@@ -1,0 +1,15 @@
+enable = true # 可被sub替换
+env = "uat" # dev / fat / uat / pro 。可被sub替换
+env_name = "环境_预上线"
+
+[account]
+enable = true
+env = "uat"
+
+[client]
+enable = true
+env = "uat"
+
+[user]
+enable = true
+env = "uat"

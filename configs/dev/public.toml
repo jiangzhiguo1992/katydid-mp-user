@@ -1,0 +1,33 @@
+
+[pgsql]
+timeout = 10
+timezone = "Asia/Shanghai"
+ssl_mode = "dev_disable"
+
+[pgsql.write]
+host = "169.2.14.2"
+port = 5432
+database = "postgres"
+user = "write"
+pwd = "write_pwd"
+
+[pgsql.read]
+host = ["169.2.14.3"]
+port = [5432]
+database = ["postgres"]
+user = ["read"]
+pwd = ["read_pwd"]
+
+[client.pgsql.write]
+host = "169.2.14.111111111"
+port = 5432
+database = "postgres"
+user = "root"
+pwd = "2ud8scsdc"
+[client.pgsql.read]
+host = ["169.2.14.1111", "169.2.14.2222"]
+port = [5432]
+database = ["postgres"]
+user = ["root"]
+pwd = ["2ud8scsdc"]
+

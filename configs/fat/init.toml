@@ -1,0 +1,15 @@
+enable = true # 可被sub替换
+env = "fat" # dev / fat / uat / pro 。可被sub替换
+env_name = "环境_测试"
+
+[account]
+enable = true
+env = "fat"
+
+[client]
+enable = true
+env = "fat"
+
+[user]
+enable = true
+env = "fat"
