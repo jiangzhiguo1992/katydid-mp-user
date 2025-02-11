@@ -23,3 +23,14 @@ go.work.sum
 
 # env file
 .env
+
+# editer
+.idea
+.vscode
+
+# configs
+/configs/cloud/
+/configs/secret/
+
+# logs
+/logs/
