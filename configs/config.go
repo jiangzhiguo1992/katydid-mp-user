@@ -3,6 +3,8 @@ package configs
 import (
 	"bytes"
 	_ "embed"
+	"fmt"
+	"github.com/fsnotify/fsnotify"
 	"github.com/spf13/viper"
 	"log"
 	"os"
@@ -183,12 +185,18 @@ func LoadConfig() *Config {
 	if config.account.ModuleConf == nil {
 		config.account.ModuleConf = config.ModuleConf
 	}
+	if config.account.ModuleConf == nil {
+		panic("account.ModuleConf is nil")
+	}
 	err = viper.Unmarshal(&config.account.ServerConf)
 	if err != nil {
 		log.Fatalf("unable to decode into account.server, %v", err)
 	}
 	if config.account.ServerConf == nil {
 		config.account.ServerConf = config.ServerConf
+	}
+	if config.account.ServerConf == nil {
+		panic("account.ServerConf is nil")
 	}
 	err = viper.UnmarshalKey("account.pgsql", &config.account.PgSql)
 	if err != nil {
@@ -197,12 +205,18 @@ func LoadConfig() *Config {
 	if config.account.PgSql == nil {
 		config.account.PgSql = config.PgSql
 	}
+	if config.account.PgSql == nil {
+		panic("account.PgSql is nil")
+	}
 	err = viper.UnmarshalKey("account.pgsql.write", &config.account.PgSql.Write)
 	if err != nil {
 		log.Fatalf("unable to decode into account.pgsql.write, %v", err)
 	}
 	if &config.account.PgSql.Write == nil {
 		config.account.PgSql.Write = config.PgSql.Write
+	}
+	if &config.account.PgSql.Write == nil {
+		panic("account.PgSql.Write is nil")
 	}
 	err = viper.UnmarshalKey("account.pgsql.read", &config.account.PgSql.Read)
 	if err != nil {
@@ -211,12 +225,18 @@ func LoadConfig() *Config {
 	if &config.account.PgSql.Read == nil {
 		config.account.PgSql.Read = config.PgSql.Read
 	}
+	if &config.account.PgSql.Read == nil {
+		panic("account.PgSql.Read is nil")
+	}
 	err = viper.UnmarshalKey("account.redis", &config.account.Redis)
 	if err != nil {
 		log.Fatalf("unable to decode into account.redis, %v", err)
 	}
 	if config.account.Redis == nil {
 		config.account.Redis = config.Redis
+	}
+	if config.account.Redis == nil {
+		panic("account.Redis is nil")
 	}
 
 	// 解析到config.client结构体
@@ -228,12 +248,18 @@ func LoadConfig() *Config {
 	if config.client.ModuleConf == nil {
 		config.client.ModuleConf = config.ModuleConf
 	}
+	if config.client.ModuleConf == nil {
+		panic("client.ModuleConf is nil")
+	}
 	err = viper.Unmarshal(&config.client.ServerConf)
 	if err != nil {
 		log.Fatalf("unable to decode into client.server, %v", err)
 	}
 	if config.client.ServerConf == nil {
 		config.client.ServerConf = config.ServerConf
+	}
+	if config.client.ServerConf == nil {
+		panic("client.ServerConf is nil")
 	}
 	err = viper.UnmarshalKey("client.pgsql", &config.client.PgSql)
 	if err != nil {
@@ -242,12 +268,18 @@ func LoadConfig() *Config {
 	if config.client.PgSql == nil {
 		config.client.PgSql = config.PgSql
 	}
+	if config.client.PgSql == nil {
+		panic("client.PgSql is nil")
+	}
 	err = viper.UnmarshalKey("client.pgsql.write", &config.client.PgSql.Write)
 	if err != nil {
 		log.Fatalf("unable to decode into client.pgsql.write, %v", err)
 	}
 	if &config.client.PgSql.Write == nil {
 		config.client.PgSql.Write = config.PgSql.Write
+	}
+	if &config.client.PgSql.Write == nil {
+		panic("client.PgSql.Write is nil")
 	}
 	err = viper.UnmarshalKey("client.pgsql.read", &config.client.PgSql.Read)
 	if err != nil {
@@ -256,12 +288,18 @@ func LoadConfig() *Config {
 	if &config.client.PgSql.Read == nil {
 		config.client.PgSql.Read = config.PgSql.Read
 	}
+	if &config.client.PgSql.Read == nil {
+		panic("client.PgSql.Read is nil")
+	}
 	err = viper.UnmarshalKey("client.redis", &config.client.Redis)
 	if err != nil {
 		log.Fatalf("unable to decode into client.redis, %v", err)
 	}
 	if config.client.Redis == nil {
 		config.client.Redis = config.Redis
+	}
+	if config.client.Redis == nil {
+		panic("client.Redis is nil")
 	}
 
 	// 解析到config.user结构体
@@ -273,12 +311,18 @@ func LoadConfig() *Config {
 	if config.user.ModuleConf == nil {
 		config.user.ModuleConf = config.ModuleConf
 	}
+	if config.user.ModuleConf == nil {
+		panic("user.ModuleConf is nil")
+	}
 	err = viper.Unmarshal(&config.user.ServerConf)
 	if err != nil {
 		log.Fatalf("unable to decode into user.server, %v", err)
 	}
 	if config.user.ServerConf == nil {
 		config.user.ServerConf = config.ServerConf
+	}
+	if config.user.ServerConf == nil {
+		panic("user.ServerConf is nil")
 	}
 	err = viper.UnmarshalKey("user.pgsql", &config.user.PgSql)
 	if err != nil {
@@ -287,12 +331,18 @@ func LoadConfig() *Config {
 	if config.user.PgSql == nil {
 		config.user.PgSql = config.PgSql
 	}
+	if config.user.PgSql == nil {
+		panic("user.PgSql is nil")
+	}
 	err = viper.UnmarshalKey("user.pgsql.write", &config.user.PgSql.Write)
 	if err != nil {
 		log.Fatalf("unable to decode into user.pgsql.write, %v", err)
 	}
 	if &config.user.PgSql.Write == nil {
 		config.user.PgSql.Write = config.PgSql.Write
+	}
+	if &config.user.PgSql.Write == nil {
+		panic("user.PgSql.Write is nil")
 	}
 	err = viper.UnmarshalKey("user.pgsql.read", &config.user.PgSql.Read)
 	if err != nil {
@@ -301,18 +351,50 @@ func LoadConfig() *Config {
 	if &config.user.PgSql.Read == nil {
 		config.user.PgSql.Read = config.PgSql.Read
 	}
+	if &config.user.PgSql.Read == nil {
+		panic("user.PgSql.Read is nil")
+	}
 	err = viper.UnmarshalKey("user.redis", &config.user.Redis)
 	if err != nil {
 		log.Fatalf("unable to decode into user.redis, %v", err)
 	}
 	if config.user.Redis == nil {
-		config.account.Redis = config.Redis
+		config.user.Redis = config.Redis
+	}
+	if config.user.Redis == nil {
+		panic("user.Redis is nil")
 	}
 
 	log.Printf("config: %v", config)
 
-	// TODO:GG 
-	//viper.RemoteConfig.WatchChannel()
+	viper.OnConfigChange(func(e fsnotify.Event) {
+		// TODO:GG 配置会被更新，这里要做一些相关的re_init操作
+		fmt.Printf("config file changed name:%s\n", e.Name)
+		//reloadConfig()
+	})
+	viper.WatchConfig()
+
+	//loadRemoteConfig()
 
 	return config
+}
+
+// loadRemoteConfig 加载远程配置
+// TODO:GG 加载远程配置
+func loadRemoteConfig() {
+	//err := viper.WatchRemoteConfig()
+	//if err != nil {
+	//	log.Fatalf("unable to read remote config: %v", err)
+	//}
+	//// 监听Consul配置变化
+	//go func() {
+	//	for {
+	//		select {
+	//		case <-viper.RemoteConfig.WatchChannel():
+	//			log.Println("remote config changed")
+	//
+	//		}
+	//	}
+	//}()
+
 }
