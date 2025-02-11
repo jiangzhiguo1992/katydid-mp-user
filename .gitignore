@@ -29,8 +29,7 @@ go.work.sum
 .vscode
 
 # configs
-/configs/cloud/
-/configs/secret/
+/configs/*/*private.toml
 
 # logs
 /logs/
