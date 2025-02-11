@@ -1,5 +1,5 @@
 package configs
 
 const (
-	logDir = "logs"
+	LogDir = "logs"
 )

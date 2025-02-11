@@ -113,7 +113,13 @@ func (m *ModuleConf) IsProd() bool {
 	return m.Env == "pro"
 }
 
-func LoadConfig() *Config {
+func InitConfig() *Config {
+	loadLocalConfig()
+	//loadRemoteConfig()
+	return config
+}
+
+func loadLocalConfig() {
 	viper.SetConfigType("toml")
 
 	// 初始app目录的conf加载
@@ -374,9 +380,6 @@ func LoadConfig() *Config {
 	})
 	viper.WatchConfig()
 
-	//loadRemoteConfig()
-
-	return config
 }
 
 // loadRemoteConfig 加载远程配置
