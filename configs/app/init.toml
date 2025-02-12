@@ -1,15 +1,11 @@
-enable = true # 可被sub替换
-env = "dev" # dev / fat / uat / pro 。可被sub替换
-env_name = "环境_xx"
+enable = true # 也是sub的默认值
+env = "dev" # dev / fat / uat / pro , 也是sub的默认值
 
 [account]
 enable = true
-env = "dev"
 
 [client]
 enable = true
-env = "dev"
 
 [user]
 enable = true
-env = "dev"

@@ -1,5 +1,12 @@
 
-[pgsql]
+[client.pgsql]
 timeout = 10
 timezone = "Asia/Shanghai"
 ssl_mode = "dev_disable"
+
+[client.pgsql.write]
+host = "169.2.14.111111111"
+port = 5432
+db = "postgres"
+user = "write"
+pwd = "write_pwd"

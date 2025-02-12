@@ -7,7 +7,7 @@ import (
 
 func init() {
 	// configs
-	config := configs.InitConfig()
+	config := configs.InitConfig(configs.ConfDir)
 
 	// logger
 	log.InitLogger(config.IsProd(), configs.LogDir)

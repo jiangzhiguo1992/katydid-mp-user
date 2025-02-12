@@ -1,15 +1,10 @@
-enable = true # 可被sub替换
-env = "pro" # dev / fat / uat / pro 。可被sub替换
 env_name = "环境_正式"
 
 [account]
 enable = true
-env = "pro"
 
 [client]
 enable = true
-env = "pro"
 
 [user]
 enable = true
-env = "pro"
