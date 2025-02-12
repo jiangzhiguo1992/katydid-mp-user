@@ -2,6 +2,7 @@ package configs
 
 import (
 	"bytes"
+	"context"
 	_ "embed"
 	"fmt"
 	"github.com/fsnotify/fsnotify"
@@ -25,6 +26,9 @@ var (
 
 const (
 	envKey = "env" // 环境key
+
+	reloadMaxRetries = 3               // 重试次数
+	reloadInterval   = 2 * time.Second // 重试间隔
 )
 
 type (
@@ -120,13 +124,13 @@ func (m *Config) merge() {
 	config.User.ModuleConf = config.ModuleConf
 }
 
-func InitConfig(confDir string) *Config {
-	loadLocalConfig(confDir)
-	//loadRemoteConfig()
+func InitConfig(confDir string, reload func() bool) *Config {
+	loadLocalConfig(confDir, reload)
+	loadRemoteConfig()
 	return config
 }
 
-func loadLocalConfig(confDir string) {
+func loadLocalConfig(confDir string, reload func() bool) {
 	viper.SetConfigType("toml")
 
 	// 初始app目录的conf加载
@@ -179,9 +183,25 @@ func loadLocalConfig(confDir string) {
 	log.Printf("config: %v", config)
 
 	viper.OnConfigChange(func(e fsnotify.Event) {
-		// TODO:GG 配置会被更新，这里要做一些相关的re_init操作
 		fmt.Printf("config file changed name:%s\n", e.Name)
-		//reloadConfig()
+		if reload != nil {
+			ctx := context.Background()
+			for i := 0; i < reloadMaxRetries; i++ {
+				if reload() {
+					break
+				}
+				log.Printf("reload config failed, retry: %d", i)
+				//time.Sleep(retryInterval)
+				if i >= reloadMaxRetries-1 {
+					log.Fatalf("reload config failed, max retries: %d", reloadMaxRetries)
+				}
+				select {
+				case <-time.After(reloadInterval):
+				case <-ctx.Done():
+					break
+				}
+			}
+		}
 	})
 	viper.WatchConfig()
 }
@@ -203,5 +223,4 @@ func loadRemoteConfig() {
 	//		}
 	//	}
 	//}()
-
 }
