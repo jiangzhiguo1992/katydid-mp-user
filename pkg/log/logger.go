@@ -18,8 +18,8 @@ const (
 	fileNameFormat = "06-01-02"
 )
 
-// InitLogger 初始化日志
-func InitLogger(prod bool, logDir string) {
+// Init 初始化日志
+func Init(prod bool, logDir string) {
 	// encoder
 	encodeCfg := zap.NewProductionEncoderConfig()
 	encodeCfg.EncodeTime = zapcore.ISO8601TimeEncoder

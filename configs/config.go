@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"github.com/fsnotify/fsnotify"
 	"github.com/spf13/viper"
+	_ "github.com/spf13/viper/remote"
 	"log"
 	"os"
 	"path/filepath"
@@ -124,7 +125,7 @@ func (m *Config) merge() {
 	config.User.ModuleConf = config.ModuleConf
 }
 
-func InitConfig(confDir string, reload func() bool) *Config {
+func Init(confDir string, reload func() bool) *Config {
 	loadLocalConfig(confDir, reload)
 	loadRemoteConfig()
 	return config

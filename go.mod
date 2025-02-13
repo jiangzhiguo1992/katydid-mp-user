@@ -3,6 +3,7 @@ module katydid-mp-user
 go 1.23.4
 
 require (
+	github.com/BurntSushi/toml v1.4.0
 	github.com/fsnotify/fsnotify v1.7.0
 	github.com/nicksnyder/go-i18n/v2 v2.5.1
 	github.com/spf13/viper v1.19.0
