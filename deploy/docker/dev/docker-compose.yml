@@ -1,0 +1,28 @@
+version: '3.7'
+
+services:
+
+  client:
+    build:
+      context: ../../.. # 上下文，项目根目录
+      dockerfile: deployments/docker/dev/client/Dockerfile # Dockerfile路径
+    container_name: katydid_base_api-client # 子服务的容器名称
+    restart: always # 重启策略
+    ports:
+      - "8080:8080" # 端口映射
+    volumes:
+      - ./logs:/app/logs # 日志目录映射
+    environment:
+      - ENV_VAR_NAME=value # 环境变量
+#    networks:
+#      - knet # 网络
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"] # 健康检查命令
+      interval: 30s # 健康检查间隔
+      timeout: 10s # 超时时间
+      retries: 3 # 重试次数
+      start_period: 5s # 启动延迟
+
+#networks:
+#  knet:
+#    name: knet-local
