@@ -70,17 +70,22 @@ func Init(dirs []string, defLang string) {
 	log.Printf("i18n langs: %v", langs)
 }
 
-func Localize(lang, msgID string, datas map[string]interface{}) string {
-	if localizes[lang] == nil {
-		nameParts := strings.Split(lang, "-")
-		if len(nameParts) <= 1 {
-			lang = defaultLang
-		} else {
-			if localizes[nameParts[0]] == nil {
-				lang = defaultLang
-			}
-		}
+func tryLocalizesKey(lang string) string {
+	if localizes[lang] != nil {
+		return lang
 	}
+	nameParts := strings.Split(lang, "-")
+	if len(nameParts) <= 1 {
+		return defaultLang
+	}
+	if localizes[nameParts[0]] != nil {
+		return nameParts[0]
+	}
+	return defaultLang
+}
+
+func Localize(lang, msgID string, datas map[string]interface{}) string {
+	lang = tryLocalizesKey(lang)
 	return localizes[lang].MustLocalize(&i18n.LocalizeConfig{
 		MessageID: msgID,
 		//PluralCount:  1,
@@ -88,6 +93,20 @@ func Localize(lang, msgID string, datas map[string]interface{}) string {
 	})
 }
 
+func LocalizeTry(lang, msgID string, datas map[string]interface{}) string {
+	lang = tryLocalizesKey(lang)
+	msg, _ := localizes[lang].Localize(&i18n.LocalizeConfig{
+		MessageID: msgID,
+		//PluralCount:  1,
+		TemplateData: datas,
+	})
+	return msg
+}
+
 func LocalizeDef(msgID string, datas map[string]interface{}) string {
 	return Localize(defaultLang, msgID, datas)
+}
+
+func LocalizeDefTry(msgID string, datas map[string]interface{}) string {
+	return LocalizeTry(defaultLang, msgID, datas)
 }

@@ -8,54 +8,56 @@ import (
 )
 
 const (
-	ErrorCodeDBInsNil        = 1002
-	ErrorCodeDBSelNil        = 1003
-	ErrorCodeDBUpdNil        = 1004
-	ErrorCodeDBDelNil        = 1005
-	ErrorCodeDBFieldNil      = 1006
-	ErrorCodeDBFieldLarge    = 1007 // 长
-	ErrorCodeDBFieldShort    = 1008 // 短
-	ErrorCodeDBFieldMax      = 1009 // 数量大
-	ErrorCodeDBFieldMin      = 1010 // 数量小
-	ErrorCodeDBFieldRange    = 1011
-	ErrorCodeDBFieldUnDef    = 1012
-	ErrorCodeDBDupPk         = 1001
-	ErrorCodeDBQueryParams   = 1013
-	ErrorCodeDBNoFind        = 1014
-	ErrorCodeDBForeignNoFind = 1015
+	// TODO:GG 这些还有必要吗？一般的code都是提醒前端做某些操作？
+
+	CodeDBAddNil         = 1002
+	CodeDBDelNil         = 1003
+	CodeDBUpdNil         = 1004
+	CodeDBQueNil         = 1005
+	CodeDBFieldNil       = 1006
+	CodeDBFieldLarge     = 1007 // 长
+	CodeDBFieldShort     = 1008 // 短
+	CodeDBFieldMax       = 1009 // 数量大
+	CodeDBFieldMin       = 1010 // 数量小
+	CodeDBFieldRange     = 1011
+	CodeDBFieldUnDefined = 1012
+	CodeDBPkDuplicated   = 1001
+	CodeDBQueParams      = 1013
+	CodeDBQueNone        = 1014
+	CodeDBQueForeignNone = 1015
 )
 
-// TODO:GG 国际化
-var errorMessages = map[int]string{
-	ErrorCodeDBInsNil:        "数据库_插入对象为空",
-	ErrorCodeDBSelNil:        "数据库_查询对象为空",
-	ErrorCodeDBUpdNil:        "数据库_更新对象为空",
-	ErrorCodeDBDelNil:        "数据库_删除对象为空",
-	ErrorCodeDBFieldNil:      "数据库_字段为空",
-	ErrorCodeDBFieldLarge:    "数据库_字段过长",
-	ErrorCodeDBFieldShort:    "数据库_字段过短",
-	ErrorCodeDBFieldMax:      "数据库_字段数量过多",
-	ErrorCodeDBFieldMin:      "数据库_字段数量过少",
-	ErrorCodeDBFieldRange:    "数据库_字段范围错误",
-	ErrorCodeDBFieldUnDef:    "数据库_字段未定义",
-	ErrorCodeDBDupPk:         "数据库_唯一约束冲突",
-	ErrorCodeDBQueryParams:   "数据库_查询参数错误",
-	ErrorCodeDBNoFind:        "数据库_未找到数据",
-	ErrorCodeDBForeignNoFind: "数据库_外键未找到数据",
+// TODO:GG 是不是可以在newerr的时候直接把locales塞进去，不用匹配?
+var codeLocales = map[int]string{
+	CodeDBAddNil:         "err_db_add_nil",
+	CodeDBDelNil:         "err_db_del_nil",
+	CodeDBUpdNil:         "err_db_upd_nil",
+	CodeDBQueNil:         "err_db_que_nil",
+	CodeDBFieldNil:       "err_db_field_nil",
+	CodeDBFieldLarge:     "err_db_field_large",
+	CodeDBFieldShort:     "err_db_field_short",
+	CodeDBFieldMax:       "err_db_field_max",
+	CodeDBFieldMin:       "err_db_field_min",
+	CodeDBFieldRange:     "err_db_field_range",
+	CodeDBFieldUnDefined: "err_db_field_undefined",
+	CodeDBPkDuplicated:   "err_db_pk_duplicated",
+	CodeDBQueParams:      "err_db_que_params",
+	CodeDBQueNone:        "err_db_que_none",
+	CodeDBQueForeignNone: "err_db_que_foreign_none",
 }
 
 var errorCodes = map[string]int{
-	"duplicate key value violates unique constraint": ErrorCodeDBDupPk,
+	"duplicate key value violates unique constraint": CodeDBPkDuplicated,
 }
 
 func MatchErrorByCode(code int) *CodeError {
-	if message, ok := errorMessages[code]; ok {
+	if message, ok := codeLocales[code]; ok {
 		return &CodeError{
 			Code: code,
 			Err:  errors.New(message),
 		}
 	}
-	log.Warn("MatchErrorByCode 没有匹配的错误Code:", zap.Int("code", code))
+	log.Warn("没有匹配的错误Code:", zap.Int("code", code))
 	return nil
 }
 
@@ -72,7 +74,7 @@ func MatchErrorByErr(err error) *CodeError {
 			if errorCode := MatchErrorByCode(code); errorCode != nil {
 				return errorCode
 			}
-			log.Warn("MatchErrorByErr 没有匹配的错误Msg:", zap.Error(err))
+			log.Warn("没有匹配的错误Msg:", zap.Error(err))
 			return &CodeError{
 				Code: code,
 				Err:  err,
