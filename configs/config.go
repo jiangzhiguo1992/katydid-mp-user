@@ -37,6 +37,8 @@ type (
 		Env     string `toml:"env" mapstructure:"env"`
 		EnvName string `toml:"env_name" mapstructure:"env_name"`
 
+		DefLang string `toml:"def_lang" mapstructure:"def_lang"`
+
 		AppConf `mapstructure:",squash"`
 
 		//ServerConf `toml:"server" mapstructure:"server"`
@@ -166,7 +168,7 @@ func loadLocalConfig(confDir string, reload func() bool) {
 
 	// 打印所有conf的kv
 	settings := viper.AllSettings()
-	log.Printf("config.settings init suceess: %v", settings)
+	log.Printf("config.settings init OK: %v", settings)
 
 	// 解析到config结构体
 	err = viper.Unmarshal(&config)
@@ -181,7 +183,7 @@ func loadLocalConfig(confDir string, reload func() bool) {
 		log.Fatalf("unable to decode into config_2, %v", err)
 	}
 
-	log.Printf("config: %v", config)
+	log.Printf("config init OK: %v", config)
 
 	viper.OnConfigChange(func(e fsnotify.Event) {
 		fmt.Printf("config file changed name:%s\n", e.Name)

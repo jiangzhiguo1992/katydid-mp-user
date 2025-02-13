@@ -17,5 +17,5 @@ func init() {
 	log.Init(config.IsProd(), configs.LogDir)
 
 	// i18n
-	i18n.Init()
+	i18n.Init(configs.LangDirs, config.DefLang)
 }
