@@ -20,6 +20,7 @@ katydid-mp-user 是一个基于 __golang__ 的 __api__ 项目，用于快速搭�
 - 6.__swag__ swagger文档(关联files，中间件gin-swagger)
 - 7.__i18n__ 国际化(关联text)
 - 8.__toml__ toml配置文件解析
+- 9.__cobra__ 命令行工具
 
 ## 运行项目可执行如下操作
 
