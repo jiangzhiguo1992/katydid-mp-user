@@ -1,0 +1,1 @@
+hello = "app,你好，{{.Count}}，{{.Name}}！"
