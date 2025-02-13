@@ -14,7 +14,8 @@ import (
 
 var (
 	defaultLang string
-	localizes   = make(map[string]*i18n.Localizer)
+
+	localizes = make(map[string]*i18n.Localizer)
 )
 
 func Init(dirs []string, defLang string) {

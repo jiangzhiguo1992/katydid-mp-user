@@ -1,6 +1,7 @@
 enable = true # 也是sub的默认值
 env = "dev" # dev / fat / uat / pro
 
+log_file_name_format = "06-01-02"
 def_lang = "zh-Hans" # zh-Hans / zh / en
 
 [account]

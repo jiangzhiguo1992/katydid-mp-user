@@ -14,7 +14,7 @@ func init() {
 	})
 
 	// logger
-	log.Init(config.IsProd(), configs.LogDir)
+	log.Init(config.IsProd(), configs.LogDir, config.LogFileNameFormat)
 
 	// i18n
 	i18n.Init(configs.LangDirs, config.DefLang)

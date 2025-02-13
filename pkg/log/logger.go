@@ -12,14 +12,15 @@ import (
 	"time"
 )
 
-var logger *zap.Logger
+var (
+	logger *zap.Logger
 
-const (
-	fileNameFormat = "06-01-02"
+	fileNameFormat = "2006-01-02"
 )
 
 // Init 初始化日志
-func Init(prod bool, logDir string) {
+func Init(prod bool, logDir, fNameFormat string) {
+	fileNameFormat = fNameFormat
 	// encoder
 	encodeCfg := zap.NewProductionEncoderConfig()
 	encodeCfg.EncodeTime = zapcore.ISO8601TimeEncoder
@@ -27,6 +28,25 @@ func Init(prod bool, logDir string) {
 		encodeCfg.LevelKey = ""
 	} else {
 		encodeCfg.EncodeLevel = zapcore.CapitalColorLevelEncoder
+		encodeCfg.EncodeLevel = func(l zapcore.Level, enc zapcore.PrimitiveArrayEncoder) {
+			switch l {
+			default:
+			case zapcore.DebugLevel:
+				enc.AppendString("\x1b[34mDEBUG\x1b[0m") // 蓝色
+			case zapcore.InfoLevel:
+				enc.AppendString("\x1b[36mINFO\x1b[0m") // 青色
+			case zapcore.WarnLevel:
+				enc.AppendString("\x1b[33mWARN\x1b[0m") // 黄色
+			case zapcore.ErrorLevel:
+				enc.AppendString("\x1b[31mERROR\x1b[0m") // 红色
+			case zapcore.DPanicLevel:
+				enc.AppendString("\x1b[35mDPANIC\x1b[0m") // 紫色
+			case zapcore.PanicLevel:
+				enc.AppendString("\x1b[35mPANIC\x1b[0m") // 紫色
+			case zapcore.FatalLevel:
+				enc.AppendString("\x1b[31mFATAL\x1b[0m") // 红色
+			}
+		}
 	}
 	var encoder zapcore.Encoder
 	if prod {

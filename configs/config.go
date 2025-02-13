@@ -14,15 +14,17 @@ import (
 	"time"
 )
 
-var config = new(Config)
-
 var (
 	//go:embed app/init.toml
 	fileAppInit []byte
+
 	//go:embed app/private.toml
 	fileAppPri []byte
+
 	//go:embed app/public.toml
 	fileAppPub []byte
+
+	config = new(Config)
 )
 
 const (
@@ -37,7 +39,8 @@ type (
 		Env     string `toml:"env" mapstructure:"env"`
 		EnvName string `toml:"env_name" mapstructure:"env_name"`
 
-		DefLang string `toml:"def_lang" mapstructure:"def_lang"`
+		LogFileNameFormat string `toml:"log_file_name_format" mapstructure:"log_file_name_format"`
+		DefLang           string `toml:"def_lang" mapstructure:"def_lang"`
 
 		AppConf `mapstructure:",squash"`
 
