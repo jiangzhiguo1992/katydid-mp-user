@@ -2,6 +2,16 @@ module katydid-mp-user
 
 go 1.23.4
 
+// casbin
+// validator
+
+// prometheus
+// tidb
+// grafana
+
+// go get github.com/gin-contrib/cors
+// go get github.com/gin-contrib/sessions
+
 require (
 	github.com/BurntSushi/toml v1.4.0
 	github.com/fsnotify/fsnotify v1.7.0
@@ -14,9 +24,6 @@ require (
 	go.uber.org/zap v1.27.0
 	golang.org/x/text v0.21.0
 )
-
-// go get github.com/gin-contrib/cors
-// go get github.com/gin-contrib/sessions
 
 require (
 	cloud.google.com/go v0.112.1 // indirect

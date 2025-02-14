@@ -12,15 +12,10 @@ import (
 	"time"
 )
 
-var (
-	logger *zap.Logger
-
-	fileNameFormat = "2006-01-02"
-)
+var logger *zap.Logger
 
 // Init 初始化日志
-func Init(prod bool, logDir, fNameFormat string) {
-	fileNameFormat = fNameFormat
+func Init(prod bool, logDir string, fileFormat *string) {
 	// encoder
 	encodeCfg := zap.NewProductionEncoderConfig()
 	encodeCfg.EncodeTime = zapcore.ISO8601TimeEncoder
@@ -77,11 +72,11 @@ func Init(prod bool, logDir, fNameFormat string) {
 		if err := os.MkdirAll(fatDir, os.ModePerm); err != nil {
 			panic(errors.New(fmt.Sprintf("failed to create log_fat_dir %s: %s", fatDir, err)))
 		}
-		infoWriteSyncer := &dateWriteSyncer{outPath: infoDir}
-		warnWriteSyncer := &dateWriteSyncer{outPath: warnDir}
-		errWriteSyncer := &dateWriteSyncer{outPath: errDir}
-		pacWriteSyncer := &dateWriteSyncer{outPath: pacDir}
-		fatWriteSyncer := &dateWriteSyncer{outPath: fatDir}
+		infoWriteSyncer := &dateWriteSyncer{outPath: infoDir, format: fileFormat}
+		warnWriteSyncer := &dateWriteSyncer{outPath: warnDir, format: fileFormat}
+		errWriteSyncer := &dateWriteSyncer{outPath: errDir, format: fileFormat}
+		pacWriteSyncer := &dateWriteSyncer{outPath: pacDir, format: fileFormat}
+		fatWriteSyncer := &dateWriteSyncer{outPath: fatDir, format: fileFormat}
 
 		// core
 		core := zapcore.NewTee(
@@ -134,11 +129,16 @@ func Init(prod bool, logDir, fNameFormat string) {
 // dateWriteSyncer 按日期写入日志
 type dateWriteSyncer struct {
 	file    *os.File
+	format  *string
 	outPath string
 }
 
 func (d *dateWriteSyncer) Write(p []byte) (n int, err error) {
-	fileName := filepath.Join(d.outPath, time.Now().Format(fileNameFormat)+".log")
+	format := "06-01-02"
+	if (d.format != nil) && (len(*d.format) > 0) {
+		format = *d.format
+	}
+	fileName := filepath.Join(d.outPath, time.Now().Format(format)+".log")
 	if d.file == nil || d.file.Name() != fileName {
 		if d.file != nil {
 			_ = d.file.Close()
@@ -158,8 +158,8 @@ func (d *dateWriteSyncer) Sync() error {
 	return nil
 }
 
-// LogExit 退出日志
-func LogExit() {
+// OnExit 退出日志
+func OnExit() {
 	if logger == nil {
 		return
 	}
