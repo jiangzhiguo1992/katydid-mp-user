@@ -40,11 +40,11 @@ type (
 		EnvName string `toml:"env_name" mapstructure:"env_name"`
 
 		LogFileNameFormat string `toml:"log_file_name_format" mapstructure:"log_file_name_format"`
-		DefLang           string `toml:"def_lang" mapstructure:"def_lang"`
+		LogFileLevel      int    `toml:"log_file_level" mapstructure:"log_file_level"`
+
+		DefLang string `toml:"def_lang" mapstructure:"def_lang"`
 
 		AppConf `mapstructure:",squash"`
-
-		//ServerConf `toml:"server" mapstructure:"server"`
 
 		Account AccountConf `toml:"account" mapstructure:"account"`
 		Client  ClientConf  `toml:"client" mapstructure:"client"`
@@ -53,9 +53,6 @@ type (
 
 	AppConf struct {
 		ModuleConf `mapstructure:",squash"`
-	}
-
-	ServerConf struct {
 	}
 
 	AccountConf struct {
@@ -72,9 +69,16 @@ type (
 
 	ModuleConf struct {
 		Enable  bool        `toml:"enable" mapstructure:"enable"`
+		Server  Server      `toml:"server" mapstructure:"server"`
 		PgSql   PgSqlConf   `toml:"pgsql" mapstructure:"pgsql"`
 		Redis   RedisConf   `toml:"redis"  mapstructure:"redis"`
 		MongoDB MongoDBConf `toml:"mongo_db"  mapstructure:"mongo_db"`
+	}
+
+	Server struct {
+		ApiDomain    string `toml:"api_domain" mapstructure:"api_domain"`
+		ApiHttpPort  string `toml:"api_http_port" mapstructure:"api_http_port"`
+		ApiHttpsPort string `toml:"api_https_port" mapstructure:"api_https_port"`
 	}
 
 	PgSqlConf struct {
@@ -128,6 +132,10 @@ func (m *Config) merge() {
 	config.Account.ModuleConf = config.ModuleConf
 	config.Client.ModuleConf = config.ModuleConf
 	config.User.ModuleConf = config.ModuleConf
+}
+
+func Get() *Config {
+	return config
 }
 
 func Init(confDir string, reload func() bool) *Config {

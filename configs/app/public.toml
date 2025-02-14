@@ -1,14 +1,8 @@
 
-[gateway]
-enable = true
-port = 30011
-log_level = 1
-
-[gateway.server]
-http_domain = ""
-http_port = "30011"
-#http_port = 30012
-log_level = 1
+[server]
+api_domain = "api.katydid.com"
+api_http_port = 80
+api_https_port = 8080
 
 [pgsql]
 timeout = 10

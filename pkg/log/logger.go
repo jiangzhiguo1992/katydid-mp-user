@@ -15,7 +15,7 @@ import (
 var logger *zap.Logger
 
 // Init 初始化日志
-func Init(prod bool, logDir string, fileFormat *string) {
+func Init(prod bool, logDir string, outLevel *int, outFormat *string) {
 	// encoder
 	encodeCfg := zap.NewProductionEncoderConfig()
 	encodeCfg.EncodeTime = zapcore.ISO8601TimeEncoder
@@ -52,57 +52,63 @@ func Init(prod bool, logDir string, fileFormat *string) {
 
 	if prod {
 		// writer
-		infoDir := path.Join(logDir, "info")
-		warnDir := path.Join(logDir, "warn")
-		errDir := path.Join(logDir, "err")
-		pacDir := path.Join(logDir, "pac")
-		fatDir := path.Join(logDir, "fat")
-		if err := os.MkdirAll(infoDir, os.ModePerm); err != nil {
-			panic(errors.New(fmt.Sprintf("failed to create log_info_dir %s: %s", infoDir, err)))
+		var levels []string
+		var enables []func(lv zapcore.Level) bool
+		if outLevel != nil {
+			if *outLevel >= 0 {
+				levels = append(levels, "fat")
+				enables = append(enables, func(lv zapcore.Level) bool {
+					return lv >= zapcore.FatalLevel
+				})
+			}
+			if *outLevel >= 1 {
+				levels = append(levels, "pac")
+				enables = append(enables, func(lv zapcore.Level) bool {
+					return (lv >= zapcore.DPanicLevel) && (lv < zapcore.FatalLevel)
+				})
+			}
+			if *outLevel >= 2 {
+				levels = append(levels, "err")
+				enables = append(enables, func(lv zapcore.Level) bool {
+					return (lv >= zapcore.ErrorLevel) && (lv < zapcore.DPanicLevel)
+				})
+			}
+			if *outLevel >= 3 {
+				levels = append(levels, "warn")
+				enables = append(enables, func(lv zapcore.Level) bool {
+					return (lv >= zapcore.WarnLevel) && (lv < zapcore.ErrorLevel)
+				})
+			}
+			if *outLevel >= 4 {
+				levels = append(levels, "info")
+				enables = append(enables, func(lv zapcore.Level) bool {
+					return (lv >= zapcore.InfoLevel) && (lv < zapcore.WarnLevel)
+				})
+			}
+			if *outLevel >= 5 {
+				levels = append(levels, "debug")
+				enables = append(enables, func(lv zapcore.Level) bool {
+					return lv < zapcore.InfoLevel
+				})
+			}
 		}
-		if err := os.MkdirAll(warnDir, os.ModePerm); err != nil {
-			panic(errors.New(fmt.Sprintf("failed to create log_warn_dir %s: %s", warnDir, err)))
-		}
-		if err := os.MkdirAll(errDir, os.ModePerm); err != nil {
-			panic(errors.New(fmt.Sprintf("failed to create log_err_dir %s: %s", errDir, err)))
-		}
-		if err := os.MkdirAll(pacDir, os.ModePerm); err != nil {
-			panic(errors.New(fmt.Sprintf("failed to create log_pac_dir %s: %s", pacDir, err)))
-		}
-		if err := os.MkdirAll(fatDir, os.ModePerm); err != nil {
-			panic(errors.New(fmt.Sprintf("failed to create log_fat_dir %s: %s", fatDir, err)))
-		}
-		infoWriteSyncer := &dateWriteSyncer{outPath: infoDir, format: fileFormat}
-		warnWriteSyncer := &dateWriteSyncer{outPath: warnDir, format: fileFormat}
-		errWriteSyncer := &dateWriteSyncer{outPath: errDir, format: fileFormat}
-		pacWriteSyncer := &dateWriteSyncer{outPath: pacDir, format: fileFormat}
-		fatWriteSyncer := &dateWriteSyncer{outPath: fatDir, format: fileFormat}
 
-		// core
-		core := zapcore.NewTee(
-			// info
-			zapcore.NewCore(encoder, zapcore.AddSync(infoWriteSyncer), zap.LevelEnablerFunc(func(lv zapcore.Level) bool {
-				return lv < zapcore.WarnLevel
-			})),
-			// warn
-			zapcore.NewCore(encoder, zapcore.AddSync(warnWriteSyncer), zap.LevelEnablerFunc(func(lv zapcore.Level) bool {
-				return (lv >= zapcore.WarnLevel) && (lv < zapcore.ErrorLevel)
-			})),
-			// error
-			zapcore.NewCore(encoder, zapcore.AddSync(errWriteSyncer), zap.LevelEnablerFunc(func(lv zapcore.Level) bool {
-				return (lv >= zapcore.ErrorLevel) && (lv < zapcore.DPanicLevel)
-			})),
-			// panic
-			zapcore.NewCore(encoder, zapcore.AddSync(pacWriteSyncer), zap.LevelEnablerFunc(func(lv zapcore.Level) bool {
-				return (lv >= zapcore.DPanicLevel) && (lv < zapcore.FatalLevel)
-			})),
-			// fatal
-			zapcore.NewCore(encoder, zapcore.AddSync(fatWriteSyncer), zap.LevelEnablerFunc(func(lv zapcore.Level) bool {
-				return lv >= zapcore.FatalLevel
-			})),
-		)
+		// cores
+		var cores []zapcore.Core
+		for i, v := range levels {
+			dir := path.Join(logDir, v)
+			if err := os.MkdirAll(dir, os.ModePerm); err != nil {
+				panic(errors.New(fmt.Sprintf("failed to create dir %s: %s", v, err)))
+			}
+			writer := &dateWriteSyncer{outPath: dir, format: outFormat}
+			core := zapcore.NewCore(encoder, zapcore.AddSync(writer), zap.LevelEnablerFunc(func(lv zapcore.Level) bool {
+				return enables[i](lv)
+			}))
+			cores = append(cores, core)
+		}
 
 		// logger
+		core := zapcore.NewTee(cores...)
 		logger = zap.New(core)
 	} else {
 		// production config
