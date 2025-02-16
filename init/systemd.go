@@ -17,7 +17,7 @@ func init() {
 	log.Init(config.IsProd(), configs.LogDir, &config.LogFileLevel, &config.LogFileNameFormat)
 
 	// i18n
-	i18n.Init(configs.LangDirs, config.DefLang)
+	i18n.Init(configs.LangDirs, &config.DefLang)
 }
 
 // TODO:GG 放哪里?

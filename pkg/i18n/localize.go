@@ -13,14 +13,16 @@ import (
 )
 
 var (
-	defaultLang string
+	defLang = "en"
 
 	localizes = make(map[string]*i18n.Localizer)
 )
 
-func Init(dirs []string, defLang string) {
+func Init(dirs []string, def *string) {
 	// default
-	defaultLang = defLang
+	if def != nil {
+		defLang = *def
+	}
 	tag, err := language.Parse(defLang)
 	if err != nil {
 		panic(err)
@@ -76,12 +78,12 @@ func tryLocalizesKey(lang string) string {
 	}
 	nameParts := strings.Split(lang, "-")
 	if len(nameParts) <= 1 {
-		return defaultLang
+		return defLang
 	}
 	if localizes[nameParts[0]] != nil {
 		return nameParts[0]
 	}
-	return defaultLang
+	return defLang
 }
 
 func Localize(lang, msgID string, datas map[string]interface{}) string {
@@ -104,9 +106,9 @@ func LocalizeTry(lang, msgID string, datas map[string]interface{}) string {
 }
 
 func LocalizeDef(msgID string, datas map[string]interface{}) string {
-	return Localize(defaultLang, msgID, datas)
+	return Localize(defLang, msgID, datas)
 }
 
 func LocalizeDefTry(msgID string, datas map[string]interface{}) string {
-	return LocalizeTry(defaultLang, msgID, datas)
+	return LocalizeTry(defLang, msgID, datas)
 }
