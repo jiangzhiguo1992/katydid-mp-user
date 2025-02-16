@@ -12,34 +12,41 @@ import (
 	"time"
 )
 
-var logger *zap.Logger
+var (
+	prod   bool
+	logger *zap.Logger
+)
 
 // Init 初始化日志
-func Init(prod bool, logDir string, outLevel *int, outFormat *string) {
+func Init(p bool, logDir string, outLevel *int, outFormat *string) {
+	prod = p
 	// encoder
 	encodeCfg := zap.NewProductionEncoderConfig()
 	encodeCfg.EncodeTime = zapcore.ISO8601TimeEncoder
 	if prod {
 		encodeCfg.LevelKey = ""
 	} else {
-		encodeCfg.EncodeLevel = zapcore.CapitalColorLevelEncoder
+		encodeCfg.EncodeTime = func(t time.Time, enc zapcore.PrimitiveArrayEncoder) {
+			enc.AppendString(fmt.Sprintf("\x1b[20m%s\x1b[0m", t.Format("2006-01-02 15:04:05.000")))
+		}
+		//encodeCfg.EncodeLevel = zapcore.CapitalColorLevelEncoder
 		encodeCfg.EncodeLevel = func(l zapcore.Level, enc zapcore.PrimitiveArrayEncoder) {
 			switch l {
 			default:
 			case zapcore.DebugLevel:
-				enc.AppendString("\x1b[34mDEBUG\x1b[0m") // 蓝色
+				enc.AppendString("\x1b[47mDEBUG\x1b[0m") // 灰色背景
 			case zapcore.InfoLevel:
-				enc.AppendString("\x1b[36mINFO\x1b[0m") // 青色
+				enc.AppendString("\x1b[42mINFO\x1b[0m") // 绿色背景
 			case zapcore.WarnLevel:
-				enc.AppendString("\x1b[33mWARN\x1b[0m") // 黄色
+				enc.AppendString("\x1b[43mWARN\x1b[0m") // 黄色背景
 			case zapcore.ErrorLevel:
-				enc.AppendString("\x1b[31mERROR\x1b[0m") // 红色
+				enc.AppendString("\x1b[41mERROR\x1b[0m") // 红色背景
 			case zapcore.DPanicLevel:
-				enc.AppendString("\x1b[35mDPANIC\x1b[0m") // 紫色
+				enc.AppendString("\x1b[45mDPANIC\x1b[0m") // 紫色背景
 			case zapcore.PanicLevel:
-				enc.AppendString("\x1b[35mPANIC\x1b[0m") // 紫色
+				enc.AppendString("\x1b[45mPANIC\x1b[0m") // 紫色背景
 			case zapcore.FatalLevel:
-				enc.AppendString("\x1b[31mFATAL\x1b[0m") // 红色
+				enc.AppendString("\x1b[40mFATAL\x1b[0m") // 黑色背景
 			}
 		}
 	}
@@ -47,6 +54,7 @@ func Init(prod bool, logDir string, outLevel *int, outFormat *string) {
 	if prod {
 		encoder = zapcore.NewJSONEncoder(encodeCfg)
 	} else {
+		//encoder = &customConsoleEncoder{zapcore.NewConsoleEncoder(encodeCfg)}
 		encoder = zapcore.NewConsoleEncoder(encodeCfg)
 	}
 
@@ -164,6 +172,30 @@ func (d *dateWriteSyncer) Sync() error {
 	return nil
 }
 
+//// customConsoleEncoder 自定义的控制台编码器
+//type customConsoleEncoder struct {
+//	zapcore.Encoder
+//}
+//
+//func (c *customConsoleEncoder) EncodeEntry(entry zapcore.Entry, fields []zapcore.Field) (*buffer.Buffer, error) {
+//	fmt.Println("EncodeEntry called")
+//	buf, err := c.Encoder.EncodeEntry(entry, fields)
+//	if err != nil {
+//		return nil, err
+//	}
+//	// 将消息内容变为绿色
+//	buf.AppendString(fmt.Sprintf("\x1b[32m%s\x1b[0m", entry.Message))
+//	return buf, nil
+//}
+//
+//func (c *customConsoleEncoder) AddByteString(key string, value []byte) {
+//	logger.Warn("AddByteString is not implemented")
+//}
+//
+//func (c *customConsoleEncoder) AddString(key, value string) {
+//	logger.Warn("AddByteString is not implemented")
+//}
+
 // OnExit 退出日志
 func OnExit() {
 	if logger == nil {
@@ -177,7 +209,11 @@ func Debug(msg string, fields ...zap.Field) {
 		slog.Debug(msg)
 		return
 	}
-	logger.Debug(msg, fields...)
+	if prod {
+		logger.Debug(msg, fields...)
+	} else {
+		logger.Debug(fmt.Sprintf("\x1b[37m%s\x1b[0m", msg), fields...)
+	}
 }
 
 func Info(msg string, fields ...zap.Field) {
@@ -185,7 +221,11 @@ func Info(msg string, fields ...zap.Field) {
 		slog.Info(msg)
 		return
 	}
-	logger.Info(msg, fields...)
+	if prod {
+		logger.Info(msg, fields...)
+	} else {
+		logger.Info(fmt.Sprintf("\x1b[32m%s\x1b[0m", msg), fields...)
+	}
 }
 
 func Warn(msg string, fields ...zap.Field) {
@@ -193,7 +233,11 @@ func Warn(msg string, fields ...zap.Field) {
 		slog.Warn(msg)
 		return
 	}
-	logger.Warn(msg, fields...)
+	if prod {
+		logger.Warn(msg, fields...)
+	} else {
+		logger.Warn(fmt.Sprintf("\x1b[33m%s\x1b[0m", msg), fields...)
+	}
 }
 
 func Error(msg string, fields ...zap.Field) {
@@ -201,7 +245,11 @@ func Error(msg string, fields ...zap.Field) {
 		slog.Error(msg)
 		return
 	}
-	logger.Error(msg, fields...)
+	if prod {
+		logger.Error(msg, fields...)
+	} else {
+		logger.Error(fmt.Sprintf("\x1b[31m%s\x1b[0m", msg), fields...)
+	}
 }
 
 func Panic(msg string, fields ...zap.Field) {
@@ -209,7 +257,11 @@ func Panic(msg string, fields ...zap.Field) {
 		slog.Error(msg)
 		return
 	}
-	logger.Panic(msg, fields...)
+	if prod {
+		logger.Panic(msg, fields...)
+	} else {
+		logger.Panic(fmt.Sprintf("\x1b[35m%s\x1b[0m", msg), fields...)
+	}
 }
 
 func Fatal(msg string, fields ...zap.Field) {
@@ -217,5 +269,9 @@ func Fatal(msg string, fields ...zap.Field) {
 		slog.Error(msg)
 		return
 	}
-	logger.Fatal(msg, fields...)
+	if prod {
+		logger.Fatal(msg, fields...)
+	} else {
+		logger.Panic(fmt.Sprintf("\x1b[30m%s\x1b[0m", msg), fields...)
+	}
 }

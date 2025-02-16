@@ -1,6 +1,6 @@
 
 [server]
-api_domain = "api.katydid.com"
+api_domain = "user.katydid.com"
 api_http_port = 80
 api_https_port = 8080
 
