@@ -8,6 +8,7 @@ go 1.23.4
 // prometheus
 // tidb
 // grafana
+// wire
 
 // go get github.com/gin-contrib/cors
 // go get github.com/gin-contrib/sessions

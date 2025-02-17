@@ -109,7 +109,8 @@ func Init(p bool, logDir string, outLevel *int, outFormat *string) {
 				panic(errors.New(fmt.Sprintf("failed to create dir %s: %s", v, err)))
 			}
 			writer := &dateWriteSyncer{outPath: dir, format: outFormat}
-			core := zapcore.NewCore(encoder, zapcore.AddSync(writer), zap.LevelEnablerFunc(func(lv zapcore.Level) bool {
+			writeSyncer := zapcore.Lock(zapcore.AddSync(writer))
+			core := zapcore.NewCore(encoder, writeSyncer, zap.LevelEnablerFunc(func(lv zapcore.Level) bool {
 				return enables[i](lv)
 			}))
 			cores = append(cores, core)
@@ -138,6 +139,14 @@ func Init(p bool, logDir string, outLevel *int, outFormat *string) {
 			panic(err)
 		}
 	}
+}
+
+// OnExit 退出日志
+func OnExit() {
+	if logger == nil {
+		return
+	}
+	_ = logger.Sync()
 }
 
 // dateWriteSyncer 按日期写入日志
@@ -196,13 +205,36 @@ func (d *dateWriteSyncer) Sync() error {
 //	logger.Warn("AddByteString is not implemented")
 //}
 
-// OnExit 退出日志
-func OnExit() {
-	if logger == nil {
-		return
-	}
-	_ = logger.Sync()
-}
+//// Meta key-value
+//type Meta struct {
+//	key   string
+//	value interface{}
+//}
+//
+//// NewMeta create meat
+//func NewMeta(key string, value interface{}) *Meta {
+//	return &Meta{key: key, value: value}
+//}
+//
+//func metas2ZapFields(metas ...Meta) (fields []zap.Field) {
+//	fields = make([]zap.Field, 0, len(metas))
+//	for _, meta := range metas {
+//		fields = append(fields, zap.Any(meta.Key(), meta.Value()))
+//	}
+//	return fields
+//}
+//
+//func (m *Meta) Key() string {
+//	return m.key
+//}
+//
+//func (m *Meta) Value() interface{} {
+//	return m.value
+//}
+//
+//func (m *Meta) zapField() (fields zap.Field) {
+//	return zap.Any(m.Key(), m.Value())
+//}
 
 func Debug(msg string, fields ...zap.Field) {
 	if logger == nil {

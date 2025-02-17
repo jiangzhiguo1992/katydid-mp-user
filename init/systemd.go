@@ -19,8 +19,3 @@ func init() {
 	// i18n
 	i18n.Init(configs.LangDirs, &config.DefLang)
 }
-
-// TODO:GG 放哪里?
-func destroy() {
-	log.OnExit()
-}

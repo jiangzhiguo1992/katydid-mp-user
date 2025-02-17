@@ -124,8 +124,16 @@ type (
 	}
 )
 
+func (m *Config) IsDebug() bool {
+	return m.Env == "dev"
+}
+
+func (m *Config) IsTest() bool {
+	return m.Env == "fat"
+}
+
 func (m *Config) IsProd() bool {
-	return m.Env == "pro"
+	return (m.Env == "uat") || (m.Env == "pro")
 }
 
 func (m *Config) merge() {
