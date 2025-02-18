@@ -18,11 +18,11 @@ var (
 	//go:embed app/init.toml
 	fileAppInit []byte
 
-	//go:embed app/private.toml
-	fileAppPri []byte
-
 	//go:embed app/public.toml
 	fileAppPub []byte
+
+	//go:embed app/private.toml
+	fileAppPri []byte
 
 	config = new(Config)
 )
@@ -125,15 +125,15 @@ type (
 )
 
 func (m *Config) IsDebug() bool {
-	return m.Env == "dev"
+	return (m.Env == "dev") || (m.Env == "fat")
 }
 
 func (m *Config) IsTest() bool {
-	return m.Env == "fat"
+	return m.Env == "uat"
 }
 
 func (m *Config) IsProd() bool {
-	return (m.Env == "uat") || (m.Env == "pro")
+	return m.Env == "pro"
 }
 
 func (m *Config) merge() {
@@ -155,8 +155,8 @@ func Init(confDir string, reload func() bool) *Config {
 func loadLocalConfig(confDir string, reload func() bool) {
 	viper.SetConfigType("toml")
 
-	// 初始app目录的conf加载
-	bs := [][]byte{fileAppInit, fileAppPri, fileAppPub}
+	// 初始app目录的conf加载(注意顺序)
+	bs := [][]byte{fileAppInit, fileAppPub, fileAppPri}
 	for _, b := range bs {
 		//if err := viper.ReadConfig(bytes.NewReader(b)); err != nil {
 		if err := viper.MergeConfig(bytes.NewReader(b)); err != nil {

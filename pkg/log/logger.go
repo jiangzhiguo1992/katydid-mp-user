@@ -13,17 +13,17 @@ import (
 )
 
 var (
-	prod   bool
+	output bool
 	logger *zap.Logger
 )
 
 // Init 初始化日志
-func Init(p bool, logDir string, outLevel *int, outFormat *string) {
-	prod = p
+func Init(out bool, logDir string, outLevel *int, outFormat *string) {
+	output = out
 	// encoder
 	encodeCfg := zap.NewProductionEncoderConfig()
 	encodeCfg.EncodeTime = zapcore.ISO8601TimeEncoder
-	if prod {
+	if output {
 		encodeCfg.LevelKey = ""
 	} else {
 		encodeCfg.EncodeTime = func(t time.Time, enc zapcore.PrimitiveArrayEncoder) {
@@ -51,14 +51,14 @@ func Init(p bool, logDir string, outLevel *int, outFormat *string) {
 		}
 	}
 	var encoder zapcore.Encoder
-	if prod {
+	if output {
 		encoder = zapcore.NewJSONEncoder(encodeCfg)
 	} else {
 		//encoder = &customConsoleEncoder{zapcore.NewConsoleEncoder(encodeCfg)}
 		encoder = zapcore.NewConsoleEncoder(encodeCfg)
 	}
 
-	if prod {
+	if output {
 		// writer
 		var levels []string
 		var enables []func(lv zapcore.Level) bool
@@ -241,7 +241,7 @@ func Debug(msg string, fields ...zap.Field) {
 		slog.Debug(msg)
 		return
 	}
-	if prod {
+	if output {
 		logger.Debug(msg, fields...)
 	} else {
 		logger.Debug(fmt.Sprintf("\x1b[37m%s\x1b[0m", msg), fields...)
@@ -253,7 +253,7 @@ func Info(msg string, fields ...zap.Field) {
 		slog.Info(msg)
 		return
 	}
-	if prod {
+	if output {
 		logger.Info(msg, fields...)
 	} else {
 		logger.Info(fmt.Sprintf("\x1b[32m%s\x1b[0m", msg), fields...)
@@ -265,7 +265,7 @@ func Warn(msg string, fields ...zap.Field) {
 		slog.Warn(msg)
 		return
 	}
-	if prod {
+	if output {
 		logger.Warn(msg, fields...)
 	} else {
 		logger.Warn(fmt.Sprintf("\x1b[33m%s\x1b[0m", msg), fields...)
@@ -277,7 +277,7 @@ func Error(msg string, fields ...zap.Field) {
 		slog.Error(msg)
 		return
 	}
-	if prod {
+	if output {
 		logger.Error(msg, fields...)
 	} else {
 		logger.Error(fmt.Sprintf("\x1b[31m%s\x1b[0m", msg), fields...)
@@ -289,7 +289,7 @@ func Panic(msg string, fields ...zap.Field) {
 		slog.Error(msg)
 		return
 	}
-	if prod {
+	if output {
 		logger.Panic(msg, fields...)
 	} else {
 		logger.Panic(fmt.Sprintf("\x1b[35m%s\x1b[0m", msg), fields...)
@@ -301,7 +301,7 @@ func Fatal(msg string, fields ...zap.Field) {
 		slog.Error(msg)
 		return
 	}
-	if prod {
+	if output {
 		logger.Fatal(msg, fields...)
 	} else {
 		logger.Panic(fmt.Sprintf("\x1b[30m%s\x1b[0m", msg), fields...)

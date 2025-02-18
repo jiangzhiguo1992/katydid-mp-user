@@ -8,14 +8,25 @@ import (
 
 func init() {
 	// configs
-	config := configs.Init(configs.ConfDir, func() bool {
-		// TODO:GG reload
-		return true
-	})
+	config := configs.Init(
+		configs.ConfDir,
+		func() bool {
+			// TODO:GG reload
+			return true
+		},
+	)
 
 	// logger
-	log.Init(config.IsProd(), configs.LogDir, &config.LogFileLevel, &config.LogFileNameFormat)
+	log.Init(
+		config.IsTest() || config.IsProd(),
+		configs.LogDir,
+		&config.LogFileLevel,
+		&config.LogFileNameFormat,
+	)
 
 	// i18n
-	i18n.Init(configs.LangDirs, &config.DefLang)
+	i18n.Init(
+		configs.LangDirs,
+		&config.DefLang,
+	)
 }
