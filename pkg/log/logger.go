@@ -1,29 +1,89 @@
 package log
 
 import (
-	"errors"
 	"fmt"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 	"log/slog"
 	"os"
 	"path"
-	"path/filepath"
 	"time"
 )
 
+const (
+	// 颜色代码
+	//colorRed    = "\x1b[31m"
+	//colorGreen  = "\x1b[32m"
+	//colorYellow = "\x1b[33m"
+	//colorBlue   = "\x1b[34m"
+	//colorPurple = "\x1b[35m"
+	//colorCyan   = "\x1b[36m"
+	//colorGray   = "\x1b[37m"
+
+	colorReset = "\x1b[0m"
+
+	// 背景色代码
+	bgBlack  = "\x1b[40m"
+	bgRed    = "\x1b[41m"
+	bgGreen  = "\x1b[42m"
+	bgYellow = "\x1b[43m"
+	bgPurple = "\x1b[45m"
+	bgGray   = "\x1b[47m"
+)
+
+// 日志级别映射
+var levelColors = map[zapcore.Level]struct {
+	bg   string
+	text string
+}{
+	zapcore.DebugLevel:  {bgGray, "DEBUG"},
+	zapcore.InfoLevel:   {bgGreen, "INFO"},
+	zapcore.WarnLevel:   {bgYellow, "WARN"},
+	zapcore.ErrorLevel:  {bgRed, "ERROR"},
+	zapcore.DPanicLevel: {bgPurple, "DPANIC"},
+	zapcore.PanicLevel:  {bgPurple, "PANIC"},
+	zapcore.FatalLevel:  {bgBlack, "FATAL"},
+}
+
+type levelConfig struct {
+	dir    string
+	enable func(zapcore.Level) bool
+}
+
+var levelConfigs = map[int][]levelConfig{
+	0: {{"fat", func(lv zapcore.Level) bool { return lv >= zapcore.FatalLevel }}},
+	1: {{"pac", func(lv zapcore.Level) bool { return lv >= zapcore.DPanicLevel && lv < zapcore.FatalLevel }}},
+	2: {{"err", func(lv zapcore.Level) bool { return lv >= zapcore.ErrorLevel && lv < zapcore.DPanicLevel }}},
+	3: {{"warn", func(lv zapcore.Level) bool { return lv >= zapcore.WarnLevel && lv < zapcore.ErrorLevel }}},
+	4: {{"info", func(lv zapcore.Level) bool { return lv >= zapcore.InfoLevel && lv < zapcore.WarnLevel }}},
+	5: {{"debug", func(lv zapcore.Level) bool { return lv < zapcore.InfoLevel }}},
+}
+
+// Config 日志配置
+type Config struct {
+	OutEnable bool           // 是否启用输出
+	OutDir    *string        // 输出目录
+	OutLevel  *int           // 输出级别
+	OutFormat *string        // 输出格式
+	CheckInt  *time.Duration // 检查间隔
+	MaxAge    *time.Duration // 最大时间
+	MaxSize   *int64         // 最大大小
+}
+
 var (
-	output bool
-	logger *zap.Logger
+	cfg     Config
+	buffers []*BufferedWriteSyncer
+	logger  *zap.Logger
 )
 
 // Init 初始化日志
-func Init(out bool, logDir string, outLevel *int, outFormat *string) {
-	output = out
+func Init(config Config) {
+	cfg = config
+
 	// encoder
 	encodeCfg := zap.NewProductionEncoderConfig()
 	encodeCfg.EncodeTime = zapcore.ISO8601TimeEncoder
-	if output {
+	if cfg.OutEnable {
 		encodeCfg.LevelKey = ""
 	} else {
 		encodeCfg.EncodeTime = func(t time.Time, enc zapcore.PrimitiveArrayEncoder) {
@@ -31,89 +91,51 @@ func Init(out bool, logDir string, outLevel *int, outFormat *string) {
 		}
 		//encodeCfg.EncodeLevel = zapcore.CapitalColorLevelEncoder
 		encodeCfg.EncodeLevel = func(l zapcore.Level, enc zapcore.PrimitiveArrayEncoder) {
-			switch l {
-			default:
-			case zapcore.DebugLevel:
-				enc.AppendString("\x1b[47mDEBUG\x1b[0m") // 灰色背景
-			case zapcore.InfoLevel:
-				enc.AppendString("\x1b[42mINFO\x1b[0m") // 绿色背景
-			case zapcore.WarnLevel:
-				enc.AppendString("\x1b[43mWARN\x1b[0m") // 黄色背景
-			case zapcore.ErrorLevel:
-				enc.AppendString("\x1b[41mERROR\x1b[0m") // 红色背景
-			case zapcore.DPanicLevel:
-				enc.AppendString("\x1b[45mDPANIC\x1b[0m") // 紫色背景
-			case zapcore.PanicLevel:
-				enc.AppendString("\x1b[45mPANIC\x1b[0m") // 紫色背景
-			case zapcore.FatalLevel:
-				enc.AppendString("\x1b[40mFATAL\x1b[0m") // 黑色背景
+			if level, ok := levelColors[l]; ok {
+				enc.AppendString(fmt.Sprintf("%s%s%s", level.bg, level.text, colorReset))
 			}
 		}
 	}
 	var encoder zapcore.Encoder
-	if output {
+	if cfg.OutEnable {
 		encoder = zapcore.NewJSONEncoder(encodeCfg)
 	} else {
 		//encoder = &customConsoleEncoder{zapcore.NewConsoleEncoder(encodeCfg)}
 		encoder = zapcore.NewConsoleEncoder(encodeCfg)
 	}
 
-	if output {
-		// writer
-		var levels []string
-		var enables []func(lv zapcore.Level) bool
-		if outLevel != nil {
-			if *outLevel >= 0 {
-				levels = append(levels, "fat")
-				enables = append(enables, func(lv zapcore.Level) bool {
-					return lv >= zapcore.FatalLevel
-				})
-			}
-			if *outLevel >= 1 {
-				levels = append(levels, "pac")
-				enables = append(enables, func(lv zapcore.Level) bool {
-					return (lv >= zapcore.DPanicLevel) && (lv < zapcore.FatalLevel)
-				})
-			}
-			if *outLevel >= 2 {
-				levels = append(levels, "err")
-				enables = append(enables, func(lv zapcore.Level) bool {
-					return (lv >= zapcore.ErrorLevel) && (lv < zapcore.DPanicLevel)
-				})
-			}
-			if *outLevel >= 3 {
-				levels = append(levels, "warn")
-				enables = append(enables, func(lv zapcore.Level) bool {
-					return (lv >= zapcore.WarnLevel) && (lv < zapcore.ErrorLevel)
-				})
-			}
-			if *outLevel >= 4 {
-				levels = append(levels, "info")
-				enables = append(enables, func(lv zapcore.Level) bool {
-					return (lv >= zapcore.InfoLevel) && (lv < zapcore.WarnLevel)
-				})
-			}
-			if *outLevel >= 5 {
-				levels = append(levels, "debug")
-				enables = append(enables, func(lv zapcore.Level) bool {
-					return lv < zapcore.InfoLevel
-				})
-			}
-		}
-
-		// cores
+	if cfg.OutEnable {
+		// outfile
 		var cores []zapcore.Core
-		for i, v := range levels {
-			dir := path.Join(logDir, v)
-			if err := os.MkdirAll(dir, os.ModePerm); err != nil {
-				panic(errors.New(fmt.Sprintf("failed to create dir %s: %s", v, err)))
+		if cfg.OutEnable && (cfg.OutDir != nil) && (cfg.OutLevel != nil) {
+			// cores
+			for level := 0; level <= *cfg.OutLevel; level++ {
+				if configs, ok := levelConfigs[level]; ok {
+					for _, config := range configs {
+						dir := path.Join(*cfg.OutDir, config.dir)
+						if err := os.MkdirAll(dir, os.ModePerm); err != nil {
+							panic(fmt.Errorf("failed to create dir %s: %w", config.dir, err))
+						}
+						// writer
+						writer := NewDateWriteSyncer(
+							&dir,
+							cfg.OutFormat,
+							cfg.CheckInt,
+							cfg.MaxAge,
+							cfg.MaxSize,
+						)
+						buffers = append(buffers, NewBufferedWriteSyncer(writer))
+						//buffered := NewBufferedWriteSyncer(writer)
+						//defer func(buffered *BufferedWriteSyncer) {
+						//	_ = buffered.Close()
+						//}(buffered)
+						//writer := &DateWriteSyncer{outPath: dir, format: cfg.OutFormat}
+						writeSyncer := zapcore.Lock(zapcore.AddSync(writer))
+						core := zapcore.NewCore(encoder, writeSyncer, zap.LevelEnablerFunc(config.enable))
+						cores = append(cores, core)
+					}
+				}
 			}
-			writer := &dateWriteSyncer{outPath: dir, format: outFormat}
-			writeSyncer := zapcore.Lock(zapcore.AddSync(writer))
-			core := zapcore.NewCore(encoder, writeSyncer, zap.LevelEnablerFunc(func(lv zapcore.Level) bool {
-				return enables[i](lv)
-			}))
-			cores = append(cores, core)
 		}
 
 		// logger
@@ -121,20 +143,20 @@ func Init(out bool, logDir string, outLevel *int, outFormat *string) {
 		logger = zap.New(core)
 	} else {
 		// production config
-		cfg := zap.NewProductionConfig()
-		cfg.Development = false
-		cfg.Encoding = "console"
-		cfg.Level = zap.NewAtomicLevelAt(zap.DebugLevel)
-		cfg.Sampling = &zap.SamplingConfig{
+		c := zap.NewProductionConfig()
+		c.Development = false
+		c.Encoding = "console"
+		c.Level = zap.NewAtomicLevelAt(zap.DebugLevel)
+		c.Sampling = &zap.SamplingConfig{
 			Initial:    100,
 			Thereafter: 100,
 		}
-		cfg.DisableCaller = true
-		cfg.EncoderConfig = encodeCfg
+		c.DisableCaller = true
+		c.EncoderConfig = encodeCfg
 
 		// logger
 		var err error
-		logger, err = cfg.Build()
+		logger, err = c.Build()
 		if err != nil {
 			panic(err)
 		}
@@ -146,164 +168,54 @@ func OnExit() {
 	if logger == nil {
 		return
 	}
+	for _, v := range buffers {
+		_ = v.Close()
+	}
 	_ = logger.Sync()
 }
 
-// dateWriteSyncer 按日期写入日志
-type dateWriteSyncer struct {
-	file    *os.File
-	format  *string
-	outPath string
-}
-
-func (d *dateWriteSyncer) Write(p []byte) (n int, err error) {
-	format := "06-01-02"
-	if (d.format != nil) && (len(*d.format) > 0) {
-		format = *d.format
-	}
-	fileName := filepath.Join(d.outPath, time.Now().Format(format)+".log")
-	if d.file == nil || d.file.Name() != fileName {
-		if d.file != nil {
-			_ = d.file.Close()
-		}
-		d.file, err = os.OpenFile(fileName, os.O_CREATE|os.O_APPEND|os.O_WRONLY, os.ModePerm)
-		if err != nil {
-			return 0, err
-		}
-	}
-	return d.file.Write(p)
-}
-
-func (d *dateWriteSyncer) Sync() error {
-	if d.file != nil {
-		return d.file.Sync()
-	}
-	return nil
-}
-
-//// customConsoleEncoder 自定义的控制台编码器
-//type customConsoleEncoder struct {
-//	zapcore.Encoder
-//}
-//
-//func (c *customConsoleEncoder) EncodeEntry(entry zapcore.Entry, fields []zapcore.Field) (*buffer.Buffer, error) {
-//	fmt.Println("EncodeEntry called")
-//	buf, err := c.Encoder.EncodeEntry(entry, fields)
-//	if err != nil {
-//		return nil, err
-//	}
-//	// 将消息内容变为绿色
-//	buf.AppendString(fmt.Sprintf("\x1b[32m%s\x1b[0m", entry.Message))
-//	return buf, nil
-//}
-//
-//func (c *customConsoleEncoder) AddByteString(key string, value []byte) {
-//	logger.Warn("AddByteString is not implemented")
-//}
-//
-//func (c *customConsoleEncoder) AddString(key, value string) {
-//	logger.Warn("AddByteString is not implemented")
-//}
-
-//// Meta key-value
-//type Meta struct {
-//	key   string
-//	value interface{}
-//}
-//
-//// NewMeta create meat
-//func NewMeta(key string, value interface{}) *Meta {
-//	return &Meta{key: key, value: value}
-//}
-//
-//func metas2ZapFields(metas ...Meta) (fields []zap.Field) {
-//	fields = make([]zap.Field, 0, len(metas))
-//	for _, meta := range metas {
-//		fields = append(fields, zap.Any(meta.Key(), meta.Value()))
-//	}
-//	return fields
-//}
-//
-//func (m *Meta) Key() string {
-//	return m.key
-//}
-//
-//func (m *Meta) Value() interface{} {
-//	return m.value
-//}
-//
-//func (m *Meta) zapField() (fields zap.Field) {
-//	return zap.Any(m.Key(), m.Value())
-//}
-
-func Debug(msg string, fields ...zap.Field) {
+func log(level zapcore.Level, msg string, fields ...zap.Field) {
 	if logger == nil {
-		slog.Debug(msg)
+		switch level {
+		case zapcore.DebugLevel:
+			slog.Debug(msg)
+		case zapcore.InfoLevel:
+			slog.Info(msg)
+		case zapcore.WarnLevel:
+			slog.Warn(msg)
+		default:
+			slog.Error(msg)
+		}
 		return
 	}
-	if output {
+
+	if !cfg.OutEnable {
+		if color, ok := levelColors[level]; ok {
+			msg = fmt.Sprintf("%s%s%s", color.text, msg, colorReset)
+		}
+	}
+
+	switch level {
+	case zapcore.DebugLevel:
 		logger.Debug(msg, fields...)
-	} else {
-		logger.Debug(fmt.Sprintf("\x1b[37m%s\x1b[0m", msg), fields...)
-	}
-}
-
-func Info(msg string, fields ...zap.Field) {
-	if logger == nil {
-		slog.Info(msg)
-		return
-	}
-	if output {
+	case zapcore.InfoLevel:
 		logger.Info(msg, fields...)
-	} else {
-		logger.Info(fmt.Sprintf("\x1b[32m%s\x1b[0m", msg), fields...)
-	}
-}
-
-func Warn(msg string, fields ...zap.Field) {
-	if logger == nil {
-		slog.Warn(msg)
-		return
-	}
-	if output {
+	case zapcore.WarnLevel:
 		logger.Warn(msg, fields...)
-	} else {
-		logger.Warn(fmt.Sprintf("\x1b[33m%s\x1b[0m", msg), fields...)
-	}
-}
-
-func Error(msg string, fields ...zap.Field) {
-	if logger == nil {
-		slog.Error(msg)
-		return
-	}
-	if output {
+	case zapcore.ErrorLevel:
 		logger.Error(msg, fields...)
-	} else {
-		logger.Error(fmt.Sprintf("\x1b[31m%s\x1b[0m", msg), fields...)
-	}
-}
-
-func Panic(msg string, fields ...zap.Field) {
-	if logger == nil {
-		slog.Error(msg)
-		return
-	}
-	if output {
+	case zapcore.PanicLevel:
 		logger.Panic(msg, fields...)
-	} else {
-		logger.Panic(fmt.Sprintf("\x1b[35m%s\x1b[0m", msg), fields...)
+	case zapcore.FatalLevel:
+		logger.Fatal(msg, fields...)
+	default:
+		panic("unhandled default case")
 	}
 }
 
-func Fatal(msg string, fields ...zap.Field) {
-	if logger == nil {
-		slog.Error(msg)
-		return
-	}
-	if output {
-		logger.Fatal(msg, fields...)
-	} else {
-		logger.Panic(fmt.Sprintf("\x1b[30m%s\x1b[0m", msg), fields...)
-	}
-}
+func Debug(msg string, fields ...zap.Field) { log(zapcore.DebugLevel, msg, fields...) }
+func Info(msg string, fields ...zap.Field)  { log(zapcore.InfoLevel, msg, fields...) }
+func Warn(msg string, fields ...zap.Field)  { log(zapcore.WarnLevel, msg, fields...) }
+func Error(msg string, fields ...zap.Field) { log(zapcore.ErrorLevel, msg, fields...) }
+func Panic(msg string, fields ...zap.Field) { log(zapcore.PanicLevel, msg, fields...) }
+func Fatal(msg string, fields ...zap.Field) { log(zapcore.FatalLevel, msg, fields...) }
