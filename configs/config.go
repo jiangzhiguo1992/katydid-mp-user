@@ -39,8 +39,7 @@ type (
 		Env     string `toml:"env" mapstructure:"env"`
 		EnvName string `toml:"env_name" mapstructure:"env_name"`
 
-		LogFileNameFormat string `toml:"log_file_name_format" mapstructure:"log_file_name_format"`
-		LogFileLevel      int    `toml:"log_file_level" mapstructure:"log_file_level"`
+		LogConf `toml:"log" mapstructure:"log"`
 
 		DefLang string `toml:"def_lang" mapstructure:"def_lang"`
 
@@ -49,6 +48,15 @@ type (
 		Account AccountConf `toml:"account" mapstructure:"account"`
 		Client  ClientConf  `toml:"client" mapstructure:"client"`
 		User    UserConf    `toml:"user" mapstructure:"user"`
+	}
+
+	LogConf struct {
+		OutEnable         bool   `toml:"out_enable" mapstructure:"out_enable"`
+		OutLevel          int    `toml:"out_level" mapstructure:"out_level"`
+		OutFormat         string `toml:"out_format" mapstructure:"out_format"`
+		FileCheckInterval int    `toml:"file_check_interval" mapstructure:"file_check_interval"`
+		FileMaxAge        int    `toml:"file_max_age" mapstructure:"file_max_age"`
+		FileMaxSize       int    `toml:"file_max_size" mapstructure:"file_max_size"`
 	}
 
 	AppConf struct {

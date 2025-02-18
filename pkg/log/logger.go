@@ -7,23 +7,21 @@ import (
 	"log/slog"
 	"os"
 	"path"
+	"sync"
 	"time"
 )
 
 const (
 	// 颜色代码
-	//colorRed    = "\x1b[31m"
-	//colorGreen  = "\x1b[32m"
-	//colorYellow = "\x1b[33m"
-	//colorBlue   = "\x1b[34m"
-	//colorPurple = "\x1b[35m"
-	//colorCyan   = "\x1b[36m"
-	//colorGray   = "\x1b[37m"
+	colorRed    = "\x1b[31m"
+	colorGreen  = "\x1b[32m"
+	colorYellow = "\x1b[33m"
+	colorPurple = "\x1b[35m"
+	colorGray   = "\x1b[37m"
 
 	colorReset = "\x1b[0m"
 
 	// 背景色代码
-	bgBlack  = "\x1b[40m"
 	bgRed    = "\x1b[41m"
 	bgGreen  = "\x1b[42m"
 	bgYellow = "\x1b[43m"
@@ -33,16 +31,17 @@ const (
 
 // 日志级别映射
 var levelColors = map[zapcore.Level]struct {
+	fg   string
 	bg   string
 	text string
 }{
-	zapcore.DebugLevel:  {bgGray, "DEBUG"},
-	zapcore.InfoLevel:   {bgGreen, "INFO"},
-	zapcore.WarnLevel:   {bgYellow, "WARN"},
-	zapcore.ErrorLevel:  {bgRed, "ERROR"},
-	zapcore.DPanicLevel: {bgPurple, "DPANIC"},
-	zapcore.PanicLevel:  {bgPurple, "PANIC"},
-	zapcore.FatalLevel:  {bgBlack, "FATAL"},
+	zapcore.DebugLevel:  {colorGray, bgGray, "DEBUG"},
+	zapcore.InfoLevel:   {colorGreen, bgGreen, "INFO"},
+	zapcore.WarnLevel:   {colorYellow, bgYellow, "WARN"},
+	zapcore.ErrorLevel:  {colorRed, bgRed, "ERROR"},
+	zapcore.DPanicLevel: {colorPurple, bgPurple, "DPANIC"},
+	zapcore.PanicLevel:  {colorPurple, bgPurple, "PANIC"},
+	zapcore.FatalLevel:  {colorRed, colorPurple, "FATAL"},
 }
 
 type levelConfig struct {
@@ -59,6 +58,14 @@ var levelConfigs = map[int][]levelConfig{
 	5: {{"debug", func(lv zapcore.Level) bool { return lv < zapcore.InfoLevel }}},
 }
 
+// Logger 封装日志实例
+type Logger struct {
+	zap    *zap.Logger
+	config *Config
+	syncs  []*BufferedWriteSyncer
+	mu     sync.RWMutex
+}
+
 // Config 日志配置
 type Config struct {
 	OutEnable bool           // 是否启用输出
@@ -71,19 +78,29 @@ type Config struct {
 }
 
 var (
-	cfg     Config
-	buffers []*BufferedWriteSyncer
-	logger  *zap.Logger
+	logger *Logger
+	once   sync.Once
 )
 
 // Init 初始化日志
-func Init(config Config) {
-	cfg = config
+func Init(cfg Config) {
+	once.Do(func() {
+		logger = NewLogger(cfg)
+	})
+}
 
+// NewLogger 创建新的日志实例
+func NewLogger(cfg Config) *Logger {
+	l := &Logger{config: &cfg}
+	l.initialize()
+	return l
+}
+
+func (l *Logger) initialize() {
 	// encoder
 	encodeCfg := zap.NewProductionEncoderConfig()
 	encodeCfg.EncodeTime = zapcore.ISO8601TimeEncoder
-	if cfg.OutEnable {
+	if l.config.OutEnable {
 		encodeCfg.LevelKey = ""
 	} else {
 		encodeCfg.EncodeTime = func(t time.Time, enc zapcore.PrimitiveArrayEncoder) {
@@ -97,40 +114,36 @@ func Init(config Config) {
 		}
 	}
 	var encoder zapcore.Encoder
-	if cfg.OutEnable {
+	if l.config.OutEnable {
 		encoder = zapcore.NewJSONEncoder(encodeCfg)
 	} else {
 		//encoder = &customConsoleEncoder{zapcore.NewConsoleEncoder(encodeCfg)}
 		encoder = zapcore.NewConsoleEncoder(encodeCfg)
 	}
 
-	if cfg.OutEnable {
+	if l.config.OutEnable {
 		// outfile
 		var cores []zapcore.Core
-		if cfg.OutEnable && (cfg.OutDir != nil) && (cfg.OutLevel != nil) {
+		if l.config.OutEnable && (l.config.OutDir != nil) && (l.config.OutLevel != nil) {
 			// cores
-			for level := 0; level <= *cfg.OutLevel; level++ {
+			for level := 0; level <= *l.config.OutLevel; level++ {
 				if configs, ok := levelConfigs[level]; ok {
 					for _, config := range configs {
-						dir := path.Join(*cfg.OutDir, config.dir)
+						dir := path.Join(*l.config.OutDir, config.dir)
 						if err := os.MkdirAll(dir, os.ModePerm); err != nil {
 							panic(fmt.Errorf("failed to create dir %s: %w", config.dir, err))
 						}
 						// writer
 						writer := NewDateWriteSyncer(
 							&dir,
-							cfg.OutFormat,
-							cfg.CheckInt,
-							cfg.MaxAge,
-							cfg.MaxSize,
+							l.config.OutFormat,
+							l.config.CheckInt,
+							l.config.MaxAge,
+							l.config.MaxSize,
 						)
-						buffers = append(buffers, NewBufferedWriteSyncer(writer))
-						//buffered := NewBufferedWriteSyncer(writer)
-						//defer func(buffered *BufferedWriteSyncer) {
-						//	_ = buffered.Close()
-						//}(buffered)
-						//writer := &DateWriteSyncer{outPath: dir, format: cfg.OutFormat}
-						writeSyncer := zapcore.Lock(zapcore.AddSync(writer))
+						buffer := NewBufferedWriteSyncer(writer)
+						l.syncs = append(l.syncs, buffer)
+						writeSyncer := zapcore.Lock(zapcore.AddSync(buffer))
 						core := zapcore.NewCore(encoder, writeSyncer, zap.LevelEnablerFunc(config.enable))
 						cores = append(cores, core)
 					}
@@ -140,7 +153,7 @@ func Init(config Config) {
 
 		// logger
 		core := zapcore.NewTee(cores...)
-		logger = zap.New(core)
+		l.zap = zap.New(core)
 	} else {
 		// production config
 		c := zap.NewProductionConfig()
@@ -156,22 +169,36 @@ func Init(config Config) {
 
 		// logger
 		var err error
-		logger, err = c.Build()
+		l.zap, err = c.Build()
 		if err != nil {
 			panic(err)
 		}
 	}
 }
 
-// OnExit 退出日志
-func OnExit() {
+// Close 优雅退出
+func Close() error {
 	if logger == nil {
-		return
+		return nil
 	}
-	for _, v := range buffers {
-		_ = v.Close()
+	logger.mu.Lock()
+	defer logger.mu.Unlock()
+
+	var errs []error
+	for _, buffer := range logger.syncs {
+		if err := buffer.Close(); err != nil {
+			errs = append(errs, err)
+		}
 	}
-	_ = logger.Sync()
+
+	if err := logger.zap.Sync(); err != nil {
+		errs = append(errs, err)
+	}
+
+	if len(errs) > 0 {
+		return fmt.Errorf("failed to close logger: %v", errs)
+	}
+	return nil
 }
 
 func log(level zapcore.Level, msg string, fields ...zap.Field) {
@@ -189,25 +216,25 @@ func log(level zapcore.Level, msg string, fields ...zap.Field) {
 		return
 	}
 
-	if !cfg.OutEnable {
+	if !logger.config.OutEnable {
 		if color, ok := levelColors[level]; ok {
-			msg = fmt.Sprintf("%s%s%s", color.text, msg, colorReset)
+			msg = fmt.Sprintf("%s%s%s", color.fg, msg, colorReset)
 		}
 	}
 
 	switch level {
 	case zapcore.DebugLevel:
-		logger.Debug(msg, fields...)
+		logger.zap.Debug(msg, fields...)
 	case zapcore.InfoLevel:
-		logger.Info(msg, fields...)
+		logger.zap.Info(msg, fields...)
 	case zapcore.WarnLevel:
-		logger.Warn(msg, fields...)
+		logger.zap.Warn(msg, fields...)
 	case zapcore.ErrorLevel:
-		logger.Error(msg, fields...)
+		logger.zap.Error(msg, fields...)
 	case zapcore.PanicLevel:
-		logger.Panic(msg, fields...)
+		logger.zap.Panic(msg, fields...)
 	case zapcore.FatalLevel:
-		logger.Fatal(msg, fields...)
+		logger.zap.Fatal(msg, fields...)
 	default:
 		panic("unhandled default case")
 	}
