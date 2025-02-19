@@ -122,7 +122,7 @@ func extractLangFromFilename(file string) string {
 	return name
 }
 
-func (m *Manager) Localize(lang, msgID string, data map[string]interface{}) string {
+func (m *Manager) Localize(lang, msgID string, data map[string]interface{}, nilBackId bool) string {
 	// 构建语言标签列表，实现回退链
 	tags := []string{lang}
 	base := strings.Split(lang, "-")[0]
@@ -132,7 +132,7 @@ func (m *Manager) Localize(lang, msgID string, data map[string]interface{}) stri
 	tags = append(tags, m.config.DefaultLang)
 
 	// 循环开找
-	msg := unknownError
+	var msg string
 	var err error
 	for i := 0; i < len(tags); i++ {
 		localizer := i18n.NewLocalizer(m.bundle, tags[i:]...)
@@ -140,12 +140,19 @@ func (m *Manager) Localize(lang, msgID string, data map[string]interface{}) stri
 			MessageID:    msgID,
 			TemplateData: data,
 			DefaultMessage: &i18n.Message{
-				ID:    msgID,
-				Other: unknownError,
+				ID: msgID,
+				//Other: unknownError,
 			},
 		})
-		if (msg != unknownError) && (err == nil) {
+		if (len(msg) > 0) && (err == nil) {
 			break
+		}
+	}
+	if (len(msg) == 0) && (err != nil) {
+		if nilBackId {
+			msg = msgID
+		} else {
+			msg = unknownError
 		}
 	}
 
@@ -157,10 +164,18 @@ func (m *Manager) Localize(lang, msgID string, data map[string]interface{}) stri
 	return msg
 }
 
-func Localize(lang, msgID string, data map[string]interface{}) string {
-	return defaultManager.Localize(lang, msgID, data)
+func LocalizeMust(lang, msgID string, data map[string]interface{}) string {
+	return defaultManager.Localize(lang, msgID, data, false)
 }
 
-func LocalizeDef(msgID string, data map[string]interface{}) string {
-	return defaultManager.Localize(defaultManager.config.DefaultLang, msgID, data)
+func LocalizeTry(lang, msgID string, data map[string]interface{}) string {
+	return defaultManager.Localize(lang, msgID, data, true)
+}
+
+func LocalizeMustDef(msgID string, data map[string]interface{}) string {
+	return defaultManager.Localize(defaultManager.config.DefaultLang, msgID, data, false)
+}
+
+func LocalizeTryDef(msgID string, data map[string]interface{}) string {
+	return defaultManager.Localize(defaultManager.config.DefaultLang, msgID, data, true)
 }
