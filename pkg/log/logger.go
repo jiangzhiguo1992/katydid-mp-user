@@ -153,19 +153,21 @@ func (l *Logger) initialize() {
 	} else {
 		// production config
 		c := zap.NewProductionConfig()
-		c.Development = false
+		c.Development = true
 		c.Encoding = "console"
 		c.Level = zap.NewAtomicLevelAt(zap.DebugLevel)
-		c.Sampling = &zap.SamplingConfig{
-			Initial:    100,
-			Thereafter: 100,
-		}
+		c.Sampling = nil                   // 禁用采样
+		c.OutputPaths = []string{"stdout"} // 及时打印
+		c.DisableStacktrace = true
 		c.DisableCaller = true
 		c.EncoderConfig = encoderCfg
 
 		// logger
 		var err error
-		l.zap, err = c.Build()
+		l.zap, err = c.Build(
+			zap.WithClock(zapcore.DefaultClock), // 使用默认时钟
+			zap.AddStacktrace(zap.ErrorLevel),   // 只在 error 级别添加堆栈
+		)
 		if err != nil {
 			panic(err)
 		}
