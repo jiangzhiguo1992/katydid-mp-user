@@ -25,7 +25,7 @@ func init() {
 		OutFormat: config.LogConf.OutFormat,
 		CheckInt:  time.Duration(config.LogConf.FileCheckInterval) * time.Minute,
 		MaxAge:    time.Duration(config.LogConf.FileMaxAge) * time.Hour * 24,
-		MaxSize:   int64(config.LogConf.FileMaxSize * 1024 * 1024),
+		MaxSize:   config.LogConf.FileMaxSize << 20,
 	})
 
 	// i18n

@@ -56,7 +56,7 @@ type (
 		OutFormat         string `toml:"out_format" mapstructure:"out_format"`
 		FileCheckInterval int    `toml:"file_check_interval" mapstructure:"file_check_interval"`
 		FileMaxAge        int    `toml:"file_max_age" mapstructure:"file_max_age"`
-		FileMaxSize       int    `toml:"file_max_size" mapstructure:"file_max_size"`
+		FileMaxSize       int64  `toml:"file_max_size" mapstructure:"file_max_size"`
 	}
 
 	AppConf struct {

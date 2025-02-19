@@ -28,12 +28,16 @@ const (
 	bgPurple = "\x1b[45m"
 	bgGray   = "\x1b[47m"
 
-	// 默认conf
+	// writer默认conf
 	defaultOutPath             = "logs"             // 默认输出目录
 	defaultFormat              = "06-01-02"         // 默认文件名格式
 	defaultCheckInterval       = time.Hour          // 定期清理时间间隔
 	defaultMaxAge              = 7 * 24 * time.Hour // 7天
 	defaultMaxSize       int64 = 100 << 20          // 100MB
+
+	// buffer默认配置
+	defaultBatchSize    = 1024 * 4        // 缓冲区大小设置为 4kb
+	defaultFlushTimeout = 5 * time.Second // 缓冲区刷新间隔设置为 5 秒
 )
 
 // 日志级别映射
@@ -69,7 +73,7 @@ var levelConfigs = map[int][]levelConfig{
 type Logger struct {
 	zap    *zap.Logger
 	config *Config
-	syncs  []*BufferedWriteSyncer
+	syncs  []*zapcore.BufferedWriteSyncer
 	mu     sync.RWMutex
 }
 
@@ -116,54 +120,27 @@ func NewLogger(cfg Config) *Logger {
 }
 
 func (l *Logger) initialize() {
-	// encoder
-	encodeCfg := zap.NewProductionEncoderConfig()
-	encodeCfg.EncodeTime = zapcore.ISO8601TimeEncoder
-	if l.config.OutEnable {
-		encodeCfg.LevelKey = ""
-	} else {
-		encodeCfg.EncodeTime = func(t time.Time, enc zapcore.PrimitiveArrayEncoder) {
-			enc.AppendString(fmt.Sprintf("\x1b[20m%s\x1b[0m", t.Format("2006-01-02 15:04:05.000")))
-		}
-		//encodeCfg.EncodeLevel = zapcore.CapitalColorLevelEncoder
-		encodeCfg.EncodeLevel = func(l zapcore.Level, enc zapcore.PrimitiveArrayEncoder) {
-			if level, ok := levelColors[l]; ok {
-				enc.AppendString(fmt.Sprintf("%s%s%s", level.bg, level.text, colorReset))
-			}
-		}
-	}
-	var encoder zapcore.Encoder
-	if l.config.OutEnable {
-		encoder = zapcore.NewJSONEncoder(encodeCfg)
-	} else {
-		//encoder = &customConsoleEncoder{zapcore.NewConsoleEncoder(encodeCfg)}
-		encoder = zapcore.NewConsoleEncoder(encodeCfg)
-	}
+	// encoderCfg
+	encoderCfg := createEncoderConfig(l.config)
 
 	if l.config.OutEnable {
-		// outfile
+		// encoder
+		var encoder zapcore.Encoder
+		if l.config.OutEnable {
+			encoder = zapcore.NewJSONEncoder(encoderCfg)
+		} else {
+			//encoder = &customConsoleEncoder{zapcore.NewConsoleEncoder(encoderCfg)}
+			encoder = zapcore.NewConsoleEncoder(encoderCfg)
+		}
+
+		// cores
 		var cores []zapcore.Core
 		if l.config.OutEnable {
-			// cores
 			for level := 0; level <= l.config.OutLevel; level++ {
 				if configs, ok := levelConfigs[level]; ok {
 					for _, config := range configs {
-						dir := path.Join(l.config.OutDir, config.dir)
-						if err := os.MkdirAll(dir, os.ModePerm); err != nil {
-							panic(fmt.Errorf("failed to create dir %s: %w", config.dir, err))
-						}
-						// writer
-						writer := NewDateWriteSyncer(
-							dir,
-							l.config.OutFormat,
-							l.config.CheckInt,
-							l.config.MaxAge,
-							l.config.MaxSize,
-						)
-						buffer := NewBufferedWriteSyncer(writer)
-						l.syncs = append(l.syncs, buffer)
-						writeSyncer := zapcore.Lock(zapcore.AddSync(buffer))
-						core := zapcore.NewCore(encoder, writeSyncer, zap.LevelEnablerFunc(config.enable))
+						core, syncer := createCore(encoder, l.config, config)
+						l.syncs = append(l.syncs, syncer)
 						cores = append(cores, core)
 					}
 				}
@@ -184,7 +161,7 @@ func (l *Logger) initialize() {
 			Thereafter: 100,
 		}
 		c.DisableCaller = true
-		c.EncoderConfig = encodeCfg
+		c.EncoderConfig = encoderCfg
 
 		// logger
 		var err error
@@ -193,6 +170,55 @@ func (l *Logger) initialize() {
 			panic(err)
 		}
 	}
+}
+
+func createEncoderConfig(config *Config) zapcore.EncoderConfig {
+	encodeCfg := zap.NewProductionEncoderConfig()
+	encodeCfg.EncodeTime = zapcore.ISO8601TimeEncoder
+	if config.OutEnable {
+		encodeCfg.LevelKey = ""
+	} else {
+		encodeCfg.EncodeTime = func(t time.Time, enc zapcore.PrimitiveArrayEncoder) {
+			enc.AppendString(fmt.Sprintf("\x1b[20m%s\x1b[0m", t.Format("2006-01-02 15:04:05.000")))
+		}
+		//encodeCfg.EncodeLevel = zapcore.CapitalColorLevelEncoder
+		encodeCfg.EncodeLevel = func(l zapcore.Level, enc zapcore.PrimitiveArrayEncoder) {
+			if level, ok := levelColors[l]; ok {
+				enc.AppendString(fmt.Sprintf("%s%s%s", level.bg, level.text, colorReset))
+			}
+		}
+	}
+	return encodeCfg
+}
+
+func createCore(encoder zapcore.Encoder, config *Config, lConf levelConfig) (zapcore.Core, *zapcore.BufferedWriteSyncer) {
+	// path
+	dir := path.Join(config.OutDir, lConf.dir)
+	if err := os.MkdirAll(dir, os.ModePerm); err != nil {
+		panic(fmt.Errorf("failed to create dir %s: %w", lConf.dir, err))
+	}
+	// writer
+	writer := NewDateWriteSyncer(
+		dir,
+		config.OutFormat,
+		config.CheckInt,
+		config.MaxAge,
+		config.MaxSize,
+	)
+
+	// syncer
+	syncer := &zapcore.BufferedWriteSyncer{
+		WS:            zapcore.AddSync(writer),
+		Size:          defaultBatchSize,
+		FlushInterval: defaultFlushTimeout,
+	}
+	// core
+	core := zapcore.NewCore(
+		encoder,
+		zapcore.Lock(syncer),
+		zap.LevelEnablerFunc(lConf.enable),
+	)
+	return core, syncer
 }
 
 // Close 优雅退出
@@ -205,7 +231,7 @@ func Close() error {
 
 	var errs []error
 	for _, buffer := range logger.syncs {
-		if err := buffer.Close(); err != nil {
+		if err := buffer.Stop(); err != nil {
 			errs = append(errs, err)
 		}
 	}
