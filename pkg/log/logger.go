@@ -259,9 +259,26 @@ func log(level zapcore.Level, msg string, fields ...zap.Field) {
 	}
 }
 
-func Debug(msg string, fields ...zap.Field) { log(zapcore.DebugLevel, msg, fields...) }
-func Info(msg string, fields ...zap.Field)  { log(zapcore.InfoLevel, msg, fields...) }
-func Warn(msg string, fields ...zap.Field)  { log(zapcore.WarnLevel, msg, fields...) }
-func Error(msg string, fields ...zap.Field) { log(zapcore.ErrorLevel, msg, fields...) }
-func Panic(msg string, fields ...zap.Field) { log(zapcore.PanicLevel, msg, fields...) }
-func Fatal(msg string, fields ...zap.Field) { log(zapcore.FatalLevel, msg, fields...) }
+func Debug(msg string, fields ...Field) {
+	log(zapcore.DebugLevel, msg, toZapFields(fields)...)
+}
+
+func Info(msg string, fields ...Field) {
+	log(zapcore.InfoLevel, msg, toZapFields(fields)...)
+}
+
+func Warn(msg string, fields ...Field) {
+	log(zapcore.WarnLevel, msg, toZapFields(fields)...)
+}
+
+func Error(msg string, fields ...Field) {
+	log(zapcore.ErrorLevel, msg, toZapFields(fields)...)
+}
+
+func Panic(msg string, fields ...Field) {
+	log(zapcore.PanicLevel, msg, toZapFields(fields)...)
+}
+
+func Fatal(msg string, fields ...Field) {
+	log(zapcore.FatalLevel, msg, toZapFields(fields)...)
+}
