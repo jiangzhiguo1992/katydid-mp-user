@@ -8,7 +8,7 @@ import (
 )
 
 const (
-	defaultBatchSize    = 4096
+	defaultBatchSize    = 1024 * 4
 	defaultFlushTimeout = time.Second
 )
 

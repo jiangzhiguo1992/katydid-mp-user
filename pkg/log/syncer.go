@@ -8,14 +8,6 @@ import (
 	"time"
 )
 
-const (
-	defaultOutPath             = "logs"             // 默认输出目录
-	defaultCheckInterval       = time.Hour          // 定期清理时间间隔
-	defaultMaxAge              = 7 * 24 * time.Hour // 7天
-	defaultMaxSize       int64 = 100 << 20          // 100MB
-	defaultFormat              = "06-01-02"         // 默认文件名格式
-)
-
 // DateWriteSyncer 按日期写入日志
 type DateWriteSyncer struct {
 	sync.Mutex
@@ -30,38 +22,18 @@ type DateWriteSyncer struct {
 
 // NewDateWriteSyncer 创建日志写入器
 func NewDateWriteSyncer(
-	outPath *string,
-	format *string,
-	checkInt *time.Duration,
-	maxAge *time.Duration,
-	maxSize *int64,
+	outPath string,
+	format string,
+	checkInt time.Duration,
+	maxAge time.Duration,
+	maxSize int64,
 ) *DateWriteSyncer {
-	out := defaultOutPath
-	if outPath != nil {
-		out = *outPath
-	}
-	ft := defaultFormat
-	if format != nil {
-		ft = *format
-	}
-	interval := defaultCheckInterval
-	if checkInt != nil {
-		interval = *checkInt
-	}
-	mAge := defaultMaxAge
-	if maxAge != nil {
-		mAge = *maxAge
-	}
-	mSize := defaultMaxSize
-	if maxSize != nil {
-		mSize = *maxSize
-	}
 	return &DateWriteSyncer{
-		outPath:   out,
-		format:    ft,
-		checkInt:  interval,
-		maxAge:    mAge,
-		maxSize:   mSize,
+		outPath:   outPath,
+		format:    format,
+		checkInt:  checkInt,
+		maxAge:    maxAge,
+		maxSize:   maxSize,
 		lastClean: time.Now(),
 	}
 }

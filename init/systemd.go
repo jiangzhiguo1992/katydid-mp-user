@@ -18,18 +18,14 @@ func init() {
 	)
 
 	// logger
-	logDir := configs.LogDir
-	checkInt := time.Duration(config.LogConf.FileCheckInterval) * time.Hour
-	maxAge := time.Duration(config.LogConf.FileMaxAge) * time.Hour * 24
-	maxSize := int64(config.LogConf.FileMaxSize * 1024 * 1024)
 	log.Init(log.Config{
 		OutEnable: config.LogConf.OutEnable,
-		OutDir:    &logDir,
-		OutLevel:  &config.LogConf.OutLevel,
-		OutFormat: &config.LogConf.OutFormat,
-		CheckInt:  &checkInt,
-		MaxAge:    &maxAge,
-		MaxSize:   &maxSize,
+		OutDir:    configs.LogDir,
+		OutLevel:  config.LogConf.OutLevel,
+		OutFormat: config.LogConf.OutFormat,
+		CheckInt:  time.Duration(config.LogConf.FileCheckInterval) * time.Minute,
+		MaxAge:    time.Duration(config.LogConf.FileMaxAge) * time.Hour * 24,
+		MaxSize:   int64(config.LogConf.FileMaxSize * 1024 * 1024),
 	})
 
 	// i18n

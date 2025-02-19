@@ -27,6 +27,13 @@ const (
 	bgYellow = "\x1b[43m"
 	bgPurple = "\x1b[45m"
 	bgGray   = "\x1b[47m"
+
+	// 默认conf
+	defaultOutPath             = "logs"             // 默认输出目录
+	defaultFormat              = "06-01-02"         // 默认文件名格式
+	defaultCheckInterval       = time.Hour          // 定期清理时间间隔
+	defaultMaxAge              = 7 * 24 * time.Hour // 7天
+	defaultMaxSize       int64 = 100 << 20          // 100MB
 )
 
 // 日志级别映射
@@ -68,19 +75,31 @@ type Logger struct {
 
 // Config 日志配置
 type Config struct {
-	OutEnable bool           // 是否启用输出
-	OutDir    *string        // 输出目录
-	OutLevel  *int           // 输出级别
-	OutFormat *string        // 输出格式
-	CheckInt  *time.Duration // 检查间隔
-	MaxAge    *time.Duration // 最大时间
-	MaxSize   *int64         // 最大大小
+	OutEnable bool          // 是否启用输出
+	OutDir    string        // 输出目录
+	OutLevel  int           // 输出级别
+	OutFormat string        // 输出格式
+	CheckInt  time.Duration // 检查间隔
+	MaxAge    time.Duration // 最大时间
+	MaxSize   int64         // 最大大小
 }
 
 var (
 	logger *Logger
 	once   sync.Once
 )
+
+func NewDefaultConfig(outEnable bool, outLevel int) Config {
+	return Config{
+		OutEnable: outEnable,
+		OutLevel:  outLevel,
+		OutDir:    defaultOutPath,
+		OutFormat: defaultFormat,
+		CheckInt:  defaultCheckInterval,
+		MaxAge:    defaultMaxAge,
+		MaxSize:   defaultMaxSize,
+	}
+}
 
 // Init 初始化日志
 func Init(cfg Config) {
@@ -124,18 +143,18 @@ func (l *Logger) initialize() {
 	if l.config.OutEnable {
 		// outfile
 		var cores []zapcore.Core
-		if l.config.OutEnable && (l.config.OutDir != nil) && (l.config.OutLevel != nil) {
+		if l.config.OutEnable {
 			// cores
-			for level := 0; level <= *l.config.OutLevel; level++ {
+			for level := 0; level <= l.config.OutLevel; level++ {
 				if configs, ok := levelConfigs[level]; ok {
 					for _, config := range configs {
-						dir := path.Join(*l.config.OutDir, config.dir)
+						dir := path.Join(l.config.OutDir, config.dir)
 						if err := os.MkdirAll(dir, os.ModePerm); err != nil {
 							panic(fmt.Errorf("failed to create dir %s: %w", config.dir, err))
 						}
 						// writer
 						writer := NewDateWriteSyncer(
-							&dir,
+							dir,
 							l.config.OutFormat,
 							l.config.CheckInt,
 							l.config.MaxAge,
