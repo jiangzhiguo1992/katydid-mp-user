@@ -87,7 +87,7 @@ func (m *Manager) loadMessageFiles() error {
 	if len(files) == 0 {
 		return fmt.Errorf("no message files found in dirs: %v", m.config.DocDirs)
 	}
-	fmt.Printf("loading i18n files: %v", files)
+	fmt.Printf("loading i18n files: %v\n", files)
 
 	langs := make([]string, 0, len(files))
 	for _, file := range files {
@@ -97,7 +97,7 @@ func (m *Manager) loadMessageFiles() error {
 		langs = append(langs, extractLangFromFilename(file))
 	}
 
-	fmt.Printf("loading initialized languages: %v", langs)
+	fmt.Printf("loading initialized languages: %v\n", langs)
 	return nil
 }
 
@@ -122,28 +122,32 @@ func extractLangFromFilename(file string) string {
 	return name
 }
 
-func (m *Manager) getLocalizer(lang string) *i18n.Localizer {
-	// 构建语言标签列表，实现回退链
-	tags := []string{
-		lang,                        // 完整标签 (如 zh-CN)
-		strings.Split(lang, "-")[0], // 基础标签 (如 zh)
-		m.config.DefaultLang,        // 默认语言
-	}
-
-	return i18n.NewLocalizer(m.bundle, tags...)
-}
-
 func (m *Manager) Localize(lang, msgID string, data map[string]interface{}) string {
-	localizer := m.getLocalizer(lang)
+	// 构建语言标签列表，实现回退链
+	tags := []string{lang}
+	base := strings.Split(lang, "-")[0]
+	if base != lang {
+		tags = append(tags, base)
+	}
+	tags = append(tags, m.config.DefaultLang)
 
-	msg, err := localizer.Localize(&i18n.LocalizeConfig{
-		MessageID:    msgID,
-		TemplateData: data,
-		DefaultMessage: &i18n.Message{
-			ID:    msgID,
-			Other: unknownError,
-		},
-	})
+	// 循环开找
+	msg := unknownError
+	var err error
+	for i := 0; i < len(tags); i++ {
+		localizer := i18n.NewLocalizer(m.bundle, tags[i:]...)
+		msg, err = localizer.Localize(&i18n.LocalizeConfig{
+			MessageID:    msgID,
+			TemplateData: data,
+			DefaultMessage: &i18n.Message{
+				ID:    msgID,
+				Other: unknownError,
+			},
+		})
+		if (msg != unknownError) && (err == nil) {
+			break
+		}
+	}
 
 	if err != nil && m.config.OnErr != nil {
 		m.config.OnErr("localize failed", map[string]interface{}{

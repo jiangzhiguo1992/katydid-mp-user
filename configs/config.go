@@ -39,9 +39,9 @@ type (
 		Env     string `toml:"env" mapstructure:"env"`
 		EnvName string `toml:"env_name" mapstructure:"env_name"`
 
-		LogConf `toml:"log" mapstructure:"log"`
-
 		DefLang string `toml:"def_lang" mapstructure:"def_lang"`
+
+		LogConf `toml:"log" mapstructure:"log"`
 
 		AppConf `mapstructure:",squash"`
 

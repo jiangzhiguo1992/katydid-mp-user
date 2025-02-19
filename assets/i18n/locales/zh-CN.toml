@@ -1,4 +1,4 @@
-hello = "app,你好，{{.Count}}，{{.Name}}！"
+hello = "app, 你好 {{.Name}}, {{.Count}} 次!"
 
 
 err_db_add_nil = "数据库错误，插入对象为空"

@@ -1,0 +1,2 @@
+hello = "app, 你好 {{.Name}}, {{.Count}}"
+hellos = "app, 你好s {{.Name}}, {{.Count}}"
