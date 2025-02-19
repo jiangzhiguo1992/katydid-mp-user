@@ -31,7 +31,23 @@ const (
 var (
 	// 错误信息映射
 	codeMsgIds = map[int][]string{
-		CodeDB: {MsgIdDBPkDuplicated, MsgIdDBAddNil, MsgIdDBDelNil, MsgIdDBUpdNil, MsgIdDBQueNil, MsgIdDBFieldNil, MsgIdDBFieldLarge, MsgIdDBFieldShort, MsgIdDBFieldMax, MsgIdDBFieldMin, MsgIdDBFieldRange, MsgIdDBFieldUnDefined, MsgIdDBQueParams, MsgIdDBQueNone, MsgIdDBQueForeignNone},
+		CodeDB: {
+			MsgIdDBPkDuplicated,
+			MsgIdDBAddNil,
+			MsgIdDBDelNil,
+			MsgIdDBUpdNil,
+			MsgIdDBQueNil,
+			MsgIdDBFieldNil,
+			MsgIdDBFieldLarge,
+			MsgIdDBFieldShort,
+			MsgIdDBFieldMax,
+			MsgIdDBFieldMin,
+			MsgIdDBFieldRange,
+			MsgIdDBFieldUnDefined,
+			MsgIdDBQueParams,
+			MsgIdDBQueNone,
+			MsgIdDBQueForeignNone,
+		},
 	}
 
 	// 错误模式匹配
