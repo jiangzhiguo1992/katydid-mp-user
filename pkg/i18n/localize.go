@@ -10,36 +10,32 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
-	"sync"
 )
 
-// Config i18n 配置
+const (
+	defaultDefLang = "en"
+	unknownError   = "unknown error"
+)
+
 type Config struct {
-	DefaultLang string   // 默认语言
-	Dirs        []string // 语言文件目录
-	Debug       bool     // 调试模式
+	DefaultLang string
+	DocDirs     []string
+	OnErr       func(string, map[string]interface{})
 }
 
-// Manager i18n 管理器
 type Manager struct {
-	config    Config
-	bundle    *i18n.Bundle
-	localizes sync.Map // string -> *i18n.Localizer
-	logger    Logger
+	config Config
+	bundle *i18n.Bundle
 }
 
-// Logger 日志接口
 type Logger interface {
-	Debug(msg string, fields ...any)
-	Info(msg string, fields ...any)
 	Error(msg string, fields ...any)
 }
 
 var defaultManager *Manager
 
-// Init 初始化默认管理器
-func Init(cfg Config, logger Logger) error {
-	m, err := NewManager(cfg, logger)
+func Init(cfg Config) error {
+	m, err := NewManager(cfg)
 	if err != nil {
 		return fmt.Errorf("create i18n manager failed: %w", err)
 	}
@@ -47,27 +43,23 @@ func Init(cfg Config, logger Logger) error {
 	return nil
 }
 
-// NewManager 创建新的i18n管理器
-func NewManager(cfg Config, logger Logger) (*Manager, error) {
+func NewManager(cfg Config) (*Manager, error) {
 	if cfg.DefaultLang == "" {
-		cfg.DefaultLang = "en"
+		cfg.DefaultLang = defaultDefLang
 	}
 
-	tag, err := language.Parse(cfg.DefaultLang)
+	defaultTag, err := language.Parse(cfg.DefaultLang)
 	if err != nil {
 		return nil, fmt.Errorf("parse default language failed: %w", err)
 	}
 
 	m := &Manager{
 		config: cfg,
-		logger: logger,
+		bundle: i18n.NewBundle(defaultTag),
 	}
 
-	// 初始化bundle
-	m.bundle = i18n.NewBundle(tag)
 	m.registerUnmarshalFuncs()
 
-	// 加载语言文件
 	if err := m.loadMessageFiles(); err != nil {
 		return nil, err
 	}
@@ -84,94 +76,79 @@ func (m *Manager) registerUnmarshalFuncs() {
 
 func (m *Manager) loadMessageFiles() error {
 	var files []string
-	for _, dir := range m.config.Dirs {
+	for _, dir := range m.config.DocDirs {
 		fs, err := filepath.Glob(filepath.Join(dir, "*"))
 		if err != nil {
 			return fmt.Errorf("glob dir %s failed: %w", dir, err)
 		}
-		for _, f := range fs {
-			if fi, err := os.Stat(f); err == nil && !fi.IsDir() {
-				files = append(files, f)
-			}
-		}
+		files = append(files, filterMessageFiles(fs)...)
 	}
 
 	if len(files) == 0 {
-		return fmt.Errorf("no message files found in dirs: %v", m.config.Dirs)
+		return fmt.Errorf("no message files found in dirs: %v", m.config.DocDirs)
 	}
+	fmt.Printf("loading i18n files: %v", files)
 
-	if m.config.Debug {
-		m.logger.Debug("loading i18n files", "files", files)
-	}
-
-	var langs []string
+	langs := make([]string, 0, len(files))
 	for _, file := range files {
-		if err := m.loadSingleFile(file); err != nil {
-			return err
+		if _, err := m.bundle.LoadMessageFile(file); err != nil {
+			return fmt.Errorf("load message file %s failed: %w", file, err)
 		}
-		lang := m.extractLangFromFilename(file)
-		langs = append(langs, lang)
+		langs = append(langs, extractLangFromFilename(file))
 	}
 
-	m.logger.Info("i18n initialized", "languages", langs)
+	fmt.Printf("loading initialized languages: %v", langs)
 	return nil
 }
 
-func (m *Manager) loadSingleFile(file string) error {
-	if _, err := m.bundle.LoadMessageFile(file); err != nil {
-		return fmt.Errorf("load message file %s failed: %w", file, err)
+func filterMessageFiles(files []string) []string {
+	var result []string
+	for _, f := range files {
+		if fi, err := os.Stat(f); err == nil && !fi.IsDir() {
+			result = append(result, f)
+		}
 	}
-
-	lang := m.extractLangFromFilename(file)
-	m.localizes.Store(lang, i18n.NewLocalizer(m.bundle, lang))
-	return nil
+	return result
 }
 
-func (m *Manager) extractLangFromFilename(file string) string {
-	filename := filepath.Base(file)
-	name := filename[:len(filename)-len(filepath.Ext(filename))]
-	parts := strings.Split(filename, ".")
-	if len(parts) > 2 {
-		name = parts[1]
+func extractLangFromFilename(file string) string {
+	base := filepath.Base(file)
+	ext := filepath.Ext(base)
+	name := base[:len(base)-len(ext)]
+
+	if parts := strings.Split(name, "."); len(parts) > 1 {
+		return parts[1]
 	}
 	return name
 }
 
 func (m *Manager) getLocalizer(lang string) *i18n.Localizer {
-	// 尝试完整语言代码
-	if loc, ok := m.localizes.Load(lang); ok {
-		return loc.(*i18n.Localizer)
+	// 构建语言标签列表，实现回退链
+	tags := []string{
+		lang,                        // 完整标签 (如 zh-CN)
+		strings.Split(lang, "-")[0], // 基础标签 (如 zh)
+		m.config.DefaultLang,        // 默认语言
 	}
 
-	// 尝试语言基础部分
-	parts := strings.Split(lang, "-")
-	if len(parts) > 1 {
-		if loc, ok := m.localizes.Load(parts[0]); ok {
-			return loc.(*i18n.Localizer)
-		}
-	}
-
-	// 回退到默认语言
-	loc, _ := m.localizes.Load(m.config.DefaultLang)
-	return loc.(*i18n.Localizer)
+	return i18n.NewLocalizer(m.bundle, tags...)
 }
 
-// Localize 本地化消息（必须存在）
 func (m *Manager) Localize(lang, msgID string, data map[string]interface{}) string {
-	return m.getLocalizer(lang).MustLocalize(&i18n.LocalizeConfig{
-		MessageID:    msgID,
-		TemplateData: data,
-	})
-}
+	localizer := m.getLocalizer(lang)
 
-// LocalizeTry 尝试本地化消息（可能不存在）
-func (m *Manager) LocalizeTry(lang, msgID string, data map[string]interface{}) string {
-	msg, err := m.getLocalizer(lang).Localize(&i18n.LocalizeConfig{
+	msg, err := localizer.Localize(&i18n.LocalizeConfig{
 		MessageID:    msgID,
 		TemplateData: data,
+		DefaultMessage: &i18n.Message{
+			ID:    msgID,
+			Other: unknownError,
+		},
 	})
-	if err != nil && m.config.Debug {
-		m.logger.Error("localize failed", "error", err, "msgID", msgID)
+
+	if err != nil && m.config.OnErr != nil {
+		m.config.OnErr("localize failed", map[string]interface{}{
+			"msgID": msgID, "lang": lang, "error": err,
+		})
 	}
 	return msg
 }
@@ -180,14 +157,6 @@ func Localize(lang, msgID string, data map[string]interface{}) string {
 	return defaultManager.Localize(lang, msgID, data)
 }
 
-func LocalizeTry(lang, msgID string, data map[string]interface{}) string {
-	return defaultManager.LocalizeTry(lang, msgID, data)
-}
-
 func LocalizeDef(msgID string, data map[string]interface{}) string {
 	return defaultManager.Localize(defaultManager.config.DefaultLang, msgID, data)
-}
-
-func LocalizeDefTry(msgID string, data map[string]interface{}) string {
-	return defaultManager.LocalizeTry(defaultManager.config.DefaultLang, msgID, data)
 }

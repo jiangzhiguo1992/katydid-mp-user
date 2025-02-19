@@ -29,8 +29,16 @@ func init() {
 	})
 
 	// i18n
-	i18n.Init(
-		configs.LangDirs,
-		&config.DefLang,
-	)
+
+	// 初始化
+	err := i18n.Init(i18n.Config{
+		DefaultLang: config.DefLang,
+		DocDirs:     configs.LangDirs,
+		OnErr: func(msg string, fields map[string]interface{}) {
+			log.Error(msg, log.Any("fields", fields))
+		},
+	})
+	if err != nil {
+		log.Fatal("init i18n failed", log.Err(err))
+	}
 }
