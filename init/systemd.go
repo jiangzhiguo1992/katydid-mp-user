@@ -29,8 +29,6 @@ func init() {
 	})
 
 	// i18n
-
-	// 初始化
 	err := i18n.Init(i18n.Config{
 		DefaultLang: config.DefLang,
 		DocDirs:     configs.LangDirs,

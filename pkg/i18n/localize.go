@@ -148,6 +148,8 @@ func (m *Manager) Localize(lang, msgID string, data map[string]interface{}, nilB
 			break
 		}
 	}
+
+	// default
 	if (len(msg) == 0) && (err != nil) {
 		if nilBackId {
 			msg = msgID
@@ -156,7 +158,8 @@ func (m *Manager) Localize(lang, msgID string, data map[string]interface{}, nilB
 		}
 	}
 
-	if err != nil && m.config.OnErr != nil {
+	// error
+	if !nilBackId && (err != nil) && (m.config.OnErr != nil) {
 		m.config.OnErr("localize failed", map[string]interface{}{
 			"msgID": msgID, "lang": lang, "error": err,
 		})
