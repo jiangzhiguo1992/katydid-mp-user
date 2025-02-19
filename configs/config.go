@@ -15,8 +15,6 @@ var (
 
 	//go:embed app/private.toml
 	fileAppPri []byte
-
-	config = new(Config)
 )
 
 const (
@@ -43,12 +41,12 @@ type (
 	}
 
 	LogConf struct {
-		OutEnable         bool   `toml:"out_enable" mapstructure:"out_enable"`
-		OutLevel          int    `toml:"out_level" mapstructure:"out_level"`
-		OutFormat         string `toml:"out_format" mapstructure:"out_format"`
-		FileCheckInterval int    `toml:"file_check_interval" mapstructure:"file_check_interval"`
-		FileMaxAge        int    `toml:"file_max_age" mapstructure:"file_max_age"`
-		FileMaxSize       int64  `toml:"file_max_size" mapstructure:"file_max_size"`
+		OutEnable     bool   `toml:"out_enable" mapstructure:"out_enable"`
+		OutLevel      int    `toml:"out_level" mapstructure:"out_level"`
+		OutFormat     string `toml:"out_format" mapstructure:"out_format"`
+		CheckInterval int    `toml:"check_interval" mapstructure:"check_interval"`
+		FileMaxAge    int    `toml:"file_max_age" mapstructure:"file_max_age"`
+		FileMaxSize   int64  `toml:"file_max_size" mapstructure:"file_max_size"`
 	}
 
 	AppConf struct {
@@ -110,13 +108,14 @@ type (
 
 	RedisConf struct {
 		// TODO:GG 也需要支持集群模式？
-		Host        string `toml:"host" mapstructure:"host"`
-		Port        string `toml:"port" mapstructure:"port"`
-		DB          string `toml:"db" mapstructure:"db"`
-		Pwd         string `toml:"pwd" mapstructure:"pwd"`
-		MaxRetries  int    `toml:"max_retries" mapstructure:"max_retries"`
-		PoolSize    int    `toml:"pool_size" mapstructure:"pool_size"`
-		MinIdleConn int    `toml:"min_idle_conn" mapstructure:"min_idle_conn"`
+		Host        string   `toml:"host" mapstructure:"host"`
+		Port        string   `toml:"port" mapstructure:"port"`
+		DB          string   `toml:"db" mapstructure:"db"`
+		Pwd         string   `toml:"pwd" mapstructure:"pwd"`
+		MaxRetries  int      `toml:"max_retries" mapstructure:"max_retries"`
+		PoolSize    int      `toml:"pool_size" mapstructure:"pool_size"`
+		MinIdleConn int      `toml:"min_idle_conn" mapstructure:"min_idle_conn"`
+		Clusters    []string `toml:"clusters" mapstructure:"clusters"`
 	}
 
 	MongoDBConf struct {
@@ -137,11 +136,7 @@ func (m *Config) IsProd() bool {
 }
 
 func (m *Config) merge() {
-	config.Account.ModuleConf = config.ModuleConf
-	config.Client.ModuleConf = config.ModuleConf
-	config.User.ModuleConf = config.ModuleConf
-}
-
-func Get() *Config {
-	return config
+	m.Account.ModuleConf = m.ModuleConf
+	m.Client.ModuleConf = m.ModuleConf
+	m.User.ModuleConf = m.ModuleConf
 }

@@ -7,7 +7,7 @@ def_lang = "en-US" # zh-CN / en-US  必须是已有的语言
 out_enable = false
 out_level = 3 # 输出级别，0(fatal) 1(panic) 2(error) 3(warn) 4(info) 5(debug)
 out_format = "06-01-02" # 可以按时间分割，06-01-02 15:04:05.000
-file_check_interval = 60 # 检查间隔，min
+check_interval = 60 # 检查间隔，min
 file_max_age = 30  # 保留时间，day
 file_max_size = 100  # 单文件最大大小，MB
 

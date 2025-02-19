@@ -36,13 +36,20 @@ func GetManager() *Manager {
 	return defaultManager
 }
 
+func Get() *Config {
+	m := GetManager()
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	return m.config
+}
+
 // Init 初始化配置
 func Init(confDir string, reload func() bool) (*Config, error) {
 	m := GetManager()
 	if err := m.Load(confDir, reload); err != nil {
 		return nil, err
 	}
-	return m.Get(), nil
+	return m.config, nil
 }
 
 // Load 加载配置
@@ -200,16 +207,4 @@ func loadRemoteConfig() {
 	//		}
 	//	}
 	//}()
-}
-
-// Get 获取配置
-func (m *Manager) Get() *Config {
-	m.mu.RLock()
-	defer m.mu.RUnlock()
-	return m.config
-}
-
-// GetViper 获取viper实例
-func (m *Manager) GetViper() *viper.Viper {
-	return m.v
 }
