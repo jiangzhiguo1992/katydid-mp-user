@@ -1,7 +1,8 @@
-package err
+package error
 
 import (
 	"errors"
+	"katydid-mp-user/pkg/err"
 	"katydid-mp-user/pkg/log"
 	"strings"
 )
@@ -40,11 +41,11 @@ var (
 )
 
 // MatchErrorMsgId 通过错误码匹配错误
-func MatchErrorMsgId(msgId string) *CodeError {
+func MatchErrorMsgId(msgId string) *err.CodeError {
 	for code, msgIds := range codeMsgIds {
 		for _, id := range msgIds {
 			if id == msgId {
-				return NewCodeError(errors.New(id)).WithCode(code)
+				return err.NewCodeError(errors.New(id)).WithCode(code)
 			}
 		}
 	}
@@ -53,23 +54,23 @@ func MatchErrorMsgId(msgId string) *CodeError {
 }
 
 // MatchErrorPattern 通过错误信息模式匹配错误
-func MatchErrorPattern(err error) *CodeError {
-	if err == nil {
+func MatchErrorPattern(e error) *err.CodeError {
+	if e == nil {
 		return nil
 	}
-	errMsg := err.Error()
+	errMsg := e.Error()
 	for pattern, msgId := range errorPatterns {
 		if strings.Contains(errMsg, pattern) {
 			if codeErr := MatchErrorMsgId(msgId); codeErr != nil {
 				return codeErr
 			}
-			log.Error("没有匹配的错误Msg:", log.Err(err))
-			return NewCodeError(err).WithCode(CodeUnknown)
+			log.Error("没有匹配的错误Msg:", log.Err(e))
+			return err.NewCodeError(e).WithCode(CodeUnknown)
 		}
 	}
-	return NewCodeError(err).WithCode(CodeUnknown)
+	return err.NewCodeError(e).WithCode(CodeUnknown)
 }
 
-func MatchErrorMessage(msg string) *CodeError {
+func MatchErrorMessage(msg string) *err.CodeError {
 	return MatchErrorPattern(errors.New(msg))
 }
