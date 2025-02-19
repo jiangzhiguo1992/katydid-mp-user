@@ -1,88 +1,65 @@
 package err
 
 import (
-	"fmt"
+	"strings"
 )
 
-// MultiCodeError 是一个可以包裹多层错误的结构体
+// MultiCodeError 定义多错误结构
 type MultiCodeError struct {
-	Code   int
-	Errors []*CodeError
+	code   int
+	errors []*CodeError
 }
 
-func NewMultiCodeError(err error) *MultiCodeError {
-	return &MultiCodeError{Code: 0, Errors: []*CodeError{NewCodeError(err)}}
+func NewMultiError(err error) *MultiCodeError {
+	return &MultiCodeError{
+		errors: []*CodeError{NewCodeError(err)},
+	}
 }
 
+// WithCode 设置错误码
 func (m *MultiCodeError) WithCode(code int) *MultiCodeError {
-	m.Code = code
+	m.code = code
 	return m
 }
 
-func (m *MultiCodeError) Error() string {
-	if len(m.Errors) == 0 {
-		return ""
-	}
-	result := "Multiple:"
-	for _, err := range m.Errors {
-		result += fmt.Sprintf("\n\t-%s", err.Error())
-	}
-	return result
-}
-
-// WrapError 包裹一个新的错误
+// WrapError 添加新错误
 func (m *MultiCodeError) WrapError(err error) *MultiCodeError {
 	return m.WrapCodeError(NewCodeError(err))
 }
 
 func (m *MultiCodeError) WrapCodeError(err *CodeError) *MultiCodeError {
-	m.Errors = append(m.Errors, err)
+	m.errors = append(m.errors, err)
 	return m
 }
 
-// Unwrap 返回第一个错误
+// Error 实现 error 接口
+func (m *MultiCodeError) Error() string {
+	if len(m.errors) == 0 {
+		return ""
+	}
+
+	if len(m.errors) == 1 {
+		return m.errors[0].Error()
+	}
+
+	var builder strings.Builder
+	builder.WriteString("Multiple errors:")
+	for _, err := range m.errors {
+		builder.WriteString("\n\t- ")
+		builder.WriteString(err.Error())
+	}
+	return builder.String()
+}
+
+// Code 获取错误码
+func (m *MultiCodeError) Code() int {
+	return m.code
+}
+
+// Unwrap 实现错误链
 func (m *MultiCodeError) Unwrap() error {
-	if len(m.Errors) > 0 {
-		return m.Errors[0]
+	if len(m.errors) == 0 {
+		return nil
 	}
-	return nil
-}
-
-// CodeError 是一个可以包裹错误码的结构体
-type CodeError struct {
-	Code   int
-	Err    error
-	Prefix string
-	Suffix string
-}
-
-func NewCodeError(err error) *CodeError {
-	return &CodeError{Code: 0, Err: err, Prefix: "", Suffix: ""}
-}
-
-func (c *CodeError) WithCode(code int) *CodeError {
-	c.Code = code
-	return c
-}
-
-func (c *CodeError) WithPrefix(prefix string) *CodeError {
-	c.Prefix = prefix
-	return c
-}
-
-func (c *CodeError) WithSuffix(suffix string) *CodeError {
-	c.Suffix = suffix
-	return c
-}
-
-func (c *CodeError) Error() string {
-	prefix := ""
-	if len(c.Prefix) > 0 {
-		prefix = fmt.Sprintf("%s_: ", c.Prefix)
-	}
-	suffix := ""
-	if len(c.Suffix) > 0 {
-		suffix = fmt.Sprintf(" :_%s", c.Suffix)
-	}
-	return fmt.Sprintf("%s%s%s", prefix, c.Err.Error(), suffix)
+	return m.errors[0]
 }
