@@ -30,7 +30,7 @@ type VerifyInfo struct {
 }
 
 func NewVerifyInfo(AccountId uint64, Kind int16, expireAt int64) *VerifyInfo {
-	return &VerifyInfo{
+	verify := &VerifyInfo{
 		Base:        model.NewBaseEmpty(),
 		AccountId:   AccountId,
 		Kind:        Kind,
@@ -40,6 +40,8 @@ func NewVerifyInfo(AccountId uint64, Kind int16, expireAt int64) *VerifyInfo {
 		ExpireAt:    expireAt,
 		VerifyTimes: 0,
 	}
+	verify.GenerateCode()
+	return verify
 }
 
 // SetBody 设置验证内容 (注意language)
