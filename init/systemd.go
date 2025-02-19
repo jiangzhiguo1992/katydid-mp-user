@@ -9,13 +9,16 @@ import (
 
 func init() {
 	// configs
-	config := configs.Init(
+	config, err := configs.Init(
 		configs.ConfDir,
 		func() bool {
 			// TODO:GG reload
 			return true
 		},
 	)
+	if err != nil {
+		log.Fatal("init config failed", log.Err(err))
+	}
 
 	// logger
 	log.Init(log.Config{
@@ -29,7 +32,7 @@ func init() {
 	})
 
 	// i18n
-	err := i18n.Init(i18n.Config{
+	err = i18n.Init(i18n.Config{
 		DefaultLang: config.DefLang,
 		DocDirs:     configs.LangDirs,
 		OnErr: func(msg string, fields map[string]interface{}) {
