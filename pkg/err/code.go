@@ -2,84 +2,74 @@ package err
 
 import (
 	"errors"
-	"go.uber.org/zap"
 	"katydid-mp-user/pkg/log"
 	"strings"
 )
 
 const (
-	// TODO:GG 这些还有必要吗？一般的code都是提醒前端做某些操作？
+	CodeUnknown = 0
+	CodeDB      = 1000
 
-	CodeDBAddNil         = 1002
-	CodeDBDelNil         = 1003
-	CodeDBUpdNil         = 1004
-	CodeDBQueNil         = 1005
-	CodeDBFieldNil       = 1006
-	CodeDBFieldLarge     = 1007 // 长
-	CodeDBFieldShort     = 1008 // 短
-	CodeDBFieldMax       = 1009 // 数量大
-	CodeDBFieldMin       = 1010 // 数量小
-	CodeDBFieldRange     = 1011
-	CodeDBFieldUnDefined = 1012
-	CodeDBPkDuplicated   = 1001
-	CodeDBQueParams      = 1013
-	CodeDBQueNone        = 1014
-	CodeDBQueForeignNone = 1015
+	MsgIdDBPkDuplicated   = "err_db_pk_duplicated"
+	MsgIdDBAddNil         = "err_db_add_nil"
+	MsgIdDBDelNil         = "err_db_del_nil"
+	MsgIdDBUpdNil         = "err_db_upd_nil"
+	MsgIdDBQueNil         = "err_db_que_nil"
+	MsgIdDBFieldNil       = "err_db_field_nil"
+	MsgIdDBFieldLarge     = "err_db_field_large"
+	MsgIdDBFieldShort     = "err_db_field_short"
+	MsgIdDBFieldMax       = "err_db_field_max"
+	MsgIdDBFieldMin       = "err_db_field_min"
+	MsgIdDBFieldRange     = "err_db_field_range"
+	MsgIdDBFieldUnDefined = "err_db_field_undefined"
+	MsgIdDBQueParams      = "err_db_que_params"
+	MsgIdDBQueNone        = "err_db_que_none"
+	MsgIdDBQueForeignNone = "err_db_que_foreign_none"
 )
 
-// TODO:GG 是不是可以在newerr的时候直接把locales塞进去，不用匹配?
-var codeLocales = map[int]string{
-	CodeDBAddNil:         "err_db_add_nil",
-	CodeDBDelNil:         "err_db_del_nil",
-	CodeDBUpdNil:         "err_db_upd_nil",
-	CodeDBQueNil:         "err_db_que_nil",
-	CodeDBFieldNil:       "err_db_field_nil",
-	CodeDBFieldLarge:     "err_db_field_large",
-	CodeDBFieldShort:     "err_db_field_short",
-	CodeDBFieldMax:       "err_db_field_max",
-	CodeDBFieldMin:       "err_db_field_min",
-	CodeDBFieldRange:     "err_db_field_range",
-	CodeDBFieldUnDefined: "err_db_field_undefined",
-	CodeDBPkDuplicated:   "err_db_pk_duplicated",
-	CodeDBQueParams:      "err_db_que_params",
-	CodeDBQueNone:        "err_db_que_none",
-	CodeDBQueForeignNone: "err_db_que_foreign_none",
-}
+var (
+	// 错误信息映射
+	codeMsgIds = map[int][]string{
+		CodeDB: {MsgIdDBPkDuplicated, MsgIdDBAddNil, MsgIdDBDelNil, MsgIdDBUpdNil, MsgIdDBQueNil, MsgIdDBFieldNil, MsgIdDBFieldLarge, MsgIdDBFieldShort, MsgIdDBFieldMax, MsgIdDBFieldMin, MsgIdDBFieldRange, MsgIdDBFieldUnDefined, MsgIdDBQueParams, MsgIdDBQueNone, MsgIdDBQueForeignNone},
+	}
 
-var errorCodes = map[string]int{
-	"duplicate key value violates unique constraint": CodeDBPkDuplicated,
-}
+	// 错误模式匹配
+	errorPatterns = map[string]string{
+		"duplicate key value violates unique constraint": MsgIdDBPkDuplicated,
+	}
+)
 
-func MatchErrorByCode(code int) *CodeError {
-	if message, ok := codeLocales[code]; ok {
-		return &CodeError{
-			Code: code,
-			Err:  errors.New(message),
+// MatchErrorMsgId 通过错误码匹配错误
+func MatchErrorMsgId(msgId string) *CodeError {
+	for code, msgIds := range codeMsgIds {
+		for _, id := range msgIds {
+			if id == msgId {
+				return NewCodeError(errors.New(id)).WithCode(code)
+			}
 		}
 	}
-	log.Warn("没有匹配的错误Code:", zap.Int("code", code))
+	log.Error("没有匹配的错误MsgId:", log.String("msgId", msgId))
 	return nil
 }
 
-func MatchErrorByMsg(msg string) *CodeError {
-	return MatchErrorByErr(errors.New(msg))
-}
-
-func MatchErrorByErr(err error) *CodeError {
+// MatchErrorPattern 通过错误信息模式匹配错误
+func MatchErrorPattern(err error) *CodeError {
 	if err == nil {
 		return nil
 	}
-	for msg, code := range errorCodes {
-		if strings.Contains(err.Error(), msg) {
-			if errorCode := MatchErrorByCode(code); errorCode != nil {
-				return errorCode
+	errMsg := err.Error()
+	for pattern, msgId := range errorPatterns {
+		if strings.Contains(errMsg, pattern) {
+			if codeErr := MatchErrorMsgId(msgId); codeErr != nil {
+				return codeErr
 			}
-			log.Warn("没有匹配的错误Msg:", zap.Error(err))
-			return &CodeError{
-				Code: code,
-				Err:  err,
-			}
+			log.Error("没有匹配的错误Msg:", log.Err(err))
+			return NewCodeError(err).WithCode(CodeUnknown)
 		}
 	}
-	return NewCodeError(err)
+	return NewCodeError(err).WithCode(CodeUnknown)
+}
+
+func MatchErrorMessage(msg string) *CodeError {
+	return MatchErrorPattern(errors.New(msg))
 }

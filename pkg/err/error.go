@@ -52,8 +52,5 @@ func (e *CodeError) Error() string {
 
 // Code 获取错误码
 func (e *CodeError) Code() int {
-	if e == nil {
-		return CodeSuccess
-	}
 	return e.code
 }
