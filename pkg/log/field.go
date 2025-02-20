@@ -10,7 +10,7 @@ import (
 // Field 日志字段
 type Field struct {
 	Key   string
-	Value interface{}
+	Value any
 }
 
 // 基础类型
@@ -243,7 +243,7 @@ func Array(key string, val zapcore.ArrayMarshaler) Field {
 }
 
 // Any handles any other type
-func Any(key string, val interface{}) Field {
+func Any(key string, val any) Field {
 	return Field{Key: key, Value: val}
 }
 

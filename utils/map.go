@@ -1,6 +1,6 @@
 package utils
 
-type Maps map[string]interface{}
+type Maps map[string]any
 
 func (m Maps) GetString(key string) (string, bool) {
 	if v, ok := m[key]; ok {

@@ -13,7 +13,7 @@ type (
 		DeleteBy int64  `json:"deleteBy"`
 		DeleteAt *int64 `json:"deleteAt"`
 
-		Extra map[string]interface{} `json:"extra" gorm:"serializer:json"` // 额外信息
+		Extra map[string]any `json:"extra" gorm:"serializer:json"` // 额外信息
 	}
 
 	//IDBModel interface {
@@ -28,7 +28,7 @@ func NewBaseEmpty() *Base {
 		//UpdateAt: time.Now().UnixMilli(), // auto
 		DeleteBy: 0,
 		DeleteAt: nil,
-		Extra:    map[string]interface{}{},
+		Extra:    map[string]any{},
 	}
 }
 

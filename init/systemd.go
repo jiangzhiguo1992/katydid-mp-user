@@ -35,7 +35,7 @@ func init() {
 	err = i18n.Init(i18n.Config{
 		DefaultLang: config.DefLang,
 		DocDirs:     configs.LangDirs,
-		OnErr: func(msg string, fields map[string]interface{}) {
+		OnErr: func(msg string, fields map[string]any) {
 			log.Error(msg, log.Any("fields", fields))
 		},
 	})

@@ -20,7 +20,7 @@ const (
 type Config struct {
 	DefaultLang string
 	DocDirs     []string
-	OnErr       func(string, map[string]interface{})
+	OnErr       func(string, map[string]any)
 }
 
 type Manager struct {
@@ -118,7 +118,7 @@ func extractLangFromFilename(file string) string {
 	return name
 }
 
-func (m *Manager) Localize(lang, msgID string, data map[string]interface{}, nilBackId bool) string {
+func (m *Manager) Localize(lang, msgID string, data map[string]any, nilBackId bool) string {
 	// 构建语言标签列表，实现回退链
 	tags := []string{lang}
 	base := strings.Split(lang, "-")[0]
@@ -156,25 +156,25 @@ func (m *Manager) Localize(lang, msgID string, data map[string]interface{}, nilB
 
 	// error
 	if !nilBackId && (err != nil) && (m.config.OnErr != nil) {
-		m.config.OnErr("localize failed", map[string]interface{}{
+		m.config.OnErr("localize failed", map[string]any{
 			"msgID": msgID, "lang": lang, "error": err,
 		})
 	}
 	return msg
 }
 
-func LocalizeMust(lang, msgID string, data map[string]interface{}) string {
+func LocalizeMust(lang, msgID string, data map[string]any) string {
 	return defaultManager.Localize(lang, msgID, data, false)
 }
 
-func LocalizeTry(lang, msgID string, data map[string]interface{}) string {
+func LocalizeTry(lang, msgID string, data map[string]any) string {
 	return defaultManager.Localize(lang, msgID, data, true)
 }
 
-func LocalizeMustDef(msgID string, data map[string]interface{}) string {
+func LocalizeMustDef(msgID string, data map[string]any) string {
 	return defaultManager.Localize(defaultManager.config.DefaultLang, msgID, data, false)
 }
 
-func LocalizeTryDef(msgID string, data map[string]interface{}) string {
+func LocalizeTryDef(msgID string, data map[string]any) string {
 	return defaultManager.Localize(defaultManager.config.DefaultLang, msgID, data, true)
 }
