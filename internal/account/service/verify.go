@@ -13,9 +13,9 @@ const (
 	VerifyMaxTimes = 5      // 验证码最大次数(5次) // TODO:GG 移动到configs/clients
 )
 
-func AddVerify(AccountId uint64, Kind int16) (*model.VerifyInfo, *err.MultiCodeError) {
+func AddVerify(clientId, accountId uint64, kind int16) (*model.VerifyInfo, *err.MultiCodeError) {
 	// TODO:GG 需要检查enable
-	verifyInfo := model.NewVerifyInfo(AccountId, Kind, time.Now().UnixMilli()+VerifyExpire*1000)
+	verifyInfo := model.NewVerifyInfo(clientId, accountId, kind, time.Now().UnixMilli()+VerifyExpire*1000)
 	// TODO:GG DB
 	return verifyInfo, nil
 }

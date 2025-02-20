@@ -28,10 +28,6 @@ type Manager struct {
 	bundle *i18n.Bundle
 }
 
-type Logger interface {
-	Error(msg string, fields ...any)
-}
-
 var defaultManager *Manager
 
 func Init(cfg Config) error {

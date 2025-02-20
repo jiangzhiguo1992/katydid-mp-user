@@ -17,6 +17,7 @@ const (
 // VerifyInfo 验证内容
 type VerifyInfo struct {
 	*model.Base
+	ClientId  uint64 `json:"clientId"`  // 客户端Id
 	AccountId uint64 `json:"accountId"` // 账户Id
 	Kind      int16  `json:"kind"`      // 平台 (手机号/邮箱/...)
 
@@ -29,11 +30,12 @@ type VerifyInfo struct {
 	// TODO:GG ip, device, location
 }
 
-func NewVerifyInfo(AccountId uint64, Kind int16, expireAt int64) *VerifyInfo {
+func NewVerifyInfo(clientId, accountId uint64, kind int16, expireAt int64) *VerifyInfo {
 	verify := &VerifyInfo{
 		Base:        model.NewBaseEmpty(),
-		AccountId:   AccountId,
-		Kind:        Kind,
+		ClientId:    clientId,
+		AccountId:   accountId,
+		Kind:        kind,
 		State:       VerityStateInit,
 		PendingAt:   -1,
 		VerityAt:    -1,
