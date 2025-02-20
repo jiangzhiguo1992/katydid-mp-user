@@ -2,8 +2,6 @@ package model
 
 import (
 	"katydid-mp-user/internal/pkg/model"
-	"katydid-mp-user/utils"
-	"time"
 )
 
 const (
@@ -19,41 +17,6 @@ const (
 	VerityStateReject  int8 = 4 // 验证失败
 
 )
-
-// Verifier 验证器接口
-type Verifier interface {
-	Generate(count int) string
-	GetExpiresAt(intervalMin int64) int64
-	IsExpired() bool
-	IsOverMax(max int8) bool
-	Validate(input string) bool
-}
-
-// CodeVerifier 验证码验证器
-type CodeVerifier struct {
-	*VerifyInfo
-}
-
-// Generate 生成验证码
-func (v *CodeVerifier) Generate(count int) string {
-	return utils.Random(count)
-}
-
-func (v *CodeVerifier) GetExpiresAt(intervalMin int64) int64 {
-	return time.Now().UnixMilli() + intervalMin*60*1000
-}
-
-func (v *CodeVerifier) IsExpired() bool {
-	return time.Now().UnixMilli() > v.ExpiresAt
-}
-
-func (v *CodeVerifier) IsOverMax(max int8) bool {
-	return v.Attempts >= max
-}
-
-func (v *CodeVerifier) Validate(input string) bool {
-	return v.GetCode() == input
-}
 
 // VerifyInfo 验证内容
 type VerifyInfo struct {
@@ -75,8 +38,8 @@ func NewVerifyInfoEmpty() *VerifyInfo {
 	return &VerifyInfo{Base: model.NewBaseEmpty()}
 }
 
-func NewVerifyInfoDef(clientId, accountId uint64, kind int16, expireAt int64) *VerifyInfo {
-	verify := &VerifyInfo{
+func NewVerifyInfoDef(clientId, accountId uint64, kind int16) *VerifyInfo {
+	return &VerifyInfo{
 		Base:       model.NewBaseEmpty(),
 		ClientId:   clientId,
 		AccountId:  accountId,
@@ -84,10 +47,9 @@ func NewVerifyInfoDef(clientId, accountId uint64, kind int16, expireAt int64) *V
 		State:      VerityStateInit,
 		PendingAt:  -1,
 		VerifiedAt: -1,
-		ExpiresAt:  expireAt,
+		ExpiresAt:  -1,
 		Attempts:   0,
 	}
-	return verify
 }
 
 // WithBody 设置验证内容 (注意language)
