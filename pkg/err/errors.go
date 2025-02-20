@@ -28,6 +28,12 @@ func (m *CodeErrors) WrapError(err *Error) *CodeErrors {
 	return m
 }
 
+// WrapErrors 添加新错误
+func (m *CodeErrors) WrapErrors(errs *CodeErrors) *CodeErrors {
+	m.errors = append(m.errors, errs.errors...)
+	return m
+}
+
 // Error 实现 error 接口
 func (m *CodeErrors) Error() string {
 	if len(m.errors) == 0 {
@@ -58,4 +64,11 @@ func (m *CodeErrors) Unwrap() error {
 		return nil
 	}
 	return m.errors[0]
+}
+
+func (m *CodeErrors) Get() error {
+	if len(m.errors) == 0 {
+		return nil
+	}
+	return m
 }

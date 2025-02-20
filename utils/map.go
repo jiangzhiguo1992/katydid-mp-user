@@ -174,6 +174,16 @@ func (m Maps) GetBool(key string) (bool, bool) {
 	return false, false
 }
 
+// GetString 获取string类型值
+func (m Maps) GetString(key string) (string, bool) {
+	if v, ok := m[key]; ok {
+		if str, ok := v.(string); ok {
+			return str, true
+		}
+	}
+	return "", false
+}
+
 // GetSlice 获取[]any类型值
 func (m Maps) GetSlice(key string) ([]any, bool) {
 	if v, ok := m[key]; ok {
