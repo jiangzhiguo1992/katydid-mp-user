@@ -2,39 +2,32 @@ package err
 
 import "strings"
 
-// CodeError 定义带错误码的错误结构
-type CodeError struct {
-	code   int
+// Error 定义带前后缀的错误结构
+type Error struct {
 	err    error
 	prefix string
 	suffix string
 }
 
-// NewCodeError 创建新的 CodeError
-func NewCodeError(err error) *CodeError {
-	return &CodeError{err: err}
-}
-
-// WithCode 设置错误码
-func (e *CodeError) WithCode(code int) *CodeError {
-	e.code = code
-	return e
+// NewError 创建新的 Error
+func NewError(err error) *Error {
+	return &Error{err: err}
 }
 
 // WithPrefix 设置前缀
-func (e *CodeError) WithPrefix(prefix string) *CodeError {
+func (e *Error) WithPrefix(prefix string) *Error {
 	e.prefix = prefix
 	return e
 }
 
 // WithSuffix 设置后缀
-func (e *CodeError) WithSuffix(suffix string) *CodeError {
+func (e *Error) WithSuffix(suffix string) *Error {
 	e.suffix = suffix
 	return e
 }
 
 // Error 实现 error 接口
-func (e *CodeError) Error() string {
+func (e *Error) Error() string {
 	parts := make([]string, 0, 3)
 	if e.prefix != "" {
 		parts = append(parts, e.prefix+": ")
@@ -48,9 +41,4 @@ func (e *CodeError) Error() string {
 		parts = append(parts, ": "+e.suffix)
 	}
 	return strings.Join(parts, "")
-}
-
-// Code 获取错误码
-func (e *CodeError) Code() int {
-	return e.code
 }

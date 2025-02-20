@@ -1,12 +1,5 @@
 package error
 
-import (
-	"errors"
-	"katydid-mp-user/pkg/err"
-	"katydid-mp-user/pkg/log"
-	"strings"
-)
-
 const (
 	CodeUnknown = 0
 	CodeDB      = 1000
@@ -55,38 +48,3 @@ var (
 		"duplicate key value violates unique constraint": MsgIdDBPkDuplicated,
 	}
 )
-
-// MatchErrorMsgId 通过错误码匹配错误
-func MatchErrorMsgId(msgId string) *err.CodeError {
-	for code, msgIds := range codeMsgIds {
-		for _, id := range msgIds {
-			if id == msgId {
-				return err.NewCodeError(errors.New(id)).WithCode(code)
-			}
-		}
-	}
-	log.Error("没有匹配的错误MsgId:", log.String("msgId", msgId))
-	return nil
-}
-
-// MatchErrorPattern 通过错误信息模式匹配错误
-func MatchErrorPattern(e error) *err.CodeError {
-	if e == nil {
-		return nil
-	}
-	errMsg := e.Error()
-	for pattern, msgId := range errorPatterns {
-		if strings.Contains(errMsg, pattern) {
-			if codeErr := MatchErrorMsgId(msgId); codeErr != nil {
-				return codeErr
-			}
-			log.Error("没有匹配的错误Msg:", log.Err(e))
-			return err.NewCodeError(e).WithCode(CodeUnknown)
-		}
-	}
-	return err.NewCodeError(e).WithCode(CodeUnknown)
-}
-
-func MatchErrorMessage(msg string) *err.CodeError {
-	return MatchErrorPattern(errors.New(msg))
-}
