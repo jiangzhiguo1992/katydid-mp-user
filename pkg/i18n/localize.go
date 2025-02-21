@@ -14,7 +14,7 @@ import (
 
 const (
 	defaultDefLang = "en"
-	unknownError   = "unknown error"
+	unknownError   = "text unknown error"
 )
 
 type Config struct {
@@ -33,7 +33,7 @@ var defaultManager *Manager
 func Init(cfg Config) error {
 	m, err := NewManager(cfg)
 	if err != nil {
-		return fmt.Errorf("create i18n manager failed: %w", err)
+		return fmt.Errorf("■ ■ Log ■ ■ create i18n manager failed: %w", err)
 	}
 	defaultManager = m
 	return nil
@@ -46,7 +46,7 @@ func NewManager(cfg Config) (*Manager, error) {
 
 	defaultTag, err := language.Parse(cfg.DefaultLang)
 	if err != nil {
-		return nil, fmt.Errorf("parse default language failed: %w", err)
+		return nil, fmt.Errorf("■ ■ Log ■ ■ parse default language failed: %w", err)
 	}
 
 	m := &Manager{
@@ -75,25 +75,34 @@ func (m *Manager) loadMessageFiles() error {
 	for _, dir := range m.config.DocDirs {
 		fs, err := filepath.Glob(filepath.Join(dir, "*"))
 		if err != nil {
-			return fmt.Errorf("glob dir %s failed: %w", dir, err)
+			return fmt.Errorf("■ ■ Log ■ ■ glob dir %s failed: %w", dir, err)
 		}
 		files = append(files, filterMessageFiles(fs)...)
 	}
-
 	if len(files) == 0 {
-		return fmt.Errorf("no message files found in dirs: %v", m.config.DocDirs)
+		return fmt.Errorf("■ ■ Log ■ ■ no message files found in dirs: %v", m.config.DocDirs)
 	}
-	fmt.Printf("loading i18n files: %v\n", files)
+	fmt.Printf("■ ■ Log ■ ■ loading i18n files: %v\n", files)
 
 	langs := make([]string, 0, len(files))
 	for _, file := range files {
 		if _, err := m.bundle.LoadMessageFile(file); err != nil {
-			return fmt.Errorf("load message file %s failed: %w", file, err)
+			return fmt.Errorf("■ ■ Log ■ ■ load message file %s failed: %w", file, err)
 		}
 		langs = append(langs, extractLangFromFilename(file))
 	}
+	fmt.Printf("■ ■ Log ■ ■ loading initialized languages: %v\n", langs)
 
-	fmt.Printf("loading initialized languages: %v\n", langs)
+	hasDefault := false
+	for _, lang := range langs {
+		if lang == m.config.DefaultLang {
+			hasDefault = true
+			break
+		}
+	}
+	if !hasDefault {
+		return fmt.Errorf("■ ■ Log ■ ■ default language %q not found in message files", m.config.DefaultLang)
+	}
 	return nil
 }
 
