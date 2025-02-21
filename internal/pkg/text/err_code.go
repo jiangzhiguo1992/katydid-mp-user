@@ -1,4 +1,4 @@
-package err
+package text
 
 const (
 	// 错误信息Code

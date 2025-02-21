@@ -1,8 +1,8 @@
 package init
 
 import (
-	err2 "katydid-mp-user/assets/err"
 	"katydid-mp-user/configs"
+	"katydid-mp-user/internal/pkg/text"
 	"katydid-mp-user/pkg/err"
 	"katydid-mp-user/pkg/i18n"
 	"katydid-mp-user/pkg/log"
@@ -34,7 +34,7 @@ func init() {
 	})
 
 	// error
-	err.Init(err2.CodeMsgIds, err2.MsgPatterns)
+	err.Init(text.CodeMsgIds, text.MsgPatterns)
 
 	// i18n
 	e = i18n.Init(i18n.Config{
