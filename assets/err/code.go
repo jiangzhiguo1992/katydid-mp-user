@@ -1,6 +1,8 @@
-package error
+package err
 
 const (
+	// 错误信息Code
+
 	CodeUnknown = 0
 	CodeDB      = 1000
 
@@ -23,7 +25,8 @@ const (
 
 var (
 	// 错误信息映射
-	codeMsgIds = map[int][]string{
+
+	CodeMsgIds = map[int][]string{
 		CodeDB: {
 			MsgIdDBPkDuplicated,
 			MsgIdDBAddNil,
@@ -44,7 +47,8 @@ var (
 	}
 
 	// 错误模式匹配
-	errorPatterns = map[string]string{
+
+	MsgPatterns = map[string]string{
 		"duplicate key value violates unique constraint": MsgIdDBPkDuplicated,
 	}
 )

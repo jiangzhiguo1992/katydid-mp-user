@@ -1,7 +1,9 @@
 package init
 
 import (
+	err2 "katydid-mp-user/assets/err"
 	"katydid-mp-user/configs"
+	"katydid-mp-user/pkg/err"
 	"katydid-mp-user/pkg/i18n"
 	"katydid-mp-user/pkg/log"
 	"time"
@@ -9,15 +11,15 @@ import (
 
 func init() {
 	// configs
-	config, err := configs.Init(
+	config, e := configs.Init(
 		configs.ConfDir,
 		func() bool {
 			// TODO:GG reload
 			return true
 		},
 	)
-	if err != nil {
-		log.Fatal("init config failed", log.Err(err))
+	if e != nil {
+		log.Fatal("■ ■ Init ■ ■ init config failed", log.Err(e))
 	}
 
 	// logger
@@ -31,15 +33,18 @@ func init() {
 		MaxSize:   config.LogConf.FileMaxSize << 20,
 	})
 
+	// error
+	err.Init(err2.CodeMsgIds, err2.MsgPatterns)
+
 	// i18n
-	err = i18n.Init(i18n.Config{
+	e = i18n.Init(i18n.Config{
 		DefaultLang: config.DefLang,
 		DocDirs:     configs.LangDirs,
 		OnErr: func(msg string, fields map[string]any) {
 			log.Error(msg, log.Any("fields", fields))
 		},
 	})
-	if err != nil {
-		log.Fatal("init i18n failed", log.Err(err))
+	if e != nil {
+		log.Fatal("■ ■ Init ■ ■ init i18n failed", log.Err(e))
 	}
 }
