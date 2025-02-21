@@ -62,17 +62,17 @@ func (m *Manager) Load(confDir string, reload func() bool) error {
 
 	// 加载内置配置
 	if err := m.loadEmbedConfigs(); err != nil {
-		return fmt.Errorf("load embed configs failed: %w", err)
+		return fmt.Errorf("■ ■ Conf ■ ■ load embed configs failed: %w", err)
 	}
 
 	// 加载环境配置
 	if err := m.loadEnvConfigs(confDir); err != nil {
-		return fmt.Errorf("load env configs failed: %w", err)
+		return fmt.Errorf("■ ■ Conf ■ ■ load env configs failed: %w", err)
 	}
 
 	// 解析配置
 	if err := m.parseConfig(); err != nil {
-		return fmt.Errorf("parse config failed: %w", err)
+		return fmt.Errorf("■ ■ Conf ■ ■ parse config failed: %w", err)
 	}
 
 	// 设置配置监听
@@ -86,7 +86,7 @@ func (m *Manager) loadEmbedConfigs() error {
 	configs := [][]byte{fileAppInit, fileAppPub, fileAppPri}
 	for _, cfg := range configs {
 		if err := m.v.MergeConfig(bytes.NewReader(cfg)); err != nil {
-			return fmt.Errorf("merge embed config failed: %w", err)
+			return fmt.Errorf("■ ■ Conf ■ ■ merge embed config failed: %w", err)
 		}
 	}
 	return nil
@@ -97,7 +97,7 @@ func (m *Manager) loadEnvConfigs(confDir string) error {
 	envDir := filepath.Join(confDir, m.v.GetString(envKey))
 	files, err := os.ReadDir(envDir)
 	if err != nil {
-		return fmt.Errorf("read env dir failed: %w", err)
+		return fmt.Errorf("■ ■ Conf ■ ■ read env dir failed: %w", err)
 	}
 
 	for _, file := range files {
@@ -105,10 +105,10 @@ func (m *Manager) loadEnvConfigs(confDir string) error {
 			filePath := filepath.Join(envDir, file.Name())
 			content, err := os.ReadFile(filePath)
 			if err != nil {
-				return fmt.Errorf("read file %s failed: %w", filePath, err)
+				return fmt.Errorf("■ ■ Conf ■ ■ read file %s failed: %w", filePath, err)
 			}
 			if err := m.v.MergeConfig(bytes.NewReader(content)); err != nil {
-				return fmt.Errorf("merge env config %s failed: %w", filePath, err)
+				return fmt.Errorf("■ ■ Conf ■ ■ merge env config %s failed: %w", filePath, err)
 			}
 		}
 	}
@@ -119,7 +119,7 @@ func (m *Manager) loadEnvConfigs(confDir string) error {
 func (m *Manager) parseConfig() error {
 	// 首次解析
 	if err := m.v.Unmarshal(m.config); err != nil {
-		return fmt.Errorf("unmarshal config failed: %w", err)
+		return fmt.Errorf("■ ■ Conf ■ ■ unmarshal config failed: %w", err)
 	}
 
 	// 设置默认值
@@ -127,7 +127,7 @@ func (m *Manager) parseConfig() error {
 
 	// 再次解析覆盖默认值
 	if err := m.v.Unmarshal(m.config); err != nil {
-		return fmt.Errorf("unmarshal config with defaults failed: %w", err)
+		return fmt.Errorf("■ ■ Conf ■ ■ unmarshal config with defaults failed: %w", err)
 	}
 
 	return nil
@@ -145,19 +145,19 @@ func (m *Manager) watchConfig(reload func() bool) {
 
 		for i := 0; i < reloadMaxRetries; i++ {
 			if reload() {
-				log.Printf("config reloaded successfully")
+				log.Printf("■ ■ Conf ■ ■ config reloaded successfully")
 				return
 			}
 
 			select {
 			case <-time.After(reloadInterval):
-				log.Printf("reload config failed, retry: %d", i+1)
+				log.Printf("■ ■ Conf ■ ■ reload config failed, retry: %d", i+1)
 			case <-ctx.Done():
-				log.Printf("reload config timeout after %d retries", i+1)
+				log.Printf("■ ■ Conf ■ ■ reload config timeout after %d retries", i+1)
 				return
 			}
 		}
-		log.Printf("reload config failed after %d retries", reloadMaxRetries)
+		log.Printf("■ ■ Conf ■ ■ reload config failed after %d retries", reloadMaxRetries)
 	})
 
 	m.v.WatchConfig()
