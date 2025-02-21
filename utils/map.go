@@ -1,10 +1,10 @@
 package utils
 
-// Maps 扩展 map[string]any 类型
-type Maps map[string]any
+// KMap 扩展 map[string]any 类型
+type KMap map[string]any
 
 // GetInt 获取int类型值
-func (m Maps) GetInt(key string) (int, bool) {
+func (m KMap) GetInt(key string) (int, bool) {
 	if v, ok := m[key]; ok {
 		switch val := v.(type) {
 		case int:
@@ -21,7 +21,7 @@ func (m Maps) GetInt(key string) (int, bool) {
 }
 
 // GetInt64 获取int64类型值
-func (m Maps) GetInt64(key string) (int64, bool) {
+func (m KMap) GetInt64(key string) (int64, bool) {
 	if v, ok := m[key]; ok {
 		switch val := v.(type) {
 		case int64:
@@ -36,7 +36,7 @@ func (m Maps) GetInt64(key string) (int64, bool) {
 }
 
 // GetFloat64 获取float64类型值
-func (m Maps) GetFloat64(key string) (float64, bool) {
+func (m KMap) GetFloat64(key string) (float64, bool) {
 	if v, ok := m[key]; ok {
 		switch val := v.(type) {
 		case float64:
@@ -53,7 +53,7 @@ func (m Maps) GetFloat64(key string) (float64, bool) {
 }
 
 // GetFloat32 获取float32类型值
-func (m Maps) GetFloat32(key string) (float32, bool) {
+func (m KMap) GetFloat32(key string) (float32, bool) {
 	if v, ok := m[key]; ok {
 		switch val := v.(type) {
 		case float32:
@@ -68,7 +68,7 @@ func (m Maps) GetFloat32(key string) (float32, bool) {
 }
 
 // GetInt8 获取int8类型值
-func (m Maps) GetInt8(key string) (int8, bool) {
+func (m KMap) GetInt8(key string) (int8, bool) {
 	if v, ok := m[key]; ok {
 		switch val := v.(type) {
 		case int8:
@@ -87,7 +87,7 @@ func (m Maps) GetInt8(key string) (int8, bool) {
 }
 
 // GetInt16 获取int16类型值
-func (m Maps) GetInt16(key string) (int16, bool) {
+func (m KMap) GetInt16(key string) (int16, bool) {
 	if v, ok := m[key]; ok {
 		switch val := v.(type) {
 		case int16:
@@ -106,7 +106,7 @@ func (m Maps) GetInt16(key string) (int16, bool) {
 }
 
 // GetUint8 获取uint8类型值
-func (m Maps) GetUint8(key string) (uint8, bool) {
+func (m KMap) GetUint8(key string) (uint8, bool) {
 	if v, ok := m[key]; ok {
 		switch val := v.(type) {
 		case uint8:
@@ -125,7 +125,7 @@ func (m Maps) GetUint8(key string) (uint8, bool) {
 }
 
 // GetUint16 获取uint16类型值
-func (m Maps) GetUint16(key string) (uint16, bool) {
+func (m KMap) GetUint16(key string) (uint16, bool) {
 	if v, ok := m[key]; ok {
 		switch val := v.(type) {
 		case uint16:
@@ -144,7 +144,7 @@ func (m Maps) GetUint16(key string) (uint16, bool) {
 }
 
 // GetUint64 获取uint64类型值
-func (m Maps) GetUint64(key string) (uint64, bool) {
+func (m KMap) GetUint64(key string) (uint64, bool) {
 	if v, ok := m[key]; ok {
 		switch val := v.(type) {
 		case uint64:
@@ -165,7 +165,7 @@ func (m Maps) GetUint64(key string) (uint64, bool) {
 }
 
 // GetBool 获取bool类型值
-func (m Maps) GetBool(key string) (bool, bool) {
+func (m KMap) GetBool(key string) (bool, bool) {
 	if v, ok := m[key]; ok {
 		if b, ok := v.(bool); ok {
 			return b, true
@@ -175,7 +175,7 @@ func (m Maps) GetBool(key string) (bool, bool) {
 }
 
 // GetString 获取string类型值
-func (m Maps) GetString(key string) (string, bool) {
+func (m KMap) GetString(key string) (string, bool) {
 	if v, ok := m[key]; ok {
 		if str, ok := v.(string); ok {
 			return str, true
@@ -185,7 +185,7 @@ func (m Maps) GetString(key string) (string, bool) {
 }
 
 // GetSlice 获取[]any类型值
-func (m Maps) GetSlice(key string) ([]any, bool) {
+func (m KMap) GetSlice(key string) ([]any, bool) {
 	if v, ok := m[key]; ok {
 		if slice, ok := v.([]any); ok {
 			return slice, true
@@ -195,7 +195,7 @@ func (m Maps) GetSlice(key string) ([]any, bool) {
 }
 
 // GetStringSlice 获取[]string类型值
-func (m Maps) GetStringSlice(key string) ([]string, bool) {
+func (m KMap) GetStringSlice(key string) ([]string, bool) {
 	if v, ok := m[key]; ok {
 		switch val := v.(type) {
 		case []string:
@@ -216,10 +216,10 @@ func (m Maps) GetStringSlice(key string) ([]string, bool) {
 }
 
 // GetMap 获取Maps类型值
-func (m Maps) GetMap(key string) (Maps, bool) {
+func (m KMap) GetMap(key string) (KMap, bool) {
 	if v, ok := m[key]; ok {
 		switch val := v.(type) {
-		case Maps:
+		case KMap:
 			return val, true
 		case map[string]any:
 			return val, true
@@ -229,7 +229,7 @@ func (m Maps) GetMap(key string) (Maps, bool) {
 }
 
 // GetBytes 获取[]byte类型值
-func (m Maps) GetBytes(key string) ([]byte, bool) {
+func (m KMap) GetBytes(key string) ([]byte, bool) {
 	if v, ok := m[key]; ok {
 		switch val := v.(type) {
 		case []byte:
@@ -242,34 +242,34 @@ func (m Maps) GetBytes(key string) ([]byte, bool) {
 }
 
 // Get 获取任意类型值，需要自己做类型断言
-func (m Maps) Get(key string) (any, bool) {
+func (m KMap) Get(key string) (any, bool) {
 	v, ok := m[key]
 	return v, ok
 }
 
 // Set 设置任意类型值
-func (m Maps) Set(key string, value any) {
+func (m KMap) Set(key string, value any) {
 	m[key] = value
 }
 
 // Delete 删除指定key
-func (m Maps) Delete(key string) {
+func (m KMap) Delete(key string) {
 	delete(m, key)
 }
 
 // Has 判断是否存在指定key
-func (m Maps) Has(key string) bool {
+func (m KMap) Has(key string) bool {
 	_, ok := m[key]
 	return ok
 }
 
 // Len 获取map长度
-func (m Maps) Len() int {
+func (m KMap) Len() int {
 	return len(m)
 }
 
 // Keys 获取所有key
-func (m Maps) Keys() []string {
+func (m KMap) Keys() []string {
 	keys := make([]string, 0, len(m))
 	for k := range m {
 		keys = append(keys, k)

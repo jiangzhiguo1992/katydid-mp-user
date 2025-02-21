@@ -197,7 +197,7 @@ func createCore(encoder zapcore.Encoder, config *Config, lConf levelConfig) (zap
 	// path
 	dir := path.Join(config.OutDir, lConf.dir)
 	if err := os.MkdirAll(dir, os.ModePerm); err != nil {
-		panic(fmt.Errorf("failed to create dir %s: %w", lConf.dir, err))
+		panic(fmt.Errorf("■ ■ Log ■ ■ failed to create dir %s: %w", lConf.dir, err))
 	}
 	// writer
 	writer := NewDateWriteSyncer(
@@ -243,7 +243,7 @@ func Close() error {
 	}
 
 	if len(errs) > 0 {
-		return fmt.Errorf("failed to close logger: %v", errs)
+		return fmt.Errorf("■ ■ Log ■ ■ failed to close logger: %v", errs)
 	}
 	return nil
 }

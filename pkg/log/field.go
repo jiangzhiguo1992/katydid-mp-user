@@ -14,6 +14,7 @@ type Field struct {
 }
 
 // 基础类型
+
 func String(key string, val string) Field {
 	return Field{Key: key, Value: val}
 }
@@ -144,6 +145,7 @@ func Uint8p(key string, val *uint8) Field {
 }
 
 // 浮点数
+
 func Float64(key string, val float64) Field {
 	return Field{Key: key, Value: val}
 }
@@ -169,6 +171,7 @@ func Float32s(key string, val []float32) Field {
 }
 
 // Complex numbers
+
 func Complex128(key string, val complex128) Field {
 	return Field{Key: key, Value: val}
 }
@@ -178,6 +181,7 @@ func Complex64(key string, val complex64) Field {
 }
 
 // Bool types
+
 func Bool(key string, val bool) Field {
 	return Field{Key: key, Value: val}
 }
@@ -196,6 +200,7 @@ func Binary(key string, val []byte) Field {
 }
 
 // Time types
+
 func Time(key string, val time.Time) Field {
 	return Field{Key: key, Value: val}
 }
@@ -221,6 +226,7 @@ func Durations(key string, val []time.Duration) Field {
 }
 
 // Err types
+
 func Err(err error) Field {
 	return Field{Key: "error", Value: err}
 }
@@ -230,6 +236,7 @@ func Errors(key string, errs []error) Field {
 }
 
 // Special types
+
 func Stringer(key string, val fmt.Stringer) Field {
 	return Field{Key: key, Value: val}
 }

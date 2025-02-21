@@ -49,7 +49,7 @@ func (d *DateWriteSyncer) Write(p []byte) (int, error) {
 
 	fileName := d.getCurrentFileName()
 	if err := d.rotateIfNeeded(fileName); err != nil {
-		return 0, fmt.Errorf("rotate log file failed: %w", err)
+		return 0, fmt.Errorf("■ ■ Log ■ ■ rotate log file failed: %w", err)
 	}
 
 	return d.file.Write(p)
@@ -60,7 +60,7 @@ func (d *DateWriteSyncer) triggerCleanup() {
 	go func() {
 		if err := d.cleanOldLogs(); err != nil {
 			// 使用标准库log记录清理错误，避免循环依赖
-			fmt.Printf("clean old logs failed: %v\n", err)
+			fmt.Printf("■ ■ Log ■ ■ clean old logs failed: %v\n", err)
 		}
 	}()
 }
@@ -127,7 +127,7 @@ func (d *DateWriteSyncer) rotate(fileName string) error {
 func (d *DateWriteSyncer) createNewFile(fileName string) error {
 	dir := filepath.Dir(fileName)
 	if err := os.MkdirAll(dir, 0755); err != nil {
-		return fmt.Errorf("failed to create log directory: %w", err)
+		return fmt.Errorf("■ ■ Log ■ ■ failed to create log directory: %w", err)
 	}
 
 	f, err := os.OpenFile(fileName, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0644)
