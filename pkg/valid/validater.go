@@ -66,6 +66,7 @@ func getZeroChecker(kind reflect.Kind) func(reflect.Value) bool {
 }
 
 func CompileValidators(t reflect.Type) *StructValidator {
+	// 检查缓存
 	if v, ok := cache.Load(t); ok {
 		return v.(*StructValidator)
 	}
@@ -78,6 +79,31 @@ func CompileValidators(t reflect.Type) *StructValidator {
 	groupFields := make(map[string][]string)
 	for i := 0; i < t.NumField(); i++ {
 		field := t.Field(i)
+
+		// 处理嵌套结构体
+		fieldType := field.Type
+		if fieldType.Kind() == reflect.Struct {
+			nested := CompileValidators(fieldType)
+			if nested != nil {
+				// 调整嵌套字段的索引
+				for _, fv := range nested.FieldValidators {
+					newIndex := append([]int{i}, fv.Index...)
+					tv.FieldValidators = append(tv.FieldValidators, FieldValidator{
+						Index:      newIndex,
+						Name:       field.Name + "." + fv.Name,
+						Required:   fv.Required,
+						Validators: fv.Validators,
+						ZeroCheck:  fv.ZeroCheck,
+					})
+				}
+				// 合并组验证器
+				for groupName, gv := range nested.GroupValidators {
+					tv.GroupValidators[field.Name+"."+groupName] = gv
+				}
+			}
+		}
+
+		// 处理当前字段的验证规则
 		tag := field.Tag.Get(fieldTag)
 		if tag == "" {
 			continue
@@ -103,6 +129,7 @@ func CompileValidators(t reflect.Type) *StructValidator {
 
 		if required || len(fValidators) > 0 {
 			fv := FieldValidator{
+				//Index:      []int{i},
 				Index:      field.Index,
 				Name:       field.Name,
 				Required:   required,
@@ -113,6 +140,7 @@ func CompileValidators(t reflect.Type) *StructValidator {
 		}
 	}
 
+	// 处理组验证器
 	for groupName, fields := range groupFields {
 		tv.GroupValidators[groupName] = GroupValidator{
 			Fields: fields,
