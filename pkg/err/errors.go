@@ -7,22 +7,34 @@ import (
 
 // CodeErrors 定义多错误结构
 type CodeErrors struct {
+	errors []error
+
 	code   int
 	prefix string
 	suffix string
-	errors []error
+
+	locales   []string
+	templates []map[string]any
 }
 
 func NewCodeError(err error) *CodeErrors {
-	return &CodeErrors{
-		errors: []error{err},
-	}
+	return &CodeErrors{errors: []error{err}}
 }
 
 func NewCodeErrors(errs []error) *CodeErrors {
-	return &CodeErrors{
-		errors: errs,
-	}
+	return &CodeErrors{errors: errs}
+}
+
+// WrapError 添加新错误
+func (c *CodeErrors) WrapError(err error) *CodeErrors {
+	c.errors = append(c.errors, err)
+	return c
+}
+
+// WrapErrors 添加新错误
+func (c *CodeErrors) WrapErrors(errs []error) *CodeErrors {
+	c.errors = append(c.errors, errs...)
+	return c
 }
 
 // WithCode 设置错误码
@@ -43,28 +55,39 @@ func (c *CodeErrors) WithSuffix(suffix string) *CodeErrors {
 	return c
 }
 
-// WrapError 添加新错误
-func (c *CodeErrors) WrapError(err error) *CodeErrors {
-	c.errors = append(c.errors, err)
+// WrapLocale 添加本地化信息
+func (c *CodeErrors) WrapLocale(locale string, template map[string]any) *CodeErrors {
+	c.locales = append(c.locales, locale)
+	if template == nil {
+		template = map[string]any{}
+	}
+	c.templates = append(c.templates, template)
 	return c
 }
 
-// WrapErrors 添加新错误
-func (c *CodeErrors) WrapErrors(errs []error) *CodeErrors {
-	c.errors = append(c.errors, errs...)
+// WrapLocales 添加本地化信息
+func (c *CodeErrors) WrapLocales(locales []string, templates []map[string]any) *CodeErrors {
+	c.locales = append(c.locales, locales...)
+	if templates == nil {
+		templates = make([]map[string]any, len(locales))
+	}
+	c.templates = append(c.templates, templates...)
 	return c
 }
 
 // Error 实现 error 接口
 func (c *CodeErrors) Error() string {
 	if len(c.errors) == 0 {
-		return "0 errors"
+		if len(c.locales) > 0 {
+			return c.ToLocales("", nil)
+		}
+		return fmt.Sprintf("CodeErrors (%d)", c.code)
 	} else if len(c.errors) == 1 {
-		return fmt.Sprintf("Error (%d): %s", c.code, c.errors[0].Error())
+		return fmt.Sprintf("CodeErrors (%d): %s", c.code, c.errors[0].Error())
 	}
 
 	var builder strings.Builder
-	builder.WriteString(fmt.Sprintf("Errors (%d):\n\t", c.code))
+	builder.WriteString(fmt.Sprintf("CodeErrors (%d):", c.code))
 	for _, err := range c.errors {
 		builder.WriteString("\n\t- ")
 		builder.WriteString(err.Error())
@@ -72,22 +95,37 @@ func (c *CodeErrors) Error() string {
 	return builder.String()
 }
 
-// Code 获取错误码
-func (c *CodeErrors) Code() int {
-	return c.code
-}
-
-// Unwrap 实现错误链
-func (c *CodeErrors) Unwrap() error {
-	if len(c.errors) == 0 {
-		return nil
-	}
-	return c.errors[0]
-}
-
+// Err 获取错误
 func (c *CodeErrors) Err() error {
 	if len(c.errors) == 0 {
 		return nil
 	}
 	return c
+}
+
+// Errs 获取错误
+func (c *CodeErrors) Errs() []error {
+	return c.errors
+}
+
+// Code 获取错误码
+func (c *CodeErrors) Code() int {
+	return c.code
+}
+
+func (c *CodeErrors) ToLocales(fun func([]string, []map[string]any) []string) string {
+	locales := c.locales
+	if fun != nil {
+		locales = fun(c.locales, c.templates)
+	}
+	if len(locales) == 0 {
+		return fmt.Sprintf("%d: no locales", c.code)
+	}
+	var builder strings.Builder
+	builder.WriteString(fmt.Sprintf("%d ", c.code))
+	for _, l := range locales {
+		builder.WriteString(" - ")
+		builder.WriteString(l)
+	}
+	return builder.String()
 }
