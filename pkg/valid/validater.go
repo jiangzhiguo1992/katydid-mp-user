@@ -1,7 +1,6 @@
 package valid
 
 import (
-	"errors"
 	"fmt"
 	"reflect"
 	"strings"
@@ -36,8 +35,9 @@ type FieldValidator struct {
 
 // GroupValidator 专门处理组验证
 type GroupValidator struct {
-	Fields    []string                    // 组内字段名
-	Validator func(reflect.Value) []error // 组验证函数
+	Indices   [][]int                       // 存储字段索引
+	Fields    []string                      // 组内字段名
+	Validator func([]reflect.Value) []error // 直接使用 reflect.Value
 }
 
 type StructValidator struct {
@@ -95,21 +95,25 @@ func compileValidateFunc(sv *StructValidator) ValidateFunc {
 
 			// 使用编译期生成的零值检查函数
 			if fv.Required && fv.ZeroCheck(field) {
-				errs = append(errs, errors.New("field "+fv.Name+" is required"))
+				errs = append(errs, fmt.Errorf("field %s is required", fv.Name))
 				continue
 			}
 
 			fieldValue := field.Interface()
 			for _, validator := range fv.Validators {
 				if msg, ok := validator(fieldValue); !ok {
-					errs = append(errs, errors.New(msg))
+					errs = append(errs, fmt.Errorf("field %s: %s", fv.Name, msg))
 				}
 			}
 		}
 
 		// 执行组验证
 		for _, gv := range sv.GroupValidators {
-			if es := gv.Validator(val); len(es) > 0 {
+			values := make([]reflect.Value, len(gv.Indices))
+			for i, idx := range gv.Indices {
+				values[i] = val.FieldByIndex(idx)
+			}
+			if es := gv.Validator(values); len(es) > 0 {
 				errs = append(errs, es...)
 			}
 		}
@@ -198,16 +202,22 @@ func CompileValidators(t reflect.Type) *StructValidator {
 
 	// 处理组验证器
 	for groupName, fields := range groupFields {
+		indices := make([][]int, len(fields))
+		for i, fieldName := range fields {
+			field, _ := t.FieldByName(fieldName)
+			indices[i] = field.Index
+		}
+
 		tv.GroupValidators[groupName] = GroupValidator{
-			Fields: fields,
-			Validator: func(v reflect.Value) []error {
+			Fields:  fields,
+			Indices: indices,
+			Validator: func(values []reflect.Value) []error {
 				var errs []error
 				// 如果有自定义的组验证器，就使用它
 				if groupValidator, exists := groupValidators[groupName]; exists {
-					fieldValues := make(map[string]interface{})
-					for _, fieldName := range fields {
-						field := v.FieldByName(fieldName)
-						fieldValues[fieldName] = field.Interface()
+					fieldValues := make(map[string]interface{}, len(fields))
+					for i, fieldName := range fields {
+						fieldValues[fieldName] = values[i].Interface()
 					}
 					if msg, ok := groupValidator(fieldValues); !ok {
 						errs = append(errs, fmt.Errorf(msg))
@@ -219,9 +229,8 @@ func CompileValidators(t reflect.Type) *StructValidator {
 				allEmpty := true
 				allFilled := true
 
-				for _, fieldName := range fields {
-					field := v.FieldByName(fieldName)
-					isEmpty := getZeroChecker(field.Kind())(field)
+				for _, value := range values {
+					isEmpty := getZeroChecker(value.Kind())(value)
 					if isEmpty {
 						allFilled = false
 					} else {
