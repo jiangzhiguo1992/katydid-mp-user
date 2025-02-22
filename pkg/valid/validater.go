@@ -15,13 +15,15 @@ var (
 	groupTag   = "group:"
 
 	cache           sync.Map
-	fieldValidators = map[string]ValidatorFieldFunc{}
-	groupValidators = map[string]ValidatorGroupFunc{}
+	fieldValidators = map[string]ValidatorFieldFunc{} // 字段验证器注册
+	groupValidators = map[string]ValidatorGroupFunc{} // 分组验证器注册
 )
 
 type ValidatorFieldFunc func(value interface{}) (string, bool)
-
 type ValidatorGroupFunc func(map[string]interface{}) (string, bool)
+
+type ValidateFunc func(reflect.Value) []error
+type TypeChecker func(interface{}) reflect.Value
 
 // FieldValidator 使用字段索引代替字段名，优化字段查找
 type FieldValidator struct {
@@ -40,7 +42,9 @@ type GroupValidator struct {
 
 type StructValidator struct {
 	FieldValidators []FieldValidator
-	GroupValidators map[string]GroupValidator // 组验证器映射
+	GroupValidators map[string]GroupValidator
+	validateFunc    ValidateFunc
+	typeChecker     TypeChecker
 }
 
 // 为常见类型生成专用的零值检查函数
@@ -65,7 +69,59 @@ func getZeroChecker(kind reflect.Kind) func(reflect.Value) bool {
 	}
 }
 
+func compileTypeChecker(t reflect.Type) TypeChecker {
+	return func(v interface{}) reflect.Value {
+		val := reflect.ValueOf(v)
+		if val.Kind() == reflect.Pointer {
+			val = val.Elem()
+		}
+		if val.Type() != t {
+			panic(fmt.Sprintf("invalid type: expected %v, got %v", t, val.Type()))
+		}
+		return val
+	}
+}
+
+func compileValidateFunc(sv *StructValidator) ValidateFunc {
+	return func(val reflect.Value) []error {
+		var errs []error
+
+		// 验证单个字段
+		for _, fv := range sv.FieldValidators {
+			field := val.FieldByIndex(fv.Index)
+			if !field.IsValid() {
+				continue
+			}
+
+			// 使用编译期生成的零值检查函数
+			if fv.Required && fv.ZeroCheck(field) {
+				errs = append(errs, errors.New("field "+fv.Name+" is required"))
+				continue
+			}
+
+			fieldValue := field.Interface()
+			for _, validator := range fv.Validators {
+				if msg, ok := validator(fieldValue); !ok {
+					errs = append(errs, errors.New(msg))
+				}
+			}
+		}
+
+		// 执行组验证
+		for _, gv := range sv.GroupValidators {
+			if es := gv.Validator(val); len(es) > 0 {
+				errs = append(errs, es...)
+			}
+		}
+		return errs
+	}
+}
+
 func CompileValidators(t reflect.Type) *StructValidator {
+	if t.Kind() == reflect.Pointer {
+		t = t.Elem()
+	}
+
 	// 检查缓存
 	if v, ok := cache.Load(t); ok {
 		return v.(*StructValidator)
@@ -181,12 +237,15 @@ func CompileValidators(t reflect.Type) *StructValidator {
 		}
 	}
 
+	// 在保存到缓存之前，添加预编译的函数
+	tv.typeChecker = compileTypeChecker(t)
+	tv.validateFunc = compileValidateFunc(tv)
+
 	cache.Store(t, tv)
 	return tv
 }
 
 func ValidateStruct(v interface{}) []error {
-	var errs []error
 	val := reflect.ValueOf(v)
 	if val.Kind() == reflect.Pointer {
 		val = val.Elem()
@@ -197,35 +256,8 @@ func ValidateStruct(v interface{}) []error {
 		return nil
 	}
 
-	// 验证单个字段
-	for _, fv := range tv.FieldValidators {
-		// 使用字段索引直接获取字段值
-		field := val.FieldByIndex(fv.Index)
-		if !field.IsValid() {
-			continue
-		}
-
-		// 使用编译期生成的零值检查函数
-		if fv.Required && fv.ZeroCheck(field) {
-			errs = append(errs, errors.New("field "+fv.Name+" is required"))
-			continue
-		}
-
-		fieldValue := field.Interface()
-		for _, validator := range fv.Validators {
-			if msg, ok := validator(fieldValue); !ok {
-				errs = append(errs, errors.New(msg))
-			}
-		}
-	}
-
-	// 执行组验证
-	for _, gv := range tv.GroupValidators {
-		if es := gv.Validator(val); len(es) > 0 {
-			errs = append(errs, es...)
-		}
-	}
-	return errs
+	// 返回预编译的函数的结果
+	return tv.validateFunc(tv.typeChecker(v))
 }
 
 func RegisterStructs(
