@@ -66,6 +66,16 @@ func (c *CodeErrs) Errs() []error {
 	return c.errs
 }
 
+// LocaleId 获取本地化ID
+func (c *CodeErrs) LocaleId() string {
+	return c.localeId
+}
+
+// Templates 获取模板数据
+func (c *CodeErrs) Templates() map[string]any {
+	return c.templates
+}
+
 // Err 获取错误
 func (c *CodeErrs) Err() error {
 	if len(c.errs) == 0 {
@@ -75,9 +85,8 @@ func (c *CodeErrs) Err() error {
 }
 
 func (c *CodeErrs) ToLocales(fun func(string, map[string]any) string) string {
-	locale := fun(c.localeId, c.templates)
-	if len(locale) == 0 {
-		return fmt.Sprintf("%d: unknown error(localeIds)", c.code)
+	if len(c.localeId) > 0 {
+		return fun(c.localeId, c.templates)
 	}
-	return locale
+	return fmt.Sprintf("%d: unknown error(localeIds)", c.code)
 }

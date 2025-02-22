@@ -1,6 +1,7 @@
 package err
 
 import (
+	"errors"
 	"fmt"
 	"strings"
 	"sync"
@@ -16,6 +17,7 @@ type Matcher struct {
 	codeLocIds map[int][]string
 	patterns   map[string]string
 	onError    func(string)
+	mu         sync.RWMutex
 }
 
 // Init 初始化错误匹配器
@@ -33,7 +35,19 @@ func Init(codes map[int][]string, patterns map[string]string, onError func(strin
 func Match(err error) *CodeErrs {
 	if err == nil {
 		return nil
+	} else if matcher == nil {
+		return New(err)
 	}
+
+	// 如果已经是自定义错误，直接返回
+	var e *CodeErrs
+	if errors.As(err, &e) {
+		return e
+	}
+
+	matcher.mu.RLock()
+	defer matcher.mu.RUnlock()
+
 	errMsg := err.Error()
 
 	// 先从patterns里找locId
