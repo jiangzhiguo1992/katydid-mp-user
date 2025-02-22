@@ -15,7 +15,7 @@ import (
 
 const (
 	defaultDefLang = "en"
-	unknownError   = "text unknown error"
+	unknownError   = "localize unknown error"
 )
 
 type Config struct {

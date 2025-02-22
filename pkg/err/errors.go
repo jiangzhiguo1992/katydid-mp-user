@@ -5,127 +5,79 @@ import (
 	"strings"
 )
 
-// CodeErrors 定义多错误结构
-type CodeErrors struct {
-	errors []error
-
-	code   int
-	prefix string
-	suffix string
-
-	locales   []string
-	templates []map[string]any
+// CodeErrs 定义多错误结构
+type CodeErrs struct {
+	code      int
+	errs      []error
+	localeId  string
+	templates map[string]any
 }
 
-func NewCodeError(err error) *CodeErrors {
-	return &CodeErrors{errors: []error{err}}
-}
-
-func NewCodeErrors(errs []error) *CodeErrors {
-	return &CodeErrors{errors: errs}
-}
-
-// WrapError 添加新错误
-func (c *CodeErrors) WrapError(err error) *CodeErrors {
-	c.errors = append(c.errors, err)
-	return c
-}
-
-// WrapErrors 添加新错误
-func (c *CodeErrors) WrapErrors(errs []error) *CodeErrors {
-	c.errors = append(c.errors, errs...)
-	return c
+func New(errs ...error) *CodeErrs {
+	return &CodeErrs{errs: errs}
 }
 
 // WithCode 设置错误码
-func (c *CodeErrors) WithCode(code int) *CodeErrors {
+func (c *CodeErrs) WithCode(code int) *CodeErrs {
 	c.code = code
 	return c
 }
 
-// WithPrefix 设置前缀
-func (c *CodeErrors) WithPrefix(prefix string) *CodeErrors {
-	c.prefix = prefix
+// WrapErrs 添加新错误
+func (c *CodeErrs) WrapErrs(errs ...error) *CodeErrs {
+	c.errs = append(c.errs, errs...)
 	return c
 }
 
-// WithSuffix 设置后缀
-func (c *CodeErrors) WithSuffix(suffix string) *CodeErrors {
-	c.suffix = suffix
-	return c
-}
-
-// WrapLocale 添加本地化信息
-func (c *CodeErrors) WrapLocale(locale string, template map[string]any) *CodeErrors {
-	c.locales = append(c.locales, locale)
-	if template == nil {
-		template = map[string]any{}
-	}
-	c.templates = append(c.templates, template)
-	return c
-}
-
-// WrapLocales 添加本地化信息
-func (c *CodeErrors) WrapLocales(locales []string, templates []map[string]any) *CodeErrors {
-	c.locales = append(c.locales, locales...)
+// WithLocalize 添加本地化信息
+func (c *CodeErrs) WithLocalize(localeId string, templates map[string]any) *CodeErrs {
+	c.localeId = localeId
 	if templates == nil {
-		templates = make([]map[string]any, len(locales))
+		templates = map[string]any{}
 	}
-	c.templates = append(c.templates, templates...)
+	c.templates = templates
 	return c
 }
 
 // Error 实现 error 接口
-func (c *CodeErrors) Error() string {
-	if len(c.errors) == 0 {
-		if len(c.locales) > 0 {
-			return c.ToLocales(nil)
-		}
-		return fmt.Sprintf("CodeErrors (%d)", c.code)
-	} else if len(c.errors) == 1 {
-		return fmt.Sprintf("CodeErrors (%d): %s", c.code, c.errors[0].Error())
+func (c *CodeErrs) Error() string {
+	if len(c.errs) == 0 {
+		return fmt.Sprintf("CodeErrs (%d)", c.code)
+	} else if len(c.errs) == 1 {
+		return fmt.Sprintf("CodeErrs (%d): %s", c.code, c.errs[0].Error())
 	}
 
 	var builder strings.Builder
-	builder.WriteString(fmt.Sprintf("CodeErrors (%d):", c.code))
-	for _, err := range c.errors {
+	builder.WriteString(fmt.Sprintf("CodeErrs (%d):", c.code))
+	for _, err := range c.errs {
 		builder.WriteString("\n\t- ")
 		builder.WriteString(err.Error())
 	}
 	return builder.String()
 }
 
+// Code 获取错误码
+func (c *CodeErrs) Code() int {
+	return c.code
+}
+
+// Errs 获取错误
+func (c *CodeErrs) Errs() []error {
+	return c.errs
+}
+
 // Err 获取错误
-func (c *CodeErrors) Err() error {
-	if len(c.errors) == 0 {
+func (c *CodeErrs) Err() error {
+	if len(c.errs) == 0 {
 		return nil
 	}
 	return c
 }
 
-// Errs 获取错误
-func (c *CodeErrors) Errs() []error {
-	return c.errors
-}
-
-// Code 获取错误码
-func (c *CodeErrors) Code() int {
-	return c.code
-}
-
-func (c *CodeErrors) ToLocales(fun func([]string, []map[string]any) []string) string {
-	locales := c.locales
-	if fun != nil {
-		locales = fun(c.locales, c.templates)
+func (c *CodeErrs) ToLocales(fun func(string, map[string]any) string) string {
+	locale := fun(c.localeId, c.templates)
+	if len(locale) == 0 {
+		return fmt.Sprintf("%d: unknown error(localeIds)", c.code)
 	}
-	if len(locales) == 0 {
-		return fmt.Sprintf("%d: unknown error(locales)", c.code)
-	}
-	var builder strings.Builder
-	builder.WriteString(fmt.Sprintf("%d ", c.code))
-	for _, l := range locales {
-		builder.WriteString(" - ")
-		builder.WriteString(l)
-	}
-	return builder.String()
+	return locale
 }

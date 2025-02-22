@@ -149,7 +149,11 @@ func (l *Logger) initialize() {
 
 		// logger
 		core := zapcore.NewTee(cores...)
-		l.zap = zap.New(core)
+		l.zap = zap.New(
+			core,
+			zap.AddStacktrace(zap.ErrorLevel),
+			zap.AddCallerSkip(2),
+		)
 	} else {
 		// production config
 		c := zap.NewProductionConfig()
@@ -167,6 +171,7 @@ func (l *Logger) initialize() {
 		l.zap, err = c.Build(
 			zap.WithClock(zapcore.DefaultClock), // 使用默认时钟
 			zap.AddStacktrace(zap.ErrorLevel),   // 只在 error 级别添加堆栈
+			zap.AddCallerSkip(2),
 		)
 		if err != nil {
 			panic(err)
@@ -180,6 +185,7 @@ func createEncoderConfig(config *Config) zapcore.EncoderConfig {
 	if config.OutEnable {
 		encodeCfg.LevelKey = ""
 	} else {
+		encodeCfg.EncodeDuration = zapcore.StringDurationEncoder
 		encodeCfg.EncodeTime = func(t time.Time, enc zapcore.PrimitiveArrayEncoder) {
 			enc.AppendString(fmt.Sprintf("\x1b[20m%s\x1b[0m", t.Format("2006-01-02 15:04:05.000")))
 		}
