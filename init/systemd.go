@@ -14,7 +14,7 @@ func init() {
 	config, e := configs.Init(
 		configs.ConfDir,
 		func() bool {
-			// TODO:GG reload
+			// TODO:GG reConfig
 			return true
 		},
 	)
@@ -33,9 +33,6 @@ func init() {
 		MaxSize:   config.LogConf.FileMaxSize << 20,
 	})
 
-	// error
-	err.Init(text.CodeMsgIds, text.MsgPatterns)
-
 	// i18n
 	e = i18n.Init(i18n.Config{
 		DefaultLang: config.DefLang,
@@ -47,4 +44,9 @@ func init() {
 	if e != nil {
 		log.Fatal("■ ■ Init ■ ■ init i18n failed", log.Err(e))
 	}
+
+	// error
+	err.Init(text.CodeMsgIds, text.MsgPatterns, func(msg string) {
+		log.Error(msg)
+	})
 }
