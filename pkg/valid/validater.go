@@ -2,31 +2,45 @@ package valid
 
 import (
 	"errors"
+	"fmt"
 	"reflect"
 	"strings"
 	"sync"
 )
 
 var (
-	cache      sync.Map
+	tagSplit   = ","
 	fieldTag   = "valid"
 	requireTag = "required"
-	validators = map[string]ValidatorFunc{}
+	groupTag   = "group:"
+
+	cache           sync.Map
+	fieldValidators = map[string]ValidatorFieldFunc{}
+	groupValidators = map[string]ValidatorGroupFunc{}
 )
 
-type ValidatorFunc func(value interface{}) (string, bool)
+type ValidatorFieldFunc func(value interface{}) (string, bool)
+
+type ValidatorGroupFunc func(map[string]interface{}) (string, bool)
 
 // FieldValidator 使用字段索引代替字段名，优化字段查找
 type FieldValidator struct {
 	Index      []int // 使用字段索引数组替代字段名
 	Name       string
 	Required   bool
-	Validators []ValidatorFunc
+	Validators []ValidatorFieldFunc
 	ZeroCheck  func(reflect.Value) bool // 编译期确定的零值检查函数
+}
+
+// GroupValidator 专门处理组验证
+type GroupValidator struct {
+	Fields    []string                    // 组内字段名
+	Validator func(reflect.Value) []error // 组验证函数
 }
 
 type StructValidator struct {
 	FieldValidators []FieldValidator
+	GroupValidators map[string]GroupValidator // 组验证器映射
 }
 
 // 为常见类型生成专用的零值检查函数
@@ -56,7 +70,12 @@ func CompileValidators(t reflect.Type) *StructValidator {
 		return v.(*StructValidator)
 	}
 
-	tv := &StructValidator{}
+	tv := &StructValidator{
+		FieldValidators: make([]FieldValidator, 0),
+		GroupValidators: make(map[string]GroupValidator),
+	}
+
+	groupFields := make(map[string][]string)
 	for i := 0; i < t.NumField(); i++ {
 		field := t.Field(i)
 		tag := field.Tag.Get(fieldTag)
@@ -64,29 +83,73 @@ func CompileValidators(t reflect.Type) *StructValidator {
 			continue
 		}
 
-		rules := strings.Split(tag, ",")
-		var fieldValidators []ValidatorFunc
+		rules := strings.Split(tag, tagSplit)
+		var fValidators []ValidatorFieldFunc
 		required := false
 
 		for _, rule := range rules {
 			rule = strings.TrimSpace(rule)
 			if rule == requireTag {
 				required = true
+			} else if strings.HasPrefix(rule, groupTag) {
+				groupName := strings.TrimPrefix(rule, groupTag)
+				groupFields[groupName] = append(groupFields[groupName], field.Name)
 			} else if rule != "" {
-				if validator, exists := validators[rule]; exists {
-					fieldValidators = append(fieldValidators, validator)
+				if validator, exists := fieldValidators[rule]; exists {
+					fValidators = append(fValidators, validator)
 				}
 			}
 		}
 
-		if required || len(fieldValidators) > 0 {
-			tv.FieldValidators = append(tv.FieldValidators, FieldValidator{
+		if required || len(fValidators) > 0 {
+			fv := FieldValidator{
 				Index:      field.Index,
 				Name:       field.Name,
 				Required:   required,
-				Validators: fieldValidators,
+				Validators: fValidators,
 				ZeroCheck:  getZeroChecker(field.Type.Kind()),
-			})
+			}
+			tv.FieldValidators = append(tv.FieldValidators, fv)
+		}
+	}
+
+	for groupName, fields := range groupFields {
+		tv.GroupValidators[groupName] = GroupValidator{
+			Fields: fields,
+			Validator: func(v reflect.Value) []error {
+				var errs []error
+				// 如果有自定义的组验证器，就使用它
+				if groupValidator, exists := groupValidators[groupName]; exists {
+					fieldValues := make(map[string]interface{})
+					for _, fieldName := range fields {
+						field := v.FieldByName(fieldName)
+						fieldValues[fieldName] = field.Interface()
+					}
+					if msg, ok := groupValidator(fieldValues); !ok {
+						errs = append(errs, fmt.Errorf(msg))
+					}
+					return errs
+				}
+
+				// 默认的组验证逻辑（全空或全填）
+				allEmpty := true
+				allFilled := true
+
+				for _, fieldName := range fields {
+					field := v.FieldByName(fieldName)
+					isEmpty := getZeroChecker(field.Kind())(field)
+					if isEmpty {
+						allFilled = false
+					} else {
+						allEmpty = false
+					}
+				}
+
+				if !allEmpty && !allFilled {
+					errs = append(errs, fmt.Errorf("group %s: all fields must be either all empty or all filled", groupName))
+				}
+				return errs
+			},
 		}
 	}
 
@@ -102,10 +165,11 @@ func ValidateStruct(v interface{}) []error {
 	}
 
 	tv := CompileValidators(val.Type())
-	if tv == nil || len(tv.FieldValidators) == 0 {
+	if tv == nil || (len(tv.FieldValidators) == 0 && len(tv.GroupValidators) == 0) {
 		return nil
 	}
 
+	// 验证单个字段
 	for _, fv := range tv.FieldValidators {
 		// 使用字段索引直接获取字段值
 		field := val.FieldByIndex(fv.Index)
@@ -126,14 +190,23 @@ func ValidateStruct(v interface{}) []error {
 			}
 		}
 	}
+
+	// 执行组验证
+	for _, gv := range tv.GroupValidators {
+		if es := gv.Validator(val); len(es) > 0 {
+			errs = append(errs, es...)
+		}
+	}
 	return errs
 }
 
-func RegisterStructs(tag string, valids map[string]ValidatorFunc, vs []interface{}) {
-	if len(tag) > 0 {
-		fieldTag = tag
-	}
-	validators = valids
+func RegisterStructs(
+	fieldValids map[string]ValidatorFieldFunc,
+	groupValids map[string]ValidatorGroupFunc,
+	vs []interface{},
+) {
+	fieldValidators = fieldValids
+	groupValidators = groupValids // 添加组验证器注册
 	for _, v := range vs {
 		t := reflect.TypeOf(v)
 		if t.Kind() == reflect.Pointer {
