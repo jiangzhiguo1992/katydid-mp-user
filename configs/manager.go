@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"github.com/fsnotify/fsnotify"
 	"github.com/spf13/viper"
+	_ "github.com/spf13/viper/remote"
 	"log"
 	"os"
 	"path/filepath"
@@ -13,47 +14,50 @@ import (
 	"time"
 )
 
+const (
+	envKey = "env" // 环境key
+
+	reConfigMaxRetries = 3               // 重试次数
+	reConfigInterval   = 2 * time.Second // 重试间隔
+)
+
 // Manager 配置管理器
 type Manager struct {
-	v      *viper.Viper
-	config *Config
-	mu     sync.RWMutex
+	v        *viper.Viper
+	config   *Config
+	reConfig func() bool
+	mu       sync.RWMutex
 }
 
 var (
-	defaultManager *Manager
-	managerOnce    sync.Once
+	manager *Manager
+	once    sync.Once
 )
 
-// GetManager 获取配置管理器单例
-func GetManager() *Manager {
-	managerOnce.Do(func() {
-		defaultManager = &Manager{
-			v:      viper.New(),
-			config: new(Config),
-		}
-	})
-	return defaultManager
-}
-
+// Get 获取配置管理器单例
 func Get() *Config {
-	m := GetManager()
-	m.mu.RLock()
-	defer m.mu.RUnlock()
-	return m.config
+	manager.mu.RLock()
+	defer manager.mu.RUnlock()
+	return manager.config
 }
 
 // Init 初始化配置
-func Init(confDir string, reload func() bool) (*Config, error) {
-	m := GetManager()
-	if err := m.Load(confDir, reload); err != nil {
+func Init(confDir string, reConfig func() bool) (*Config, error) {
+	once.Do(func() {
+		manager = &Manager{
+			v:        viper.New(),
+			config:   new(Config),
+			reConfig: reConfig,
+		}
+	})
+	if err := manager.Load(confDir); err != nil {
 		return nil, err
 	}
-	return m.config, nil
+	return manager.config, nil
 }
 
 // Load 加载配置
-func (m *Manager) Load(confDir string, reload func() bool) error {
+func (m *Manager) Load(confDir string) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
@@ -76,7 +80,7 @@ func (m *Manager) Load(confDir string, reload func() bool) error {
 	}
 
 	// 设置配置监听
-	m.watchConfig(reload)
+	m.watchConfig()
 
 	return nil
 }
@@ -134,30 +138,30 @@ func (m *Manager) parseConfig() error {
 }
 
 // watchConfig 监听配置变化
-func (m *Manager) watchConfig(reload func() bool) {
+func (m *Manager) watchConfig() {
 	m.v.OnConfigChange(func(e fsnotify.Event) {
-		if reload == nil {
+		if m.reConfig == nil {
 			return
 		}
 
-		ctx, cancel := context.WithTimeout(context.Background(), reloadInterval*reloadMaxRetries)
+		ctx, cancel := context.WithTimeout(context.Background(), reConfigInterval*reConfigMaxRetries)
 		defer cancel()
 
-		for i := 0; i < reloadMaxRetries; i++ {
-			if reload() {
+		for i := 0; i < reConfigMaxRetries; i++ {
+			if m.reConfig() {
 				log.Printf("■ ■ Conf ■ ■ config reloaded successfully")
 				return
 			}
 
 			select {
-			case <-time.After(reloadInterval):
+			case <-time.After(reConfigInterval):
 				log.Printf("■ ■ Conf ■ ■ reload config failed, retry: %d", i+1)
 			case <-ctx.Done():
 				log.Printf("■ ■ Conf ■ ■ reload config timeout after %d retries", i+1)
 				return
 			}
 		}
-		log.Printf("■ ■ Conf ■ ■ reload config failed after %d retries", reloadMaxRetries)
+		log.Printf("■ ■ Conf ■ ■ reload config failed after %d retries", reConfigMaxRetries)
 	})
 
 	m.v.WatchConfig()

@@ -79,7 +79,7 @@ func (c *CodeErrors) WrapLocales(locales []string, templates []map[string]any) *
 func (c *CodeErrors) Error() string {
 	if len(c.errors) == 0 {
 		if len(c.locales) > 0 {
-			return c.ToLocales("", nil)
+			return c.ToLocales(nil)
 		}
 		return fmt.Sprintf("CodeErrors (%d)", c.code)
 	} else if len(c.errors) == 1 {
@@ -119,7 +119,7 @@ func (c *CodeErrors) ToLocales(fun func([]string, []map[string]any) []string) st
 		locales = fun(c.locales, c.templates)
 	}
 	if len(locales) == 0 {
-		return fmt.Sprintf("%d: no locales", c.code)
+		return fmt.Sprintf("%d: unknown error(locales)", c.code)
 	}
 	var builder strings.Builder
 	builder.WriteString(fmt.Sprintf("%d ", c.code))

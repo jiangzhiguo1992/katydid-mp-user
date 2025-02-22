@@ -60,7 +60,6 @@ func NewManager(cfg Config) (*Manager, error) {
 	if err := m.loadMessageFiles(); err != nil {
 		return nil, err
 	}
-
 	return m, nil
 }
 

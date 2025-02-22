@@ -2,7 +2,6 @@ package configs
 
 import (
 	_ "embed"
-	_ "github.com/spf13/viper/remote"
 	"time"
 )
 
@@ -15,13 +14,6 @@ var (
 
 	//go:embed app/private.toml
 	fileAppPri []byte
-)
-
-const (
-	envKey = "env" // 环境key
-
-	reloadMaxRetries = 3               // 重试次数
-	reloadInterval   = 2 * time.Second // 重试间隔
 )
 
 type (
