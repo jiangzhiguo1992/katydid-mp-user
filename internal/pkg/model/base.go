@@ -5,6 +5,7 @@ import (
 	"katydid-mp-user/internal/pkg/text"
 	"katydid-mp-user/pkg/err"
 	"katydid-mp-user/utils"
+	"time"
 )
 
 const (
@@ -15,8 +16,8 @@ const (
 	deleteByAdminOffset = -10000 // 系统管理员删除偏移量
 
 	// Extra 相关常量
-	extraKeyAdminNote = "adminNote" // 管理员备注
-	extraItemMaxLen   = 10000
+	extraKeyAdminNote       = "adminNote" // 管理员备注
+	extraValAdminNoteMaxLen = 10000       // 最大长度
 )
 
 type (
@@ -50,6 +51,42 @@ func NewBaseEmpty() *Base {
 	}
 }
 
+func (b *Base) CreatedTime() time.Time {
+	return time.UnixMilli(b.CreateAt)
+}
+
+func (b *Base) UpdatedTime() time.Time {
+	return time.UnixMilli(b.UpdateAt)
+}
+
+func (b *Base) DeletedTime() *time.Time {
+	if b.DeleteAt == nil {
+		return nil
+	}
+	t := time.UnixMilli(*b.DeleteAt)
+	return &t
+}
+
+func (b *Base) IsDeleted() bool {
+	return b.DeleteAt != nil
+}
+
+func (b *Base) IsDelByUser() bool {
+	return b.DeleteBy >= deleteByUserSelf
+}
+
+func (b *Base) IsDelByAdmin() bool {
+	return b.DeleteBy <= deleteByAdminSys
+}
+
+func (b *Base) IsDelByUserSelf() bool {
+	return b.DeleteBy == b.GetDelByUserSelf()
+}
+
+func (b *Base) IsDelByAdminSys() bool {
+	return b.DeleteBy == b.GetDelByAdminSys()
+}
+
 func (b *Base) GetDelByUserSelf() int64 {
 	return deleteByUserSelf
 }
@@ -69,27 +106,11 @@ func (b *Base) GetDelBy(id uint64) int64 {
 	}
 }
 
-func (b *Base) IsDelByUser() bool {
-	return b.DeleteBy >= deleteByUserSelf
-}
-
-func (b *Base) IsDelByAdmin() bool {
-	return b.DeleteBy <= deleteByAdminSys
-}
-
-func (b *Base) IsDelByUserSelf() bool {
-	return b.DeleteBy == b.GetDelByUserSelf()
-}
-
-func (b *Base) IsDelByAdminSys() bool {
-	return b.DeleteBy == b.GetDelByAdminSys()
-}
-
 func (b *Base) Valid() *err.CodeErrs {
 	var errs = new(err.CodeErrs)
 	// extra
-	if v, ok := b.Extra[extraKeyAdminNote]; ok {
-		if len(v.(string)) > extraItemMaxLen {
+	if note, ok := b.Extra.GetString(extraKeyAdminNote); ok {
+		if len(note) > extraValAdminNoteMaxLen {
 			errs = errs.WrapErrs(errors.New(text.MsgIdDBFieldLarge))
 		}
 	}
