@@ -34,7 +34,7 @@ type (
 		DeleteAt *int64 `json:"deleteAt"` // TODO:GG 所有的查询都带上index `gorm:"index"`
 		DeleteBy int64  `json:"deleteBy"`
 
-		Extra utils.KSMap `json:"extra" gorm:"serializer:json"` // 额外信息
+		Extra utils.KSMap `json:"extra" gorm:"serializer:json"` // 额外信息 (!索引/!必需)
 
 		ExtraKeys func() []string `json:"-" gorm:"-:all"`
 	}

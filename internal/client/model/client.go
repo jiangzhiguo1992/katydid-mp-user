@@ -27,17 +27,90 @@ func NewClientEmpty() *Client {
 }
 
 func NewClientDefault(
-	teamId uint64, ip, part uint,
+	teamId uint64, IP, part uint,
 	enable bool, name string,
 ) *Client {
 	client := &Client{
 		Base:   model.NewBaseEmpty(),
-		TeamId: teamId, IP: ip, Part: part,
+		TeamId: teamId, IP: IP, Part: part,
 		Enable: enable, Name: name,
 		OnlineAt: 0, OfflineAt: 0,
 		//Platforms: make(map[uint16]map[uint16]*Platform),
 	}
 	return client
+}
+
+const (
+	clientExtraKeyWebsite        = "website"        // 官网
+	clientExtraKeyCopyrights     = "copyrights"     // 版权
+	clientExtraKeySupportUrl     = "supportUrl"     // 服务条款URL
+	clientExtraKeyPrivacyUrl     = "privacyUrl"     // 隐私政策URL
+	clientExtraKeyUserMaxAccount = "userMaxAccount" // 用户最多账户数
+	clientExtraKeyUserMaxToken   = "userMaxToken"   // 用户最多令牌数 (同时登录最大数，防止工作室?)
+)
+
+func (c *Client) SetWebsite(website *string) {
+	c.Extra.SetString(clientExtraKeyWebsite, website)
+}
+
+func (c *Client) GetWebsite() string {
+	data, _ := c.Extra.GetString(clientExtraKeyWebsite)
+	return data
+}
+
+func (c *Client) SetCopyrights(copyrights *[]string) {
+	c.Extra.SetStringSlice(clientExtraKeyCopyrights, copyrights)
+}
+
+func (c *Client) GetCopyrights() []string {
+	data, _ := c.Extra.GetStringSlice(clientExtraKeyCopyrights)
+	return data
+}
+
+func (c *Client) SetSupportUrl(supportUrl *string) {
+	c.Extra.SetString(clientExtraKeySupportUrl, supportUrl)
+}
+
+func (c *Client) GetSupportUrl() string {
+	data, _ := c.Extra.GetString(clientExtraKeySupportUrl)
+	return data
+}
+
+func (c *Client) SetPrivacyUrl(privacyUrl *string) {
+	c.Extra.SetString(clientExtraKeyPrivacyUrl, privacyUrl)
+}
+
+func (c *Client) GetPrivacyUrl() string {
+	data, _ := c.Extra.GetString(clientExtraKeyPrivacyUrl)
+	return data
+}
+
+func (c *Client) SetUserMaxAccount(userMaxAccount *int) {
+	c.Extra.SetInt(clientExtraKeyUserMaxAccount, userMaxAccount)
+}
+
+func (c *Client) GetUserMaxAccount() int {
+	data, _ := c.Extra.GetInt(clientExtraKeyUserMaxAccount)
+	return data
+}
+
+func (c *Client) OverUserMaxAccount(count int) bool {
+	maxCount := c.GetUserMaxAccount()
+	return (maxCount >= 0) && (count > maxCount)
+}
+
+func (c *Client) SetUserMaxToken(userMaxToken *int) {
+	c.Extra.SetInt(clientExtraKeyUserMaxToken, userMaxToken)
+}
+
+func (c *Client) GetUserMaxToken() int {
+	data, _ := c.Extra.GetInt(clientExtraKeyUserMaxToken)
+	return data
+}
+
+func (c *Client) OverUserMaxToken(count int) bool {
+	maxCount := c.GetUserMaxToken()
+	return (maxCount >= 0) && (count > maxCount)
 }
 
 // IsOnline 是否上线
@@ -62,85 +135,6 @@ func (c *Client) IsComingOnline() bool {
 func (c *Client) IsComingOffline() bool {
 	currentTime := time.Now().UnixMilli()
 	return c.OfflineAt > currentTime && (c.OnlineAt == -1 || c.OnlineAt < currentTime)
-}
-
-const (
-	clientExtraKeyWebsite        = "website"
-	clientExtraKeyCopyrights     = "copyrights"
-	clientExtraKeySupportUrl     = "supportUrl"
-	clientExtraKeyPrivacyUrl     = "privacyUrl"
-	clientExtraKeyUserMaxAccount = "userMaxAccount"
-	clientExtraKeyUserMaxToken   = "userMaxToken"
-)
-
-// SetWebsite 官网
-func (c *Client) SetWebsite(website *string) {
-	c.Extra.SetString(clientExtraKeyWebsite, website)
-}
-
-func (c *Client) GetWebsite() string {
-	data, _ := c.Extra.GetString(clientExtraKeyWebsite)
-	return data
-}
-
-// SetCopyrights 版权
-func (c *Client) SetCopyrights(copyrights *[]string) {
-	c.Extra.SetStringSlice(clientExtraKeyCopyrights, copyrights)
-}
-
-func (c *Client) GetCopyrights() []string {
-	data, _ := c.Extra.GetStringSlice(clientExtraKeyCopyrights)
-	return data
-}
-
-// SetSupportUrl 服务条款URL
-func (c *Client) SetSupportUrl(supportUrl *string) {
-	c.Extra.SetString(clientExtraKeySupportUrl, supportUrl)
-}
-
-func (c *Client) GetSupportUrl() string {
-	data, _ := c.Extra.GetString(clientExtraKeySupportUrl)
-	return data
-}
-
-// SetPrivacyUrl 隐私政策URL
-func (c *Client) SetPrivacyUrl(privacyUrl *string) {
-	c.Extra.SetString(clientExtraKeyPrivacyUrl, privacyUrl)
-}
-
-func (c *Client) GetPrivacyUrl() string {
-	data, _ := c.Extra.GetString(clientExtraKeyPrivacyUrl)
-	return data
-}
-
-// SetUserMaxAccount 用户最多账户数 (身份证/护照/...)
-func (c *Client) SetUserMaxAccount(userMaxAccount *int) {
-	c.Extra.SetInt(clientExtraKeyUserMaxAccount, userMaxAccount)
-}
-
-func (c *Client) GetUserMaxAccount() int {
-	data, _ := c.Extra.GetInt(clientExtraKeyUserMaxAccount)
-	return data
-}
-
-func (c *Client) OverUserMaxAccount(count int) bool {
-	maxCount := c.GetUserMaxAccount()
-	return (maxCount >= 0) && (count > maxCount)
-}
-
-// SetUserMaxToken 用户最多令牌数 (同时登录最大数，防止工作室?)
-func (c *Client) SetUserMaxToken(userMaxToken *int) {
-	c.Extra.SetInt(clientExtraKeyUserMaxToken, userMaxToken)
-}
-
-func (c *Client) GetUserMaxToken() int {
-	data, _ := c.Extra.GetInt(clientExtraKeyUserMaxToken)
-	return data
-}
-
-func (c *Client) OverUserMaxToken(count int) bool {
-	maxCount := c.GetUserMaxToken()
-	return (maxCount >= 0) && (count > maxCount)
 }
 
 func (c *Client) GetPlatformsByPlat(platform uint16) []*Platform {
