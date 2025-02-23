@@ -970,6 +970,15 @@ func (m KSMap) GetString(key string) (string, bool) {
 	return "", false
 }
 
+// SetStringSlice 设置[]string类型值
+func (m KSMap) SetStringSlice(key string, value *[]string) {
+	if value == nil {
+		delete(m, key)
+		return
+	}
+	m[key] = *value
+}
+
 // GetStringSlice 获取[]string类型值
 func (m KSMap) GetStringSlice(key string) ([]string, bool) {
 	if v, ok := m[key]; ok {

@@ -5,8 +5,6 @@ import (
 	"time"
 )
 
-var _ model.IValid = (*Client)(nil)
-
 // Client 客户端
 type Client struct {
 	*model.Base
@@ -14,13 +12,14 @@ type Client struct {
 	IP     uint   `json:"IP"`     // 系列 (eg:大富翁IP)
 	Part   uint   `json:"part"`   // 类型 (eg:单机版)
 
-	Enable    bool  `json:"enable"`    // 是否可用 (一般不用，下架之类的，没有reason)
+	Enable bool   `json:"enable"`                   // 是否可用 (一般不用，下架之类的，没有reason)
+	Name   string `json:"name" valid:"client-name"` // 客户端名称
+
 	OnlineAt  int64 `json:"onlineAt"`  // 上线时间 (时间没到时，只能停留在首页，提示bulletins)
 	OfflineAt int64 `json:"offlineAt"` // 下线时间 (时间到后，强制下线+升级/等待/...)
+	//RemainingTime // TODO:GG 维护信息
 
-	Name string `json:"name" valid:"client-name"` // 客户端名称
-
-	//Platforms map[uint16]map[uint16]*Platform `json:"platforms" gorm:"-:all"` // [platform][area]平台列表
+	Platforms []*Platform `json:"platforms" gorm:"-:all"` // [platform][area]平台列表
 }
 
 func NewClientEmpty() *Client {
@@ -29,14 +28,13 @@ func NewClientEmpty() *Client {
 
 func NewClientDefault(
 	teamId uint64, ip, part uint,
-	enable bool,
-	name string,
+	enable bool, name string,
 ) *Client {
 	client := &Client{
 		Base:   model.NewBaseEmpty(),
 		TeamId: teamId, IP: ip, Part: part,
-		Enable: enable, OnlineAt: 0, OfflineAt: 0,
-		Name: name,
+		Enable: enable, Name: name,
+		OnlineAt: 0, OfflineAt: 0,
 		//Platforms: make(map[uint16]map[uint16]*Platform),
 	}
 	return client
@@ -66,125 +64,114 @@ func (c *Client) IsComingOffline() bool {
 	return c.OfflineAt > currentTime && (c.OnlineAt == -1 || c.OnlineAt < currentTime)
 }
 
+const (
+	clientExtraKeyWebsite        = "website"
+	clientExtraKeyCopyrights     = "copyrights"
+	clientExtraKeySupportUrl     = "supportUrl"
+	clientExtraKeyPrivacyUrl     = "privacyUrl"
+	clientExtraKeyUserMaxAccount = "userMaxAccount"
+	clientExtraKeyUserMaxToken   = "userMaxToken"
+)
+
 // SetWebsite 官网
 func (c *Client) SetWebsite(website *string) {
-	if (website != nil) && (len(*website) > 0) {
-		c.Extra["website"] = *website
-	} else {
-		delete(c.Extra, "website")
-	}
+	c.Extra.SetString(clientExtraKeyWebsite, website)
 }
 
 func (c *Client) GetWebsite() string {
-	if c.Extra["website"] == nil {
-		return ""
-	}
-	return c.Extra["website"].(string)
+	data, _ := c.Extra.GetString(clientExtraKeyWebsite)
+	return data
 }
 
 // SetCopyrights 版权
 func (c *Client) SetCopyrights(copyrights *[]string) {
-	if (copyrights != nil) && (len(*copyrights) > 0) {
-		c.Extra["copyrights"] = *copyrights
-	} else {
-		delete(c.Extra, "copyrights")
-	}
+	c.Extra.SetStringSlice(clientExtraKeyCopyrights, copyrights)
 }
 
 func (c *Client) GetCopyrights() []string {
-	if c.Extra["copyrights"] == nil {
-		return []string{}
-	}
-	return c.Extra["copyrights"].([]string)
+	data, _ := c.Extra.GetStringSlice(clientExtraKeyCopyrights)
+	return data
 }
 
 // SetSupportUrl 服务条款URL
 func (c *Client) SetSupportUrl(supportUrl *string) {
-	if (supportUrl != nil) && (len(*supportUrl) > 0) {
-		c.Extra["supportUrl"] = *supportUrl
-	} else {
-		delete(c.Extra, "supportUrl")
-	}
+	c.Extra.SetString(clientExtraKeySupportUrl, supportUrl)
 }
 
 func (c *Client) GetSupportUrl() string {
-	if c.Extra["supportUrl"] == nil {
-		return ""
-	}
-	return c.Extra["supportUrl"].(string)
+	data, _ := c.Extra.GetString(clientExtraKeySupportUrl)
+	return data
 }
 
 // SetPrivacyUrl 隐私政策URL
 func (c *Client) SetPrivacyUrl(privacyUrl *string) {
-	if (privacyUrl != nil) && (len(*privacyUrl) > 0) {
-		c.Extra["privacyUrl"] = *privacyUrl
-	} else {
-		delete(c.Extra, "privacyUrl")
-	}
+	c.Extra.SetString(clientExtraKeyPrivacyUrl, privacyUrl)
 }
 
 func (c *Client) GetPrivacyUrl() string {
-	if c.Extra["privacyUrl"] == nil {
-		return ""
-	}
-	return c.Extra["privacyUrl"].(string)
+	data, _ := c.Extra.GetString(clientExtraKeyPrivacyUrl)
+	return data
 }
 
 // SetUserMaxAccount 用户最多账户数 (身份证/护照/...)
 func (c *Client) SetUserMaxAccount(userMaxAccount *int) {
-	if (userMaxAccount != nil) && (*userMaxAccount > 0) {
-		c.Extra["userMaxAccount"] = *userMaxAccount
-	} else {
-		delete(c.Extra, "userMaxAccount")
-	}
+	c.Extra.SetInt(clientExtraKeyUserMaxAccount, userMaxAccount)
 }
 
 func (c *Client) GetUserMaxAccount() int {
-	if c.Extra["userMaxAccount"] == nil {
-		return 0
-	}
-	return c.Extra["userMaxAccount"].(int)
+	data, _ := c.Extra.GetInt(clientExtraKeyUserMaxAccount)
+	return data
 }
 
 func (c *Client) OverUserMaxAccount(count int) bool {
 	maxCount := c.GetUserMaxAccount()
-	if maxCount <= 0 {
-		return false
-	}
-	return count > maxCount
+	return (maxCount >= 0) && (count > maxCount)
 }
 
 // SetUserMaxToken 用户最多令牌数 (同时登录最大数，防止工作室?)
 func (c *Client) SetUserMaxToken(userMaxToken *int) {
-	if (userMaxToken != nil) && (*userMaxToken > 0) {
-		c.Extra["userMaxToken"] = *userMaxToken
-	} else {
-		delete(c.Extra, "userMaxToken")
-	}
+	c.Extra.SetInt(clientExtraKeyUserMaxToken, userMaxToken)
 }
 
 func (c *Client) GetUserMaxToken() int {
-	if c.Extra["userMaxToken"] == nil {
-		return 0
-	}
-	return c.Extra["userMaxToken"].(int)
+	data, _ := c.Extra.GetInt(clientExtraKeyUserMaxToken)
+	return data
 }
 
 func (c *Client) OverUserMaxToken(count int) bool {
 	maxCount := c.GetUserMaxToken()
-	if maxCount <= 0 {
-		return false
-	}
-	return count > maxCount
+	return (maxCount >= 0) && (count > maxCount)
 }
 
-//func (c *Client) GetPlatform(platform, area uint16) *Platform {
-//	if _, ok := c.Platforms[platform]; !ok {
-//		return nil
-//	}
-//	return c.Platforms[platform][area]
-//}
-//
+func (c *Client) GetPlatformsByPlat(platform uint16) []*Platform {
+	var platforms []*Platform
+	for _, p := range c.Platforms {
+		if p.Platform == platform {
+			platforms = append(platforms, p)
+		}
+	}
+	return platforms
+}
+
+func (c *Client) GetPlatformsByArea(area uint) []*Platform {
+	var platforms []*Platform
+	for _, p := range c.Platforms {
+		if p.Area == area {
+			platforms = append(platforms, p)
+		}
+	}
+	return platforms
+}
+
+func (c *Client) GetPlatform(platform uint16, area uint) *Platform {
+	for _, p := range c.Platforms {
+		if p.Platform == platform && p.Area == area {
+			return p
+		}
+	}
+	return nil
+}
+
 //func (c *Client) GetLatestVersion(platform, area uint16, market uint) *Version {
 //	p := c.GetPlatform(platform, area)
 //	return p.GetLatestVersion(market)
