@@ -4,22 +4,6 @@ import (
 	"math"
 )
 
-// 定义类型范围常量
-const (
-	maxInt8   = 1<<7 - 1
-	minInt8   = -1 << 7
-	maxInt16  = 1<<15 - 1
-	minInt16  = -1 << 15
-	maxInt32  = 1<<31 - 1
-	minInt32  = -1 << 31
-	maxInt64  = 1<<63 - 1
-	minInt64  = -1 << 63
-	maxUint8  = 1<<8 - 1
-	maxUint16 = 1<<16 - 1
-	maxUint32 = 1<<32 - 1
-	maxUint64 = 1<<63 - 1
-)
-
 // KSMap 扩展 map[string]any 类型
 type KSMap map[string]any
 
@@ -71,11 +55,11 @@ func (m KSMap) GetInt(key string) (int, bool) {
 		case int32:
 			return int(val), true
 		case int64:
-			if val >= int64(minInt32) && val <= int64(maxInt32) {
+			if val >= int64(math.MinInt32) && val <= int64(math.MaxInt32) {
 				return int(val), true
 			}
 		case uint:
-			if val <= uint(maxInt32) {
+			if val <= uint(math.MaxInt32) {
 				return int(val), true
 			}
 		case uint8:
@@ -83,19 +67,19 @@ func (m KSMap) GetInt(key string) (int, bool) {
 		case uint16:
 			return int(val), true
 		case uint32:
-			if val <= uint32(maxInt32) {
+			if val <= uint32(math.MaxInt32) {
 				return int(val), true
 			}
 		case uint64:
-			if val <= uint64(maxInt32) {
+			if val <= uint64(math.MaxInt32) {
 				return int(val), true
 			}
 		case float32:
-			if val >= float32(minInt32) && val <= float32(maxInt32) {
+			if val >= float32(math.MinInt32) && val <= float32(math.MaxInt32) {
 				return int(val), true
 			}
 		case float64:
-			if val >= float64(minInt32) && val <= float64(maxInt32) {
+			if val >= float64(math.MinInt32) && val <= float64(math.MaxInt32) {
 				return int(val), true
 			}
 		}
@@ -131,47 +115,47 @@ func (m KSMap) GetInt8(key string) (int8, bool) {
 		case int8:
 			return val, true
 		case int:
-			if val >= minInt8 && val <= maxInt8 {
+			if val >= math.MinInt8 && val <= math.MaxInt8 {
 				return int8(val), true
 			}
 		case int16:
-			if val >= minInt8 && val <= maxInt8 {
+			if val >= math.MinInt8 && val <= math.MaxInt8 {
 				return int8(val), true
 			}
 		case int32:
-			if val >= minInt8 && val <= maxInt8 {
+			if val >= math.MinInt8 && val <= math.MaxInt8 {
 				return int8(val), true
 			}
 		case int64:
-			if val >= minInt8 && val <= maxInt8 {
+			if val >= math.MinInt8 && val <= math.MaxInt8 {
 				return int8(val), true
 			}
 		case uint:
-			if val <= uint(maxInt8) {
+			if val <= uint(math.MaxInt8) {
 				return int8(val), true
 			}
 		case uint8:
-			if val <= uint8(maxInt8) {
+			if val <= uint8(math.MaxInt8) {
 				return int8(val), true
 			}
 		case uint16:
-			if val <= uint16(maxInt8) {
+			if val <= uint16(math.MaxInt8) {
 				return int8(val), true
 			}
 		case uint32:
-			if val <= uint32(maxInt8) {
+			if val <= uint32(math.MaxInt8) {
 				return int8(val), true
 			}
 		case uint64:
-			if val <= uint64(maxInt8) {
+			if val <= uint64(math.MaxInt8) {
 				return int8(val), true
 			}
 		case float32:
-			if val >= minInt8 && val <= maxInt8 {
+			if val >= math.MinInt8 && val <= math.MaxInt8 {
 				return int8(val), true
 			}
 		case float64:
-			if val >= minInt8 && val <= maxInt8 {
+			if val >= math.MinInt8 && val <= math.MaxInt8 {
 				return int8(val), true
 			}
 		}
@@ -209,41 +193,41 @@ func (m KSMap) GetInt16(key string) (int16, bool) {
 		case int8:
 			return int16(val), true
 		case int:
-			if val >= minInt16 && val <= maxInt16 {
+			if val >= math.MinInt16 && val <= math.MaxInt16 {
 				return int16(val), true
 			}
 		case int32:
-			if val >= minInt16 && val <= maxInt16 {
+			if val >= math.MinInt16 && val <= math.MaxInt16 {
 				return int16(val), true
 			}
 		case int64:
-			if val >= minInt16 && val <= maxInt16 {
+			if val >= math.MinInt16 && val <= math.MaxInt16 {
 				return int16(val), true
 			}
 		case uint:
-			if val <= uint(maxInt16) {
+			if val <= uint(math.MaxInt16) {
 				return int16(val), true
 			}
 		case uint8:
 			return int16(val), true
 		case uint16:
-			if val <= uint16(maxInt16) {
+			if val <= uint16(math.MaxInt16) {
 				return int16(val), true
 			}
 		case uint32:
-			if val <= uint32(maxInt16) {
+			if val <= uint32(math.MaxInt16) {
 				return int16(val), true
 			}
 		case uint64:
-			if val <= uint64(maxInt16) {
+			if val <= uint64(math.MaxInt16) {
 				return int16(val), true
 			}
 		case float32:
-			if val >= minInt16 && val <= maxInt16 {
+			if val >= math.MinInt16 && val <= math.MaxInt16 {
 				return int16(val), true
 			}
 		case float64:
-			if val >= minInt16 && val <= maxInt16 {
+			if val >= math.MinInt16 && val <= math.MaxInt16 {
 				return int16(val), true
 			}
 		}
@@ -295,7 +279,7 @@ func (m KSMap) GetInt64(key string) (int64, bool) {
 		case uint32:
 			return int64(val), true
 		case uint64:
-			if val <= uint64(maxInt64) {
+			if val <= uint64(math.MaxInt64) {
 				return int64(val), true
 			}
 		case float32:
@@ -343,11 +327,11 @@ func (m KSMap) GetUint(key string) (uint, bool) {
 		case uint16:
 			return uint(val), true
 		case uint32:
-			if val <= uint32(maxUint32) {
+			if val <= uint32(math.MaxUint32) {
 				return uint(val), true
 			}
 		case uint64:
-			if val <= uint64(maxUint32) {
+			if val <= uint64(math.MaxUint32) {
 				return uint(val), true
 			}
 		case int:
@@ -371,11 +355,11 @@ func (m KSMap) GetUint(key string) (uint, bool) {
 				return uint(val), true
 			}
 		case float32:
-			if val >= 0 && val <= float32(maxUint32) {
+			if val >= 0 && val <= float32(math.MaxUint32) {
 				return uint(val), true
 			}
 		case float64:
-			if val >= 0 && val <= float64(maxUint32) {
+			if val >= 0 && val <= float64(math.MaxUint32) {
 				return uint(val), true
 			}
 		}
@@ -411,23 +395,23 @@ func (m KSMap) GetUint8(key string) (uint8, bool) {
 		case uint8:
 			return val, true
 		case uint:
-			if val <= maxUint8 {
+			if val <= math.MaxUint8 {
 				return uint8(val), true
 			}
 		case uint16:
-			if val <= maxUint8 {
+			if val <= math.MaxUint8 {
 				return uint8(val), true
 			}
 		case uint32:
-			if val <= maxUint8 {
+			if val <= math.MaxUint8 {
 				return uint8(val), true
 			}
 		case uint64:
-			if val <= maxUint8 {
+			if val <= math.MaxUint8 {
 				return uint8(val), true
 			}
 		case int:
-			if val >= 0 && val <= maxUint8 {
+			if val >= 0 && val <= math.MaxUint8 {
 				return uint8(val), true
 			}
 		case int8:
@@ -435,23 +419,23 @@ func (m KSMap) GetUint8(key string) (uint8, bool) {
 				return uint8(val), true
 			}
 		case int16:
-			if val >= 0 && val <= maxUint8 {
+			if val >= 0 && val <= math.MaxUint8 {
 				return uint8(val), true
 			}
 		case int32:
-			if val >= 0 && val <= maxUint8 {
+			if val >= 0 && val <= math.MaxUint8 {
 				return uint8(val), true
 			}
 		case int64:
-			if val >= 0 && val <= maxUint8 {
+			if val >= 0 && val <= math.MaxUint8 {
 				return uint8(val), true
 			}
 		case float32:
-			if val >= 0 && val <= float32(maxUint8) {
+			if val >= 0 && val <= float32(math.MaxUint8) {
 				return uint8(val), true
 			}
 		case float64:
-			if val >= 0 && val <= float64(maxUint8) {
+			if val >= 0 && val <= float64(math.MaxUint8) {
 				return uint8(val), true
 			}
 		}
@@ -489,19 +473,19 @@ func (m KSMap) GetUint16(key string) (uint16, bool) {
 		case uint8:
 			return uint16(val), true
 		case uint:
-			if val <= maxUint16 {
+			if val <= math.MaxUint16 {
 				return uint16(val), true
 			}
 		case uint32:
-			if val <= maxUint16 {
+			if val <= math.MaxUint16 {
 				return uint16(val), true
 			}
 		case uint64:
-			if val <= maxUint16 {
+			if val <= math.MaxUint16 {
 				return uint16(val), true
 			}
 		case int:
-			if val >= 0 && val <= maxUint16 {
+			if val >= 0 && val <= math.MaxUint16 {
 				return uint16(val), true
 			}
 		case int8:
@@ -513,19 +497,19 @@ func (m KSMap) GetUint16(key string) (uint16, bool) {
 				return uint16(val), true
 			}
 		case int32:
-			if val >= 0 && val <= maxUint16 {
+			if val >= 0 && val <= math.MaxUint16 {
 				return uint16(val), true
 			}
 		case int64:
-			if val >= 0 && val <= maxUint16 {
+			if val >= 0 && val <= math.MaxUint16 {
 				return uint16(val), true
 			}
 		case float32:
-			if val >= 0 && val <= float32(maxUint16) {
+			if val >= 0 && val <= float32(math.MaxUint16) {
 				return uint16(val), true
 			}
 		case float64:
-			if val >= 0 && val <= float64(maxUint16) {
+			if val >= 0 && val <= float64(math.MaxUint16) {
 				return uint16(val), true
 			}
 		}
@@ -653,9 +637,9 @@ func (m KSMap) GetFloat32(key string) (float32, bool) {
 		case uint32:
 			return float32(val), true
 		case uint64:
-			if val <= uint64(math.MaxFloat32) {
-				return float32(val), true
-			}
+			//if val <= uint64(math.MaxFloat32) {
+			return float32(val), true
+			//}
 		}
 	}
 	return 0, false
@@ -709,9 +693,9 @@ func (m KSMap) GetFloat64(key string) (float64, bool) {
 		case uint32:
 			return float64(val), true
 		case uint64:
-			if val <= uint64(math.MaxFloat64) {
-				return float64(val), true
-			}
+			//if val <= uint64(math.MaxFloat64) {
+			return float64(val), true
+			//}
 		}
 	}
 	return 0, false

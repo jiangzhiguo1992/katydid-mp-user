@@ -9,10 +9,10 @@ import (
 )
 
 const (
-	patUsername = `^[a-zA-Z0-9]{6,16}$`
-	patPassword = "^[a-zA-Z0-9]{6,16}$"
-	patPhone    = `^1[3-9]\d{9}$`
-	patEmail    = `^[\w-\.]+@([\w-]+\.)+[\w-]{2,4}$`
+	patUsername = `^[a-zA-Z0-9_]{6,16}$`             // 只允许字母、数字和下划线
+	patPassword = "^[a-zA-Z0-9_]{6,16}$"             // 只允许字母、数字和下划线
+	patPhone    = `^1[3-9]\d{9}$`                    // 11位手机号
+	patEmail    = `^[\w-\.]+@([\w-]+\.)+[\w-]{2,4}$` // 邮箱地址
 )
 
 var Structs = []interface{}{
