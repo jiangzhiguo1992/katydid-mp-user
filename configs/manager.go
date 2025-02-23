@@ -7,7 +7,7 @@ import (
 	"github.com/fsnotify/fsnotify"
 	"github.com/spf13/viper"
 	_ "github.com/spf13/viper/remote"
-	"log"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"sync"
@@ -149,19 +149,19 @@ func (m *Manager) watchConfig() {
 
 		for i := 0; i < reConfigMaxRetries; i++ {
 			if m.reConfig() {
-				log.Printf("■ ■ Conf ■ ■ config reloaded successfully")
+				slog.Info("■ ■ Conf ■ ■ config reloaded successfully")
 				return
 			}
 
 			select {
 			case <-time.After(reConfigInterval):
-				log.Printf("■ ■ Conf ■ ■ reload config failed, retry: %d", i+1)
+				slog.Warn("■ ■ Conf ■ ■ reload config failed", slog.Int("retry", i+1))
 			case <-ctx.Done():
-				log.Printf("■ ■ Conf ■ ■ reload config timeout after %d retries", i+1)
+				slog.Warn("■ ■ Conf ■ ■ reload config timeout", slog.Int("retries", i+1))
 				return
 			}
 		}
-		log.Printf("■ ■ Conf ■ ■ reload config failed after %d retries", reConfigMaxRetries)
+		slog.Error("■ ■ Conf ■ ■ reload config failed", slog.Int("retries", reConfigMaxRetries))
 	})
 
 	m.v.WatchConfig()
@@ -188,7 +188,7 @@ func loadRemoteConfig() {
 	//		// currently, only tested with etcd support
 	//		err := runtime_viper.WatchRemoteConfig()
 	//		if err != nil {
-	//			log.Errorf("unable to read remote config: %v", err)
+	//			slog.Errorf("unable to read remote config: %v", err)
 	//			continue
 	//		}
 	//
@@ -199,14 +199,14 @@ func loadRemoteConfig() {
 	//}()
 	//err := viper.WatchRemoteConfig()
 	//if err != nil {
-	//	log.Fatalf("unable to read remote config: %v", err)
+	//	slog.Fatalf("unable to read remote config: %v", err)
 	//}
 	//// 监听Consul配置变化
 	//go func() {
 	//	for {
 	//		select {
 	//		case <-viper.RemoteConfig.WatchChannel():
-	//			log.Println("remote config changed")
+	//			slog.Println("remote config changed")
 	//
 	//		}
 	//	}

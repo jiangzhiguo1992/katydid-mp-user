@@ -82,7 +82,7 @@ func (m *Manager) loadMessageFiles() error {
 	if len(files) == 0 {
 		return fmt.Errorf("■ ■ i18n ■ ■ no message files found in dirs: %v", m.config.DocDirs)
 	}
-	fmt.Printf("■ ■ i18n ■ ■ loading i18n files: %v\n", files)
+	slog.Info("■ ■ i18n ■ ■ loading i18n files", slog.Any("files", files))
 
 	langs := make([]string, 0, len(files))
 	for _, file := range files {
@@ -91,7 +91,7 @@ func (m *Manager) loadMessageFiles() error {
 		}
 		langs = append(langs, extractLangFromFilename(file))
 	}
-	fmt.Printf("■ ■ i18n ■ ■ loading initialized languages: %v\n", langs)
+	slog.Info("■ ■ i18n ■ ■ loading i18n files done", slog.Any("languages", files))
 
 	hasDefault := false
 	for _, lang := range langs {
@@ -101,7 +101,7 @@ func (m *Manager) loadMessageFiles() error {
 		}
 	}
 	if !hasDefault {
-		slog.Warn("■ ■ i18n ■ ■ default language %q not found in message files\n", m.config.DefaultLang)
+		slog.Warn("■ ■ i18n ■ ■ default language %q not found in message files", slog.String("lang", m.config.DefaultLang))
 	}
 	return nil
 }

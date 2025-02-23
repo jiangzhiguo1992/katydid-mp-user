@@ -2,6 +2,7 @@ package log
 
 import (
 	"fmt"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"sync"
@@ -60,7 +61,7 @@ func (d *DateWriteSyncer) triggerCleanup() {
 	go func() {
 		if err := d.cleanOldLogs(); err != nil {
 			// 使用标准库log记录清理错误，避免循环依赖
-			fmt.Printf("■ ■ Log ■ ■ clean old logs failed: %v\n", err)
+			slog.Error("■ ■ Log ■ ■ clean old logs failed\n", slog.Any("err", err))
 		}
 	}()
 }
