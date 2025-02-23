@@ -139,7 +139,7 @@ func addToCache(t reflect.Type, sv *StructValidator) {
 	atomic.AddInt32(&cacheSize, 1)
 }
 
-func CompileValidators(t reflect.Type) *StructValidator {
+func compileValidators(t reflect.Type) *StructValidator {
 	if t.Kind() == reflect.Pointer {
 		t = t.Elem()
 	}
@@ -161,7 +161,7 @@ func CompileValidators(t reflect.Type) *StructValidator {
 		// 处理嵌套结构体
 		fieldType := field.Type
 		if fieldType.Kind() == reflect.Struct {
-			nested := CompileValidators(fieldType)
+			nested := compileValidators(fieldType)
 			if nested != nil {
 				// 调整嵌套字段的索引
 				for _, fv := range nested.FieldValidators {
@@ -296,7 +296,7 @@ func ValidateStruct(v interface{}) []error {
 		val = val.Elem()
 	}
 
-	tv := CompileValidators(val.Type())
+	tv := compileValidators(val.Type())
 	if tv == nil || (len(tv.FieldValidators) == 0 && len(tv.GroupValidators) == 0) {
 		return nil
 	}
@@ -321,6 +321,6 @@ func RegisterRules(
 		if t.Kind() == reflect.Pointer {
 			t = t.Elem()
 		}
-		CompileValidators(t)
+		compileValidators(t)
 	}
 }

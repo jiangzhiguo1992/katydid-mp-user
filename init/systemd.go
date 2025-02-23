@@ -3,9 +3,11 @@ package init
 import (
 	"katydid-mp-user/configs"
 	"katydid-mp-user/internal/pkg/text"
+	"katydid-mp-user/internal/pkg/validation"
 	"katydid-mp-user/pkg/err"
 	"katydid-mp-user/pkg/i18n"
 	"katydid-mp-user/pkg/log"
+	"katydid-mp-user/pkg/valid"
 	"time"
 )
 
@@ -19,7 +21,7 @@ func init() {
 		},
 	)
 	if e != nil {
-		log.Fatal("■ ■ Init ■ ■ init config failed", log.Err(e))
+		log.Fatal("", log.Err(e))
 	}
 
 	// logger
@@ -42,11 +44,19 @@ func init() {
 		},
 	})
 	if e != nil {
-		log.Fatal("■ ■ Init ■ ■ init i18n failed", log.Err(e))
+		log.Fatal("", log.Err(e))
 	}
 
 	// error
 	err.Init(text.CodeMsgIds, text.MsgPatterns, func(msg string) {
 		log.Error(msg)
 	})
+
+	// validate
+	valid.RegisterRules(
+		validation.NilTips,
+		validation.FiledValidators,
+		validation.GroupValidators,
+		validation.Structs,
+	)
 }
