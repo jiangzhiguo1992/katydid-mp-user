@@ -27,16 +27,13 @@ type (
 
 	Base struct {
 		//gorm.Model
-
-		Id       uint64 `json:"id" gorm:"primarykey"`
-		CreateAt int64  `json:"createAt" gorm:"autoCreateTime:milli"`
-		UpdateAt int64  `json:"updateAt" gorm:"autoUpdateTime:milli"`
-		DeleteAt *int64 `json:"deleteAt"` // TODO:GG 所有的查询都带上index `gorm:"index"`
-		DeleteBy int64  `json:"deleteBy"`
+		Id       uint64 `json:"id" gorm:"primarykey"`                 // 主键
+		CreateAt int64  `json:"createAt" gorm:"autoCreateTime:milli"` // 创建时间
+		UpdateAt int64  `json:"updateAt" gorm:"autoUpdateTime:milli"` // 更新时间
+		DeleteAt *int64 `json:"deleteAt"`                             // 删除时间 // TODO:GG 所有的查询都带上index `gorm:"index"`
+		DeleteBy int64  `json:"deleteBy"`                             // 删除人
 
 		Extra utils.KSMap `json:"extra" gorm:"serializer:json"` // 额外信息 (!索引/!必需)
-
-		ExtraKeys func() []string `json:"-" gorm:"-:all"`
 	}
 )
 
