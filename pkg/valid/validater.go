@@ -3,17 +3,24 @@ package valid
 import (
 	"fmt"
 	"reflect"
+	"sort"
 	"strings"
 	"sync"
+	"sync/atomic"
 )
 
-var (
-	tagSplit   = ","
-	fieldTag   = "valid"
-	requireTag = "required"
-	groupTag   = "group:"
+// TODO:GG 还有日志
 
-	cache           sync.Map
+var (
+	tagSplit   = ","        // 标签分隔符
+	fieldTag   = "valid"    // 字段验证标签
+	requireTag = "required" // 必填标签
+	groupTag   = "group:"   // 分组标签
+
+	cache        sync.Map      // 缓存
+	cacheSize    int32    = 0  // 缓存大小
+	maxCacheSize int32    = -1 // -1表示不限制
+
 	fieldValidators = map[string]ValidatorFieldFunc{} // 字段验证器注册
 	groupValidators = map[string]ValidatorGroupFunc{} // 分组验证器注册
 )
@@ -121,6 +128,16 @@ func compileValidateFunc(sv *StructValidator) ValidateFunc {
 	}
 }
 
+func addToCache(t reflect.Type, sv *StructValidator) {
+	if maxCacheSize >= 0 {
+		if atomic.LoadInt32(&cacheSize) >= maxCacheSize {
+			return
+		}
+	}
+	cache.Store(t, sv)
+	atomic.AddInt32(&cacheSize, 1)
+}
+
 func CompileValidators(t reflect.Type) *StructValidator {
 	if t.Kind() == reflect.Pointer {
 		t = t.Elem()
@@ -200,6 +217,11 @@ func CompileValidators(t reflect.Type) *StructValidator {
 		}
 	}
 
+	// Require 进行排序
+	sort.Slice(tv.FieldValidators, func(i, j int) bool {
+		return tv.FieldValidators[i].Required && !tv.FieldValidators[j].Required
+	})
+
 	// 处理组验证器
 	for groupName, fields := range groupFields {
 		indices := make([][]int, len(fields))
@@ -250,7 +272,7 @@ func CompileValidators(t reflect.Type) *StructValidator {
 	tv.typeChecker = compileTypeChecker(t)
 	tv.validateFunc = compileValidateFunc(tv)
 
-	cache.Store(t, tv)
+	addToCache(t, tv)
 	return tv
 }
 
@@ -269,14 +291,16 @@ func ValidateStruct(v interface{}) []error {
 	return tv.validateFunc(tv.typeChecker(v))
 }
 
-func RegisterStructs(
+func RegisterRules(
 	fieldValids map[string]ValidatorFieldFunc,
 	groupValids map[string]ValidatorGroupFunc,
-	vs []interface{},
+	structs []interface{},
 ) {
+	fieldTag = "valid"
+	maxCacheSize = -1
 	fieldValidators = fieldValids
-	groupValidators = groupValids // 添加组验证器注册
-	for _, v := range vs {
+	groupValidators = groupValids
+	for _, v := range structs {
 		t := reflect.TypeOf(v)
 		if t.Kind() == reflect.Pointer {
 			t = t.Elem()
