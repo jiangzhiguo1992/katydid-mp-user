@@ -1,5 +1,23 @@
 package utils
 
+import "math"
+
+// 定义类型范围常量
+const (
+	maxInt8   = 1<<7 - 1
+	minInt8   = -1 << 7
+	maxInt16  = 1<<15 - 1
+	minInt16  = -1 << 15
+	maxInt32  = 1<<31 - 1
+	minInt32  = -1 << 31
+	maxInt64  = 1<<63 - 1
+	minInt64  = -1 << 63
+	maxUint8  = 1<<8 - 1
+	maxUint16 = 1<<16 - 1
+	maxUint32 = 1<<32 - 1
+	maxUint64 = 1<<63 - 1
+)
+
 // KMap 扩展 map[string]any 类型
 type KMap map[string]any
 
@@ -41,11 +59,33 @@ func (m KMap) GetInt(key string) (int, bool) {
 		case int32:
 			return int(val), true
 		case int64:
+			if val >= int64(minInt32) && val <= int64(maxInt32) {
+				return int(val), true
+			}
+		case uint:
+			if val <= uint(maxInt32) {
+				return int(val), true
+			}
+		case uint8:
 			return int(val), true
+		case uint16:
+			return int(val), true
+		case uint32:
+			if val <= uint32(maxInt32) {
+				return int(val), true
+			}
+		case uint64:
+			if val <= uint64(maxInt32) {
+				return int(val), true
+			}
 		case float32:
-			return int(val), true
+			if val >= float32(minInt32) && val <= float32(maxInt32) {
+				return int(val), true
+			}
 		case float64:
-			return int(val), true
+			if val >= float64(minInt32) && val <= float64(maxInt32) {
+				return int(val), true
+			}
 		}
 	}
 	return 0, false
@@ -58,11 +98,47 @@ func (m KMap) GetInt8(key string) (int8, bool) {
 		case int8:
 			return val, true
 		case int:
-			if val >= -128 && val <= 127 {
+			if val >= minInt8 && val <= maxInt8 {
+				return int8(val), true
+			}
+		case int16:
+			if val >= minInt8 && val <= maxInt8 {
+				return int8(val), true
+			}
+		case int32:
+			if val >= minInt8 && val <= maxInt8 {
+				return int8(val), true
+			}
+		case int64:
+			if val >= minInt8 && val <= maxInt8 {
+				return int8(val), true
+			}
+		case uint:
+			if val <= uint(maxInt8) {
+				return int8(val), true
+			}
+		case uint8:
+			if val <= uint8(maxInt8) {
+				return int8(val), true
+			}
+		case uint16:
+			if val <= uint16(maxInt8) {
+				return int8(val), true
+			}
+		case uint32:
+			if val <= uint32(maxInt8) {
+				return int8(val), true
+			}
+		case uint64:
+			if val <= uint64(maxInt8) {
+				return int8(val), true
+			}
+		case float32:
+			if val >= minInt8 && val <= maxInt8 {
 				return int8(val), true
 			}
 		case float64:
-			if val >= -128 && val <= 127 {
+			if val >= minInt8 && val <= maxInt8 {
 				return int8(val), true
 			}
 		}
@@ -76,12 +152,44 @@ func (m KMap) GetInt16(key string) (int16, bool) {
 		switch val := v.(type) {
 		case int16:
 			return val, true
+		case int8:
+			return int16(val), true
 		case int:
-			if val >= -32768 && val <= 32767 {
+			if val >= minInt16 && val <= maxInt16 {
+				return int16(val), true
+			}
+		case int32:
+			if val >= minInt16 && val <= maxInt16 {
+				return int16(val), true
+			}
+		case int64:
+			if val >= minInt16 && val <= maxInt16 {
+				return int16(val), true
+			}
+		case uint:
+			if val <= uint(maxInt16) {
+				return int16(val), true
+			}
+		case uint8:
+			return int16(val), true
+		case uint16:
+			if val <= uint16(maxInt16) {
+				return int16(val), true
+			}
+		case uint32:
+			if val <= uint32(maxInt16) {
+				return int16(val), true
+			}
+		case uint64:
+			if val <= uint64(maxInt16) {
+				return int16(val), true
+			}
+		case float32:
+			if val >= minInt16 && val <= maxInt16 {
 				return int16(val), true
 			}
 		case float64:
-			if val >= -32768 && val <= 32767 {
+			if val >= minInt16 && val <= maxInt16 {
 				return int16(val), true
 			}
 		}
@@ -97,64 +205,31 @@ func (m KMap) GetInt64(key string) (int64, bool) {
 			return val, true
 		case int:
 			return int64(val), true
-		case float64:
+		case int8:
 			return int64(val), true
-		}
-	}
-	return 0, false
-}
-
-// GetUint 获取uint类型值
-func (m KMap) GetUint(key string) (uint, bool) {
-	if v, ok := m[key]; ok {
-		switch val := v.(type) {
+		case int16:
+			return int64(val), true
+		case int32:
+			return int64(val), true
+		case uint:
+			return int64(val), true
 		case uint8:
-			return uint(val), true
-		case int:
-			if val >= 0 && val <= 65535 {
-				return uint(val), true
-			}
-		case float64:
-			if val >= 0 && val <= 65535 {
-				return uint(val), true
-			}
-		}
-	}
-	return 0, false
-}
-
-// GetUint8 获取uint8类型值
-func (m KMap) GetUint8(key string) (uint8, bool) {
-	if v, ok := m[key]; ok {
-		switch val := v.(type) {
-		case uint8:
-			return val, true
-		case int:
-			if val >= 0 && val <= 255 {
-				return uint8(val), true
-			}
-		case float64:
-			if val >= 0 && val <= 255 {
-				return uint8(val), true
-			}
-		}
-	}
-	return 0, false
-}
-
-// GetUint16 获取uint16类型值
-func (m KMap) GetUint16(key string) (uint16, bool) {
-	if v, ok := m[key]; ok {
-		switch val := v.(type) {
+			return int64(val), true
 		case uint16:
-			return val, true
-		case int:
-			if val >= 0 && val <= 65535 {
-				return uint16(val), true
+			return int64(val), true
+		case uint32:
+			return int64(val), true
+		case uint64:
+			if val <= uint64(maxInt64) {
+				return int64(val), true
+			}
+		case float32:
+			if float32(math.MinInt64) <= val && val <= float32(math.MaxInt64) {
+				return int64(val), true
 			}
 		case float64:
-			if val >= 0 && val <= 65535 {
-				return uint16(val), true
+			if math.MinInt64 <= val && val <= math.MaxInt64 {
+				return int64(val), true
 			}
 		}
 	}
@@ -169,12 +244,38 @@ func (m KMap) GetUint64(key string) (uint64, bool) {
 			return val, true
 		case uint:
 			return uint64(val), true
+		case uint8:
+			return uint64(val), true
+		case uint16:
+			return uint64(val), true
+		case uint32:
+			return uint64(val), true
 		case int:
 			if val >= 0 {
 				return uint64(val), true
 			}
-		case float64:
+		case int8:
 			if val >= 0 {
+				return uint64(val), true
+			}
+		case int16:
+			if val >= 0 {
+				return uint64(val), true
+			}
+		case int32:
+			if val >= 0 {
+				return uint64(val), true
+			}
+		case int64:
+			if val >= 0 {
+				return uint64(val), true
+			}
+		case float32:
+			if val >= 0 && val <= float32(math.MaxUint64) {
+				return uint64(val), true
+			}
+		case float64:
+			if val >= 0 && val <= float64(math.MaxUint64) {
 				return uint64(val), true
 			}
 		}
@@ -189,9 +290,33 @@ func (m KMap) GetFloat32(key string) (float32, bool) {
 		case float32:
 			return val, true
 		case float64:
-			return float32(val), true
+			if val >= -math.MaxFloat32 && val <= math.MaxFloat32 {
+				return float32(val), true
+			}
 		case int:
 			return float32(val), true
+		case int8:
+			return float32(val), true
+		case int16:
+			return float32(val), true
+		case int32:
+			return float32(val), true
+		case int64:
+			if val >= math.MinInt32 && val <= math.MaxInt32 {
+				return float32(val), true
+			}
+		case uint:
+			return float32(val), true
+		case uint8:
+			return float32(val), true
+		case uint16:
+			return float32(val), true
+		case uint32:
+			return float32(val), true
+		case uint64:
+			if val <= uint64(math.MaxFloat32) {
+				return float32(val), true
+			}
 		}
 	}
 	return 0, false
@@ -207,8 +332,26 @@ func (m KMap) GetFloat64(key string) (float64, bool) {
 			return float64(val), true
 		case int:
 			return float64(val), true
+		case int8:
+			return float64(val), true
+		case int16:
+			return float64(val), true
+		case int32:
+			return float64(val), true
 		case int64:
 			return float64(val), true
+		case uint:
+			return float64(val), true
+		case uint8:
+			return float64(val), true
+		case uint16:
+			return float64(val), true
+		case uint32:
+			return float64(val), true
+		case uint64:
+			if val <= uint64(math.MaxFloat64) {
+				return float64(val), true
+			}
 		}
 	}
 	return 0, false
