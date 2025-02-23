@@ -8,6 +8,8 @@ api_https_port = 8080
 timeout = 10
 timezone = "Asia/Shanghai"
 ssl_mode = "app_disable"
+max_retries = 5
+retry_delay = 2
 
 [pgsql.write]
 host = "169.2.14.2"
@@ -40,3 +42,7 @@ pwd = ["2ud8scsdc"]
 address = "r-2zegwp14leh0qyqzrs.redis.rds.aliyuncs.com"
 port = 6379
 pwd = "LAOjiang1"
+Host = ""
+MaxIdle = 30
+MaxActive = 30
+IdleTimeout = 200
