@@ -20,6 +20,7 @@ var (
 	cacheSize    int32    = 0  // 缓存大小
 	maxCacheSize int32    = -1 // -1表示不限制
 
+	requireTips     = map[string]string{}             // 空提示
 	fieldValidators = map[string]ValidatorFieldFunc{} // 字段验证器注册
 	groupValidators = map[string]ValidatorGroupFunc{} // 分组验证器注册
 )
@@ -35,6 +36,7 @@ type FieldValidator struct {
 	Index      []int // 使用字段索引数组替代字段名
 	Name       string
 	Required   bool
+	NilTip     string
 	Validators []ValidatorFieldFunc
 	ZeroCheck  func(reflect.Value) bool // 编译期确定的零值检查函数
 }
@@ -101,7 +103,7 @@ func compileValidateFunc(sv *StructValidator) ValidateFunc {
 
 			// 使用编译期生成的零值检查函数
 			if fv.Required && fv.ZeroCheck(field) {
-				errs = append(errs, fmt.Errorf("field %s is required", fv.Name)) // TODO:GG localize
+				errs = append(errs, errors.New(fv.NilTip))
 				continue
 			}
 
@@ -164,10 +166,16 @@ func CompileValidators(t reflect.Type) *StructValidator {
 				// 调整嵌套字段的索引
 				for _, fv := range nested.FieldValidators {
 					newIndex := append([]int{i}, fv.Index...)
+					fieldName := field.Name + "." + fv.Name
+					nilTip := ""
+					if tip, ok := requireTips[fieldName]; ok {
+						nilTip = tip
+					}
 					tv.FieldValidators = append(tv.FieldValidators, FieldValidator{
 						Index:      newIndex,
-						Name:       field.Name + "." + fv.Name,
+						Name:       fieldName,
 						Required:   fv.Required,
+						NilTip:     nilTip,
 						Validators: fv.Validators,
 						ZeroCheck:  fv.ZeroCheck,
 					})
@@ -204,11 +212,18 @@ func CompileValidators(t reflect.Type) *StructValidator {
 		}
 
 		if required || len(fValidators) > 0 {
+			nilTip := ""
+			if required {
+				if tip, ok := requireTips[field.Name]; ok {
+					nilTip = tip
+				}
+			}
+
 			fv := FieldValidator{
-				//Index:      []int{i},
-				Index:      field.Index,
+				Index:      field.Index, // []int{i},
 				Name:       field.Name,
 				Required:   required,
+				NilTip:     nilTip,
 				Validators: fValidators,
 				ZeroCheck:  getZeroChecker(field.Type.Kind()),
 			}
@@ -291,12 +306,14 @@ func ValidateStruct(v interface{}) []error {
 }
 
 func RegisterRules(
+	nilTips map[string]string,
 	fieldValids map[string]ValidatorFieldFunc,
 	groupValids map[string]ValidatorGroupFunc,
 	structs []interface{},
 ) {
 	fieldTag = "valid"
 	maxCacheSize = -1
+	requireTips = nilTips
 	fieldValidators = fieldValids
 	groupValidators = groupValids
 	for _, v := range structs {
