@@ -1,6 +1,7 @@
 package valid
 
 import (
+	"errors"
 	"fmt"
 	"reflect"
 	"sort"
@@ -8,8 +9,6 @@ import (
 	"sync"
 	"sync/atomic"
 )
-
-// TODO:GG 还有日志
 
 var (
 	tagSplit   = ","        // 标签分隔符
@@ -59,8 +58,8 @@ func getZeroChecker(kind reflect.Kind) func(reflect.Value) bool {
 	switch kind {
 	case reflect.String:
 		return func(v reflect.Value) bool { return v.Len() == 0 }
-	case reflect.Bool:
-		return func(v reflect.Value) bool { return !v.Bool() }
+	//case reflect.Bool:
+	//	return func(v reflect.Value) bool { return !v.Bool() }
 	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
 		return func(v reflect.Value) bool { return v.Int() == 0 }
 	case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
@@ -83,7 +82,7 @@ func compileTypeChecker(t reflect.Type) TypeChecker {
 			val = val.Elem()
 		}
 		if val.Type() != t {
-			panic(fmt.Sprintf("invalid type: expected %v, got %v", t, val.Type()))
+			panic(fmt.Sprintf("■ ■ valid ■ ■ invalid type: expected %v, got %v", t, val.Type()))
 		}
 		return val
 	}
@@ -102,14 +101,14 @@ func compileValidateFunc(sv *StructValidator) ValidateFunc {
 
 			// 使用编译期生成的零值检查函数
 			if fv.Required && fv.ZeroCheck(field) {
-				errs = append(errs, fmt.Errorf("field %s is required", fv.Name))
+				errs = append(errs, fmt.Errorf("field %s is required", fv.Name)) // TODO:GG localize
 				continue
 			}
 
 			fieldValue := field.Interface()
 			for _, validator := range fv.Validators {
 				if msg, ok := validator(fieldValue); !ok {
-					errs = append(errs, fmt.Errorf("field %s: %s", fv.Name, msg))
+					errs = append(errs, errors.New(msg))
 				}
 			}
 		}
@@ -248,7 +247,7 @@ func CompileValidators(t reflect.Type) *StructValidator {
 				}
 
 				// 默认的组验证逻辑（全空或全填）
-				allEmpty := true
+				/*allEmpty := true
 				allFilled := true
 
 				for _, value := range values {
@@ -262,7 +261,7 @@ func CompileValidators(t reflect.Type) *StructValidator {
 
 				if !allEmpty && !allFilled {
 					errs = append(errs, fmt.Errorf("group %s: all fields must be either all empty or all filled", groupName))
-				}
+				}*/
 				return errs
 			},
 		}
