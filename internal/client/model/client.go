@@ -1,7 +1,10 @@
 package model
 
 import (
+	"fmt"
 	"katydid-mp-user/internal/pkg/model"
+	"katydid-mp-user/pkg/valid"
+	"katydid-mp-user/utils"
 	"reflect"
 	"time"
 	"unicode"
@@ -53,10 +56,10 @@ func NewClientDefault(
 
 func (c *Client) FieldRules() map[string]func(reflect.Value) bool {
 	return map[string]func(reflect.Value) bool{
-		// 名称 (2-50)
+		// 名称 (1-50)
 		"client-name": func(refVal reflect.Value) bool {
 			name := refVal.String()
-			if len(name) < 2 || len(name) > 50 {
+			if len(name) < 1 || len(name) > 50 {
 				return false
 			}
 			for _, r := range name {
@@ -69,7 +72,7 @@ func (c *Client) FieldRules() map[string]func(reflect.Value) bool {
 	}
 }
 
-func (c *Client) ExtraRules() (map[string]any, map[string]model.ExtraValidationRule) {
+func (c *Client) ExtraRules() (utils.KSMap, map[string]model.ExtraValidationRule) {
 	rules := map[string]model.ExtraValidationRule{
 		// 官网 (<=100)
 		clientExtraKeyWebsite: {
@@ -105,31 +108,34 @@ func (c *Client) ExtraRules() (map[string]any, map[string]model.ExtraValidationR
 	return c.Extra, rules
 }
 
-//func (c *Client) RuleLocalizes(err error) {
-//	for _, err := range err.(validator.ValidationErrors) {
-//		var message string
-//
-//		// 根据不同的验证规则返回不同的错误消息
-//		switch err.Tag() {
-//		case "client-name":
-//			message = fmt.Sprintf("%s必须是2-50个字符的字母、数字、下划线或中划线", err.Field())
-//		case "required":
-//			message = fmt.Sprintf("%s不能为空", err.Field())
-//		case "min":
-//			message = fmt.Sprintf("%s长度不能小于%s", err.Field(), err.Param())
-//		case "max":
-//			message = fmt.Sprintf("%s长度不能大于%s", err.Field(), err.Param())
-//		default:
-//			message = err.Error()
-//		}
-//
-//		errors = append(errors, ValidationError{
-//			Field:   err.Field(),
-//			Tag:     err.Tag(),
-//			Message: message,
-//		})
-//	}
-//}
+func (c *Client) RuleLocalizes(errs []valid.FieldError) []valid.FieldMsgError {
+	var errors []valid.FieldMsgError
+	for _, err := range errs {
+		var message string
+		switch err.Tag() {
+		case "required":
+			switch err.Field() {
+			case "name":
+				message = fmt.Sprintf("%s不能为空", err.Field())
+			default:
+				message = fmt.Sprintf("%s不能为空", err.Field())
+			}
+		case "client-name":
+			message = fmt.Sprintf("%s必须是2-50个字符的字母、数字、下划线或中划线", err.Field())
+		case "min":
+			message = fmt.Sprintf("%s长度不能小于%s", err.Field(), err.Param())
+		case "max":
+			message = fmt.Sprintf("%s长度不能大于%s", err.Field(), err.Param())
+		default:
+			message = err.Error()
+		}
+		errors = append(errors, valid.FieldMsgError{
+			FieldError: err,
+			Message:    message,
+		})
+	}
+	return errors
+}
 
 func (c *Client) SetWebsite(website *string) {
 	c.Extra.SetString(clientExtraKeyWebsite, website)
