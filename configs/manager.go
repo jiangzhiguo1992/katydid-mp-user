@@ -21,6 +21,11 @@ const (
 	reConfigInterval   = 2 * time.Second // 重试间隔
 )
 
+var (
+	manager *Manager
+	once    sync.Once
+)
+
 // Manager 配置管理器
 type Manager struct {
 	v        *viper.Viper
@@ -28,11 +33,6 @@ type Manager struct {
 	reConfig func() bool
 	mu       sync.RWMutex
 }
-
-var (
-	manager *Manager
-	once    sync.Once
-)
 
 // Get 获取配置管理器单例
 func Get() *Config {

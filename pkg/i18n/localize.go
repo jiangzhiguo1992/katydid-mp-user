@@ -18,6 +18,8 @@ const (
 	unknownError   = "localize unknown error"
 )
 
+var defaultManager *Manager
+
 type Config struct {
 	DefaultLang string
 	DocDirs     []string
@@ -28,8 +30,6 @@ type Manager struct {
 	config Config
 	bundle *i18n.Bundle
 }
-
-var defaultManager *Manager
 
 func Init(cfg Config) error {
 	m, err := NewManager(cfg)

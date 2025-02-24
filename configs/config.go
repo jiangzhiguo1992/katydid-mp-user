@@ -33,7 +33,6 @@ type (
 	}
 
 	LogConf struct {
-		OutEnable     bool   `toml:"out_enable" mapstructure:"out_enable"`
 		OutLevel      int    `toml:"out_level" mapstructure:"out_level"`
 		OutFormat     string `toml:"out_format" mapstructure:"out_format"`
 		CheckInterval int    `toml:"check_interval" mapstructure:"check_interval"`

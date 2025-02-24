@@ -61,13 +61,18 @@ type levelConfig struct {
 }
 
 var levelConfigs = map[int][]levelConfig{
-	0: {{"fat", func(lv zapcore.Level) bool { return lv >= zapcore.FatalLevel }}},
-	1: {{"pac", func(lv zapcore.Level) bool { return lv >= zapcore.DPanicLevel && lv < zapcore.FatalLevel }}},
-	2: {{"err", func(lv zapcore.Level) bool { return lv >= zapcore.ErrorLevel && lv < zapcore.DPanicLevel }}},
-	3: {{"warn", func(lv zapcore.Level) bool { return lv >= zapcore.WarnLevel && lv < zapcore.ErrorLevel }}},
-	4: {{"info", func(lv zapcore.Level) bool { return lv >= zapcore.InfoLevel && lv < zapcore.WarnLevel }}},
-	5: {{"debug", func(lv zapcore.Level) bool { return lv < zapcore.InfoLevel }}},
+	1: {{"fat", func(lv zapcore.Level) bool { return lv >= zapcore.FatalLevel }}},
+	2: {{"pac", func(lv zapcore.Level) bool { return lv >= zapcore.DPanicLevel && lv < zapcore.FatalLevel }}},
+	3: {{"err", func(lv zapcore.Level) bool { return lv >= zapcore.ErrorLevel && lv < zapcore.DPanicLevel }}},
+	4: {{"warn", func(lv zapcore.Level) bool { return lv >= zapcore.WarnLevel && lv < zapcore.ErrorLevel }}},
+	5: {{"info", func(lv zapcore.Level) bool { return lv >= zapcore.InfoLevel && lv < zapcore.WarnLevel }}},
+	6: {{"debug", func(lv zapcore.Level) bool { return lv < zapcore.InfoLevel }}},
 }
+
+var (
+	logger *Logger
+	once   sync.Once
+)
 
 // Logger 封装日志实例
 type Logger struct {
@@ -79,23 +84,16 @@ type Logger struct {
 
 // Config 日志配置
 type Config struct {
-	OutEnable bool          // 是否启用输出
-	OutDir    string        // 输出目录
 	OutLevel  int           // 输出级别
+	OutDir    string        // 输出目录
 	OutFormat string        // 输出格式
 	CheckInt  time.Duration // 检查间隔
 	MaxAge    time.Duration // 最大时间
 	MaxSize   int64         // 最大大小
 }
 
-var (
-	logger *Logger
-	once   sync.Once
-)
-
-func NewDefaultConfig(outEnable bool, outLevel int) Config {
+func NewDefaultConfig(outLevel int) Config {
 	return Config{
-		OutEnable: outEnable,
 		OutLevel:  outLevel,
 		OutDir:    defaultOutPath,
 		OutFormat: defaultFormat,
@@ -119,30 +117,29 @@ func NewLogger(cfg Config) *Logger {
 	return l
 }
 
+func (c *Config) OutEnable() bool {
+	return c.OutLevel > 0
+}
+
 func (l *Logger) initialize() {
-	// encoderCfg
+	// encoder
+	var encoder zapcore.Encoder
 	encoderCfg := createEncoderConfig(l.config)
+	if l.config.OutEnable() {
+		encoder = zapcore.NewJSONEncoder(encoderCfg)
+	} else {
+		encoder = zapcore.NewConsoleEncoder(encoderCfg)
+	}
 
-	if l.config.OutEnable {
-		// encoder
-		var encoder zapcore.Encoder
-		if l.config.OutEnable {
-			encoder = zapcore.NewJSONEncoder(encoderCfg)
-		} else {
-			//encoder = &customConsoleEncoder{zapcore.NewConsoleEncoder(encoderCfg)}
-			encoder = zapcore.NewConsoleEncoder(encoderCfg)
-		}
-
+	if l.config.OutEnable() {
 		// cores
 		var cores []zapcore.Core
-		if l.config.OutEnable {
-			for level := 0; level <= l.config.OutLevel; level++ {
-				if configs, ok := levelConfigs[level]; ok {
-					for _, config := range configs {
-						core, syncer := createCore(encoder, l.config, config)
-						l.syncs = append(l.syncs, syncer)
-						cores = append(cores, core)
-					}
+		for level := 1; level <= l.config.OutLevel; level++ {
+			if configs, ok := levelConfigs[level]; ok {
+				for _, config := range configs {
+					core, syncer := createCore(encoder, l.config, config)
+					l.syncs = append(l.syncs, syncer)
+					cores = append(cores, core)
 				}
 			}
 		}
@@ -182,7 +179,7 @@ func (l *Logger) initialize() {
 func createEncoderConfig(config *Config) zapcore.EncoderConfig {
 	encodeCfg := zap.NewProductionEncoderConfig()
 	encodeCfg.EncodeTime = zapcore.ISO8601TimeEncoder
-	if config.OutEnable {
+	if config.OutEnable() {
 		encodeCfg.LevelKey = ""
 	} else {
 		encodeCfg.EncodeDuration = zapcore.StringDurationEncoder
@@ -269,7 +266,7 @@ func log(level zapcore.Level, msg string, fields ...zap.Field) {
 		return
 	}
 
-	if !logger.config.OutEnable {
+	if !logger.config.OutEnable() {
 		if color, ok := levelColors[level]; ok {
 			msg = fmt.Sprintf("%s%s%s", color.fg, msg, colorReset)
 		}

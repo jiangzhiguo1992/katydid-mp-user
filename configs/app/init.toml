@@ -4,8 +4,7 @@ env = "dev" # dev / fat / uat / pro
 def_lang = "en-US" # zh-CN / en-US  必须是已有的语言
 
 [log]
-out_enable = false
-out_level = 3 # 输出级别，0(fatal) 1(panic) 2(error) 3(warn) 4(info) 5(debug)
+out_level = 0 # 输出级别，1(fatal) 2(panic) 3(error) 4(warn) 5(info) 6(debug)
 out_format = "06-01-02" # 可以按时间分割，06-01-02 15:04:05.000
 check_interval = 60 # 检查间隔，min
 file_max_age = 30  # 保留时间，day

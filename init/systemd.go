@@ -26,7 +26,6 @@ func init() {
 
 	// logger
 	log.Init(log.Config{
-		OutEnable: config.LogConf.OutEnable,
 		OutDir:    configs.LogDir,
 		OutLevel:  config.LogConf.OutLevel,
 		OutFormat: config.LogConf.OutFormat,
