@@ -1,9 +1,11 @@
 package model
 
 import (
+	"errors"
 	"fmt"
 	"github.com/go-playground/validator/v10"
 	"katydid-mp-user/pkg/valid"
+	"katydid-mp-user/utils"
 	"reflect"
 )
 
@@ -18,16 +20,12 @@ type (
 		Validate func(value interface{}) bool
 	}
 
-	ValidFieldError struct {
-		validator.FieldError
-	}
-
 	IFieldValidator interface {
 		FieldRules() map[string]func(reflect.Value) bool
 	}
 
 	IExtraValidator interface {
-		ExtraRules() (map[string]any, map[string]ExtraValidationRule)
+		ExtraRules() (utils.KSMap, map[string]ExtraValidationRule)
 	}
 
 	IStructValidator interface {
@@ -35,7 +33,7 @@ type (
 	}
 
 	IRuleLocalizes interface {
-		RuleLocalizes(err ValidFieldError)
+		RuleLocalizes(errs []valid.FieldError) []valid.FieldMsgError
 	}
 
 	Validator struct {
@@ -43,18 +41,6 @@ type (
 		any
 	}
 )
-
-func (ve *ValidFieldError) Tag() string {
-	return ve.FieldError.Tag()
-}
-
-func (ve *ValidFieldError) Field() string {
-	return ve.FieldError.Field()
-}
-
-func (ve *ValidFieldError) Error() string {
-	return ve.FieldError.Error()
-}
 
 func NewValidator(obj any) *Validator {
 	return &Validator{
@@ -105,18 +91,34 @@ func (v *Validator) Valid() error {
 	}
 
 	// localize
-	//if i, ok := v.any.(IRuleLocalizes); ok {
-	//	// 注册错误消息
-	//	v.validate.RegisterTranslation("client-name", nil,
-	//		func(ut ut.Translator) error {
-	//			return ut.Add("client-name", "{0}格式不正确", true)
-	//		},
-	//		func(ut ut.Translator, fe validator.FieldError) string {
-	//			t, _ := ut.T("client-name", fe.Field())
-	//			return t
-	//		},
-	//	)
-	//}
+	err := v.validate.Struct(v)
+	if err != nil {
+		var invalidValidationError *validator.InvalidValidationError
+		if errors.As(err, &invalidValidationError) {
+			fmt.Println(err)
+			return err
+		}
+		var validateErrs validator.ValidationErrors
+		if errors.As(err, &validateErrs) {
+			for _, e := range validateErrs {
+				if i, ok := v.any.(IRuleLocalizes); ok {
+					print(i, e)
 
-	return v.validate.Struct(v)
+					// TODO:GG from here you can create your own error messages in whatever language you wish
+
+					// 注册错误消息
+					//v.validate.RegisterTranslation("client-name", nil,
+					//	func(ut ut.Translator) error {
+					//		return ut.Add("client-name", "{0}格式不正确", true)
+					//	},
+					//	func(ut ut.Translator, fe validator.FieldError) string {
+					//		t, _ := ut.T("client-name", fe.Field())
+					//		return t
+					//	},
+					//)
+				}
+			}
+		}
+	}
+	return err
 }
