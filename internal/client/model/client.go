@@ -2,7 +2,18 @@ package model
 
 import (
 	"katydid-mp-user/internal/pkg/model"
+	"reflect"
 	"time"
+	"unicode"
+)
+
+const (
+	clientExtraKeyWebsite        = "website"        // 官网
+	clientExtraKeyCopyrights     = "copyrights"     // 版权
+	clientExtraKeySupportUrl     = "supportUrl"     // 服务条款URL
+	clientExtraKeyPrivacyUrl     = "privacyUrl"     // 隐私政策URL
+	clientExtraKeyUserMaxAccount = "userMaxAccount" // 用户最多账户数
+	clientExtraKeyUserMaxToken   = "userMaxToken"   // 用户最多令牌数 (同时登录最大数，防止工作室?)
 )
 
 // Client 客户端
@@ -12,8 +23,8 @@ type Client struct {
 	IP     uint   `json:"IP"`     // 系列 (eg:大富翁IP)
 	Part   uint   `json:"part"`   // 类型 (eg:单机版)
 
-	Enable bool   `json:"enable"`                   // 是否可用 (一般不用，下架之类的，没有reason)
-	Name   string `json:"name" valid:"client-name"` // 客户端名称
+	Enable bool   `json:"enable"`                               // 是否可用 (一般不用，下架之类的，没有reason)
+	Name   string `json:"name" validate:"required,client-name"` // 客户端名称
 
 	OnlineAt  int64 `json:"onlineAt"`  // 上线时间 (时间没到时，只能停留在首页，提示bulletins)
 	OfflineAt int64 `json:"offlineAt"` // 下线时间 (时间到后，强制下线+升级/等待/...)
@@ -40,14 +51,85 @@ func NewClientDefault(
 	return client
 }
 
-const (
-	clientExtraKeyWebsite        = "website"        // 官网
-	clientExtraKeyCopyrights     = "copyrights"     // 版权
-	clientExtraKeySupportUrl     = "supportUrl"     // 服务条款URL
-	clientExtraKeyPrivacyUrl     = "privacyUrl"     // 隐私政策URL
-	clientExtraKeyUserMaxAccount = "userMaxAccount" // 用户最多账户数
-	clientExtraKeyUserMaxToken   = "userMaxToken"   // 用户最多令牌数 (同时登录最大数，防止工作室?)
-)
+func (c *Client) FieldRules() map[string]func(reflect.Value) bool {
+	return map[string]func(reflect.Value) bool{
+		// 名称 (2-50)
+		"client-name": func(refVal reflect.Value) bool {
+			name := refVal.String()
+			if len(name) < 2 || len(name) > 50 {
+				return false
+			}
+			for _, r := range name {
+				if !unicode.IsLetter(r) && !unicode.IsNumber(r) && r != '_' && r != '-' {
+					return false
+				}
+			}
+			return true
+		},
+	}
+}
+
+func (c *Client) ExtraRules() (map[string]any, map[string]model.ExtraValidationRule) {
+	rules := map[string]model.ExtraValidationRule{
+		// 官网 (<=100)
+		clientExtraKeyWebsite: {
+			Required: false,
+			Validate: func(value interface{}) bool {
+				str, ok := value.(string)
+				if !ok {
+					return false
+				}
+				return len(str) <= 100
+			},
+		},
+		// 版权 (<=100)
+		clientExtraKeyCopyrights: {
+			Required: false,
+			Validate: func(value interface{}) bool {
+				copyrights, ok := value.([]string)
+				if !ok {
+					return false
+				}
+				if len(copyrights) > 100 {
+					return false
+				}
+				for _, copyright := range copyrights {
+					if len(copyright) > 1000 {
+						return false
+					}
+				}
+				return true
+			},
+		},
+	}
+	return c.Extra, rules
+}
+
+//func (c *Client) RuleLocalizes(err error) {
+//	for _, err := range err.(validator.ValidationErrors) {
+//		var message string
+//
+//		// 根据不同的验证规则返回不同的错误消息
+//		switch err.Tag() {
+//		case "client-name":
+//			message = fmt.Sprintf("%s必须是2-50个字符的字母、数字、下划线或中划线", err.Field())
+//		case "required":
+//			message = fmt.Sprintf("%s不能为空", err.Field())
+//		case "min":
+//			message = fmt.Sprintf("%s长度不能小于%s", err.Field(), err.Param())
+//		case "max":
+//			message = fmt.Sprintf("%s长度不能大于%s", err.Field(), err.Param())
+//		default:
+//			message = err.Error()
+//		}
+//
+//		errors = append(errors, ValidationError{
+//			Field:   err.Field(),
+//			Tag:     err.Tag(),
+//			Message: message,
+//		})
+//	}
+//}
 
 func (c *Client) SetWebsite(website *string) {
 	c.Extra.SetString(clientExtraKeyWebsite, website)

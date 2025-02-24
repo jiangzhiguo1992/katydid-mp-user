@@ -3,6 +3,7 @@ package model
 import (
 	"fmt"
 	"github.com/go-playground/validator/v10"
+	"katydid-mp-user/pkg/valid"
 	"reflect"
 )
 
@@ -17,6 +18,10 @@ type (
 		Validate func(value interface{}) bool
 	}
 
+	ValidFieldError struct {
+		validator.FieldError
+	}
+
 	IFieldValidator interface {
 		FieldRules() map[string]func(reflect.Value) bool
 	}
@@ -29,15 +34,31 @@ type (
 		StructRules(obj any, fn ReportError)
 	}
 
+	IRuleLocalizes interface {
+		RuleLocalizes(err ValidFieldError)
+	}
+
 	Validator struct {
 		validate *validator.Validate
 		any
 	}
 )
 
-func NewValidator(validate *validator.Validate, obj any) *Validator {
+func (ve *ValidFieldError) Tag() string {
+	return ve.FieldError.Tag()
+}
+
+func (ve *ValidFieldError) Field() string {
+	return ve.FieldError.Field()
+}
+
+func (ve *ValidFieldError) Error() string {
+	return ve.FieldError.Error()
+}
+
+func NewValidator(obj any) *Validator {
 	return &Validator{
-		validate: validate,
+		validate: valid.Get(),
 		any:      obj,
 	}
 }
@@ -47,9 +68,12 @@ func (v *Validator) Valid() error {
 	if i, ok := v.any.(IFieldValidator); ok {
 		fRules := i.FieldRules()
 		for name, rule := range fRules {
-			_ = v.validate.RegisterValidation(name, func(fl validator.FieldLevel) bool {
+			e := v.validate.RegisterValidation(name, func(fl validator.FieldLevel) bool {
 				return rule(fl.Field())
 			})
+			if e != nil {
+				return e
+			}
 		}
 	}
 
@@ -79,5 +103,20 @@ func (v *Validator) Valid() error {
 			i.StructRules(sl.Current().Interface(), sl.ReportError)
 		}, v)
 	}
+
+	// localize
+	//if i, ok := v.any.(IRuleLocalizes); ok {
+	//	// 注册错误消息
+	//	v.validate.RegisterTranslation("client-name", nil,
+	//		func(ut ut.Translator) error {
+	//			return ut.Add("client-name", "{0}格式不正确", true)
+	//		},
+	//		func(ut ut.Translator, fe validator.FieldError) string {
+	//			t, _ := ut.T("client-name", fe.Field())
+	//			return t
+	//		},
+	//	)
+	//}
+
 	return v.validate.Struct(v)
 }
