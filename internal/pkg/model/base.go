@@ -21,10 +21,6 @@ const (
 )
 
 type (
-	IValid interface {
-		Valid() *err.CodeErrs
-	}
-
 	Base struct {
 		//gorm.Model
 		Id       uint64 `json:"id" gorm:"primarykey"`                 // 主键
