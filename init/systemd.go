@@ -21,7 +21,7 @@ func init() {
 		},
 	)
 	if e != nil {
-		log.Fatal("", log.Err(e))
+		log.Fatal("", log.FError(e))
 	}
 
 	// logger
@@ -39,11 +39,11 @@ func init() {
 		DefaultLang: config.DefLang,
 		DocDirs:     configs.LangDirs,
 		OnErr: func(msg string, fields map[string]any) {
-			log.Error(msg, log.Any("fields", fields))
+			log.Error(msg, log.FAny("fields", fields))
 		},
 	})
 	if e != nil {
-		log.Fatal("", log.Err(e))
+		log.Fatal("", log.FError(e))
 	}
 
 	// error

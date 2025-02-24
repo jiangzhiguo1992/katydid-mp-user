@@ -13,244 +13,227 @@ type Field struct {
 	Value any
 }
 
-// 基础类型
-
-func String(key string, val string) Field {
+func FString(key string, val string) Field {
 	return Field{Key: key, Value: val}
 }
 
-func Stringp(key string, val *string) Field {
+func FStringp(key string, val *string) Field {
 	return Field{Key: key, Value: val}
 }
 
-func Strings(key string, val []string) Field {
+func FStrings(key string, val []string) Field {
 	return Field{Key: key, Value: val}
 }
 
-func Int(key string, val int) Field {
+func FInt(key string, val int) Field {
 	return Field{Key: key, Value: val}
 }
 
-func Intp(key string, val *int) Field {
+func FIntp(key string, val *int) Field {
 	return Field{Key: key, Value: val}
 }
 
-func Ints(key string, val []int) Field {
+func FInts(key string, val []int) Field {
 	return Field{Key: key, Value: val}
 }
 
-func Int64(key string, val int64) Field {
+func FInt64(key string, val int64) Field {
 	return Field{Key: key, Value: val}
 }
 
-func Int64p(key string, val *int64) Field {
+func FInt64p(key string, val *int64) Field {
 	return Field{Key: key, Value: val}
 }
 
-func Int64s(key string, val []int64) Field {
+func FInt64s(key string, val []int64) Field {
 	return Field{Key: key, Value: val}
 }
 
-func Int32(key string, val int32) Field {
+func FInt32(key string, val int32) Field {
 	return Field{Key: key, Value: val}
 }
 
-func Int32p(key string, val *int32) Field {
+func FInt32p(key string, val *int32) Field {
 	return Field{Key: key, Value: val}
 }
 
-func Int32s(key string, val []int32) Field {
+func FInt32s(key string, val []int32) Field {
 	return Field{Key: key, Value: val}
 }
 
-func Int16(key string, val int16) Field {
+func FInt16(key string, val int16) Field {
 	return Field{Key: key, Value: val}
 }
 
-func Int16p(key string, val *int16) Field {
+func FInt16p(key string, val *int16) Field {
 	return Field{Key: key, Value: val}
 }
 
-func Int16s(key string, val []int16) Field {
+func FInt16s(key string, val []int16) Field {
 	return Field{Key: key, Value: val}
 }
 
-func Int8(key string, val int8) Field {
+func FInt8(key string, val int8) Field {
 	return Field{Key: key, Value: val}
 }
 
-func Int8p(key string, val *int8) Field {
+func FInt8p(key string, val *int8) Field {
 	return Field{Key: key, Value: val}
 }
 
-func Int8s(key string, val []int8) Field {
+func FInt8s(key string, val []int8) Field {
 	return Field{Key: key, Value: val}
 }
 
-// Unsigned integers
-func Uint(key string, val uint) Field {
+func FUint(key string, val uint) Field {
 	return Field{Key: key, Value: val}
 }
 
-func Uintp(key string, val *uint) Field {
+func FUintp(key string, val *uint) Field {
 	return Field{Key: key, Value: val}
 }
 
-func Uints(key string, val []uint) Field {
+func FUints(key string, val []uint) Field {
 	return Field{Key: key, Value: val}
 }
 
-func Uint64(key string, val uint64) Field {
+func FUint64(key string, val uint64) Field {
 	return Field{Key: key, Value: val}
 }
 
-func Uint64p(key string, val *uint64) Field {
+func FUint64p(key string, val *uint64) Field {
 	return Field{Key: key, Value: val}
 }
 
-func Uint64s(key string, val []uint64) Field {
+func FUint64s(key string, val []uint64) Field {
 	return Field{Key: key, Value: val}
 }
 
-func Uint32(key string, val uint32) Field {
+func FUint32(key string, val uint32) Field {
 	return Field{Key: key, Value: val}
 }
 
-func Uint32p(key string, val *uint32) Field {
+func FUint32p(key string, val *uint32) Field {
 	return Field{Key: key, Value: val}
 }
 
-func Uint32s(key string, val []uint32) Field {
+func FUint32s(key string, val []uint32) Field {
 	return Field{Key: key, Value: val}
 }
 
-func Uint16(key string, val uint16) Field {
+func FUint16(key string, val uint16) Field {
 	return Field{Key: key, Value: val}
 }
 
-func Uint16p(key string, val *uint16) Field {
+func FUint16p(key string, val *uint16) Field {
 	return Field{Key: key, Value: val}
 }
 
-func Uint16s(key string, val []uint16) Field {
+func FUint16s(key string, val []uint16) Field {
 	return Field{Key: key, Value: val}
 }
 
-func Uint8(key string, val uint8) Field {
+func FUint8(key string, val uint8) Field {
 	return Field{Key: key, Value: val}
 }
 
-func Uint8p(key string, val *uint8) Field {
+func FUint8p(key string, val *uint8) Field {
 	return Field{Key: key, Value: val}
 }
 
-// 浮点数
-
-func Float64(key string, val float64) Field {
+func FFloat64(key string, val float64) Field {
 	return Field{Key: key, Value: val}
 }
 
-func Float64p(key string, val *float64) Field {
+func FFloat64p(key string, val *float64) Field {
 	return Field{Key: key, Value: val}
 }
 
-func Float64s(key string, val []float64) Field {
+func FFloat64s(key string, val []float64) Field {
 	return Field{Key: key, Value: val}
 }
 
-func Float32(key string, val float32) Field {
+func FFloat32(key string, val float32) Field {
 	return Field{Key: key, Value: val}
 }
 
-func Float32p(key string, val *float32) Field {
+func FFloat32p(key string, val *float32) Field {
 	return Field{Key: key, Value: val}
 }
 
-func Float32s(key string, val []float32) Field {
+func FFloat32s(key string, val []float32) Field {
 	return Field{Key: key, Value: val}
 }
 
-// Complex numbers
-
-func Complex128(key string, val complex128) Field {
+func FComplex128(key string, val complex128) Field {
 	return Field{Key: key, Value: val}
 }
 
-func Complex64(key string, val complex64) Field {
+func FComplex64(key string, val complex64) Field {
 	return Field{Key: key, Value: val}
 }
 
-// Bool types
-
-func Bool(key string, val bool) Field {
+func FBool(key string, val bool) Field {
 	return Field{Key: key, Value: val}
 }
 
-func Boolp(key string, val *bool) Field {
+func FBoolp(key string, val *bool) Field {
 	return Field{Key: key, Value: val}
 }
 
-func Bools(key string, val []bool) Field {
+func FBools(key string, val []bool) Field {
 	return Field{Key: key, Value: val}
 }
 
-// Binary data
-func Binary(key string, val []byte) Field {
+func FBinary(key string, val []byte) Field {
 	return Field{Key: key, Value: val}
 }
 
-// Time types
-
-func Time(key string, val time.Time) Field {
+func FTime(key string, val time.Time) Field {
 	return Field{Key: key, Value: val}
 }
 
-func Timep(key string, val *time.Time) Field {
+func FTimep(key string, val *time.Time) Field {
 	return Field{Key: key, Value: val}
 }
 
-func Times(key string, val []time.Time) Field {
+func FTimes(key string, val []time.Time) Field {
 	return Field{Key: key, Value: val}
 }
 
-func Duration(key string, val time.Duration) Field {
+func FDuration(key string, val time.Duration) Field {
 	return Field{Key: key, Value: val}
 }
 
-func Durationp(key string, val *time.Duration) Field {
+func FDurationp(key string, val *time.Duration) Field {
 	return Field{Key: key, Value: val}
 }
 
-func Durations(key string, val []time.Duration) Field {
+func FDurations(key string, val []time.Duration) Field {
 	return Field{Key: key, Value: val}
 }
 
-// Err types
-
-func Err(err error) Field {
+func FError(err error) Field {
 	return Field{Key: "error", Value: err}
 }
 
-func Errors(key string, errs []error) Field {
+func FErrors(key string, errs []error) Field {
 	return Field{Key: key, Value: errs}
 }
 
-// Special types
-
-func Stringer(key string, val fmt.Stringer) Field {
+func FStringer(key string, val fmt.Stringer) Field {
 	return Field{Key: key, Value: val}
 }
 
-func Object(key string, val zapcore.ObjectMarshaler) Field {
+func FObject(key string, val zapcore.ObjectMarshaler) Field {
 	return Field{Key: key, Value: val}
 }
 
-func Array(key string, val zapcore.ArrayMarshaler) Field {
+func FArray(key string, val zapcore.ArrayMarshaler) Field {
 	return Field{Key: key, Value: val}
 }
 
-// Any handles any other type
-func Any(key string, val any) Field {
+func FAny(key string, val any) Field {
 	return Field{Key: key, Value: val}
 }
 
