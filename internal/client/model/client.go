@@ -57,7 +57,7 @@ func (c *Client) ValidFieldRules() valid.FieldValidRules {
 	return valid.FieldValidRules{
 		valid.SceneAll: valid.FieldValidRule{
 			// 客户端名称 (1-50)
-			"name-format": func(value reflect.Value) bool {
+			"name-format": func(value reflect.Value, param string) bool {
 				name := value.String()
 				if len(name) < 1 || len(name) > 50 {
 					return false
@@ -79,7 +79,7 @@ func (c *Client) ValidExtraRules() (utils.KSMap, valid.ExtraValidRules) {
 			// 官网 (<1000)
 			clientExtraKeyWebsite: valid.ExtraValidRuleInfo{
 				Field: clientExtraKeyWebsite,
-				Validate: func(value interface{}) bool {
+				ValidFn: func(value interface{}) bool {
 					v, ok := value.(string)
 					if !ok {
 						return false
@@ -90,7 +90,7 @@ func (c *Client) ValidExtraRules() (utils.KSMap, valid.ExtraValidRules) {
 			// 版权 (<100)*(<1000)
 			clientExtraKeyCopyrights: valid.ExtraValidRuleInfo{
 				Field: clientExtraKeyCopyrights,
-				Validate: func(value interface{}) bool {
+				ValidFn: func(value interface{}) bool {
 					vs, ok := value.([]string)
 					if !ok {
 						return false
@@ -109,7 +109,7 @@ func (c *Client) ValidExtraRules() (utils.KSMap, valid.ExtraValidRules) {
 			// 服务条款URL (<1000)
 			clientExtraKeySupportUrl: valid.ExtraValidRuleInfo{
 				Field: clientExtraKeySupportUrl,
-				Validate: func(value interface{}) bool {
+				ValidFn: func(value interface{}) bool {
 					v, ok := value.(string)
 					if !ok {
 						return false
@@ -120,7 +120,7 @@ func (c *Client) ValidExtraRules() (utils.KSMap, valid.ExtraValidRules) {
 			// 隐私政策URL (<1000)
 			clientExtraKeyPrivacyUrl: valid.ExtraValidRuleInfo{
 				Field: clientExtraKeyPrivacyUrl,
-				Validate: func(value interface{}) bool {
+				ValidFn: func(value interface{}) bool {
 					v, ok := value.(string)
 					if !ok {
 						return false
@@ -135,11 +135,11 @@ func (c *Client) ValidExtraRules() (utils.KSMap, valid.ExtraValidRules) {
 func (c *Client) ValidLocalizeRules() valid.LocalizeValidRules {
 	return valid.LocalizeValidRules{
 		valid.SceneAll: valid.LocalizeValidRule{
-			Rule1: map[valid.Tag]map[valid.FieldName][3]interface{}{
+			Rule1: map[valid.Tag]map[valid.FieldName]valid.LocalizeValidRuleParam{
 				valid.TagRequired: {
 					"Name": {"format_s_input_required", false, []any{"client_name"}},
 				},
-			}, Rule2: map[valid.Tag][3]interface{}{
+			}, Rule2: map[valid.Tag]valid.LocalizeValidRuleParam{
 				"name-format":            {"format_client_name_err", false, nil},
 				clientExtraKeyWebsite:    {"format_website_err", false, nil},
 				clientExtraKeyCopyrights: {"format_copyrights_err", false, nil},
