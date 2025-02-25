@@ -4,10 +4,13 @@ import (
 	"errors"
 	"fmt"
 	"github.com/go-playground/validator/v10"
+	"katydid-mp-user/pkg/err"
 	"katydid-mp-user/pkg/valid"
 	"katydid-mp-user/utils"
 	"reflect"
 )
+
+// TODO:GG 重复注册?
 
 type (
 	// ReportError validator.StructLevel.ReportError
@@ -33,7 +36,7 @@ type (
 	}
 
 	IRuleLocalizes interface {
-		RuleLocalizes(errs []valid.FieldError) []valid.FieldMsgError
+		RuleLocalizes() (map[string]map[string]string, map[string]string)
 	}
 
 	Validator struct {
@@ -49,7 +52,7 @@ func NewValidator(obj any) *Validator {
 	}
 }
 
-func (v *Validator) Valid() error {
+func (v *Validator) Valid() *err.CodeErrs {
 	// fields
 	if i, ok := v.any.(IFieldValidator); ok {
 		fRules := i.FieldRules()
@@ -58,7 +61,7 @@ func (v *Validator) Valid() error {
 				return rule(fl.Field())
 			})
 			if e != nil {
-				return e
+				return err.Match(e)
 			}
 		}
 	}
@@ -91,34 +94,36 @@ func (v *Validator) Valid() error {
 	}
 
 	// localize
-	err := v.validate.Struct(v)
-	if err != nil {
+	e := v.validate.Struct(v)
+	if e != nil {
 		var invalidValidationError *validator.InvalidValidationError
-		if errors.As(err, &invalidValidationError) {
-			fmt.Println(err)
-			return err
+		if errors.As(e, &invalidValidationError) {
+			return err.Match(e)
 		}
 		var validateErrs validator.ValidationErrors
-		if errors.As(err, &validateErrs) {
-			for _, e := range validateErrs {
-				if i, ok := v.any.(IRuleLocalizes); ok {
-					print(i, e)
-
-					// TODO:GG from here you can create your own error messages in whatever language you wish
-
-					// 注册错误消息
-					//v.validate.RegisterTranslation("client-name", nil,
-					//	func(ut ut.Translator) error {
-					//		return ut.Add("client-name", "{0}格式不正确", true)
-					//	},
-					//	func(ut ut.Translator, fe validator.FieldError) string {
-					//		t, _ := ut.T("client-name", fe.Field())
-					//		return t
-					//	},
-					//)
+		if errors.As(e, &validateErrs) {
+			var cErrs = err.New()
+			if i, ok := v.any.(IRuleLocalizes); ok {
+				commonTags, customTags := i.RuleLocalizes()
+				for _, ee := range validateErrs {
+					for kk, vv := range commonTags {
+						if ee.Tag() == kk {
+							for kkk, vvv := range vv {
+								if ee.Field() == kkk {
+									_ = cErrs.WrapLocalize(fmt.Sprintf(vvv, ee.Param()), nil)
+								}
+							}
+						}
+					}
+					for kk, vv := range customTags {
+						if ee.Tag() == kk {
+							_ = cErrs.WrapLocalize(fmt.Sprintf(vv, ee.Param()), nil)
+						}
+					}
 				}
 			}
+			return cErrs
 		}
 	}
-	return err
+	return err.Match(e)
 }

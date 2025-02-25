@@ -9,8 +9,8 @@ import (
 type CodeErrs struct {
 	code      int
 	errs      []error
-	localeId  string
-	templates map[string]any
+	localeIds []string
+	templates []map[string]any
 }
 
 func New(errs ...error) *CodeErrs {
@@ -29,13 +29,13 @@ func (c *CodeErrs) WrapErrs(errs ...error) *CodeErrs {
 	return c
 }
 
-// WithLocalize 添加本地化信息
-func (c *CodeErrs) WithLocalize(localeId string, templates map[string]any) *CodeErrs {
-	c.localeId = localeId
-	if templates == nil {
-		templates = map[string]any{}
+// WrapLocalize 添加本地化信息
+func (c *CodeErrs) WrapLocalize(localeId string, template map[string]any) *CodeErrs {
+	c.localeIds = append(c.localeIds, localeId)
+	if template == nil {
+		template = map[string]any{}
 	}
-	c.templates = templates
+	c.templates = append(c.templates, template)
 	return c
 }
 
@@ -66,13 +66,13 @@ func (c *CodeErrs) Errs() []error {
 	return c.errs
 }
 
-// LocaleId 获取本地化ID
-func (c *CodeErrs) LocaleId() string {
-	return c.localeId
+// LocaleIds 获取本地化ID
+func (c *CodeErrs) LocaleIds() []string {
+	return c.localeIds
 }
 
 // Templates 获取模板数据
-func (c *CodeErrs) Templates() map[string]any {
+func (c *CodeErrs) Templates() []map[string]any {
 	return c.templates
 }
 
@@ -85,8 +85,16 @@ func (c *CodeErrs) Err() error {
 }
 
 func (c *CodeErrs) ToLocales(fun func(string, map[string]any) string) string {
-	if len(c.localeId) > 0 {
-		return fun(c.localeId, c.templates)
+	if len(c.localeIds) > 0 {
+		var builder strings.Builder
+		for k, v := range c.localeIds {
+			msg := fun(v, c.templates[k])
+			builder.WriteString(msg)
+			if k < len(c.localeIds)-1 {
+				builder.WriteString("\n")
+			}
+		}
+		return builder.String()
 	}
 	return fmt.Sprintf("%d: unknown error(localeIds)", c.code)
 }

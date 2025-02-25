@@ -71,7 +71,7 @@ func Match(err error) *CodeErrs {
 		for code, locIds := range matcher.codeLocIds {
 			for _, locId := range locIds {
 				if locId == matchLocId {
-					return New(err).WithCode(code).WithLocalize(locId, nil)
+					return New(err).WithCode(code).WrapLocalize(locId, nil)
 				}
 			}
 		}

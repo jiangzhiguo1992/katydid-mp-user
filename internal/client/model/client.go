@@ -1,9 +1,7 @@
 package model
 
 import (
-	"fmt"
 	"katydid-mp-user/internal/pkg/model"
-	"katydid-mp-user/pkg/valid"
 	"katydid-mp-user/utils"
 	"reflect"
 	"time"
@@ -108,33 +106,17 @@ func (c *Client) ExtraRules() (utils.KSMap, map[string]model.ExtraValidationRule
 	return c.Extra, rules
 }
 
-func (c *Client) RuleLocalizes(errs []valid.FieldError) []valid.FieldMsgError {
-	var errors []valid.FieldMsgError
-	for _, err := range errs {
-		var message string
-		switch err.Tag() {
-		case "required":
-			switch err.Field() {
-			case "name":
-				message = fmt.Sprintf("%s不能为空", err.Field())
-			default:
-				message = fmt.Sprintf("%s不能为空", err.Field())
-			}
-		case "client-name":
-			message = fmt.Sprintf("%s必须是2-50个字符的字母、数字、下划线或中划线", err.Field())
-		case "min":
-			message = fmt.Sprintf("%s长度不能小于%s", err.Field(), err.Param())
-		case "max":
-			message = fmt.Sprintf("%s长度不能大于%s", err.Field(), err.Param())
-		default:
-			message = err.Error()
+func (c *Client) RuleLocalizes() (map[string]map[string]string, map[string]string) {
+	return map[string]map[string]string{
+			"required": {
+				"name": "客户端名称不能为空",
+			},
+			"min": {
+				"name": "客户端名称长度不能小于%s",
+			},
+		}, map[string]string{
+			"client-name": "客户端名称 必须是2-50个字符的字母、数字、下划线或中划线",
 		}
-		errors = append(errors, valid.FieldMsgError{
-			FieldError: err,
-			Message:    message,
-		})
-	}
-	return errors
 }
 
 func (c *Client) SetWebsite(website *string) {
