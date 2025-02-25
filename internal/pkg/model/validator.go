@@ -10,12 +10,14 @@ import (
 	"reflect"
 )
 
-// TODO:GG 重复注册?
-
 const (
 	ValidSceneAll  uint16 = 0
 	ValidSceneBind uint16 = 1
 	ValidSceneSave uint16 = 2
+)
+
+var (
+	regTypes = make(map[reflect.Type]bool)
 )
 
 type (
@@ -65,35 +67,11 @@ func NewValidator(obj any) *Validator {
 }
 
 func (v *Validator) Valid(scene uint16) *err.CodeErrs {
-	// fields
-	if i, ok := v.any.(IFieldValidator); ok {
-		scenes := i.ValidFieldRules()
-		sceneRules := make(map[string]func(reflect.Value) bool)
-		if allRules := scenes[ValidSceneAll]; allRules != nil {
-			for name, rule := range allRules {
-				sceneRules[name] = rule
-			}
-		}
-		if specificRules := scenes[scene]; specificRules != nil {
-			for name, rule := range specificRules {
-				sceneRules[name] = rule
-			}
-		}
-		for name, rule := range sceneRules {
-			e := v.validate.RegisterValidation(name, func(fl validator.FieldLevel) bool {
-				return rule(fl.Field())
-			})
-			if e != nil {
-				return err.Match(e)
-			}
-		}
-	}
-
-	// extra
-	if i, ok := v.any.(IExtraValidator); ok {
-		v.validate.RegisterStructValidation(func(sl validator.StructLevel) {
-			extra, scenes := i.ValidExtraRules()
-			sceneRules := make(map[string]ValidationExtraInfo)
+	if !regTypes[reflect.TypeOf(v.any)] {
+		// fields
+		if i, ok := v.any.(IFieldValidator); ok {
+			scenes := i.ValidFieldRules()
+			sceneRules := make(map[string]func(reflect.Value) bool)
 			if allRules := scenes[ValidSceneAll]; allRules != nil {
 				for name, rule := range allRules {
 					sceneRules[name] = rule
@@ -104,26 +82,55 @@ func (v *Validator) Valid(scene uint16) *err.CodeErrs {
 					sceneRules[name] = rule
 				}
 			}
-			for key, rule := range sceneRules {
-				value, exists := extra[key]
-				if rule.Required && !exists {
-					sl.ReportError(extra, "Extra", "Extra",
-						fmt.Sprintf("required-%s", key), "")
-					continue
-				}
-				if exists && !rule.Validate(value) {
-					sl.ReportError(extra, "Extra", "Extra",
-						fmt.Sprintf("invalid-%s", key), "")
+			for name, rule := range sceneRules {
+				e := v.validate.RegisterValidation(name, func(fl validator.FieldLevel) bool {
+					return rule(fl.Field())
+				})
+				if e != nil {
+					return err.Match(e)
 				}
 			}
-		}, v)
-	}
+		}
 
-	// struct
-	if i, ok := v.any.(IStructValidator); ok {
-		v.validate.RegisterStructValidation(func(sl validator.StructLevel) {
-			i.ValidStructRules(sl.Current().Interface(), sl.ReportError)
-		}, v)
+		// extra
+		if i, ok := v.any.(IExtraValidator); ok {
+			v.validate.RegisterStructValidation(func(sl validator.StructLevel) {
+				extra, scenes := i.ValidExtraRules()
+				sceneRules := make(map[string]ValidationExtraInfo)
+				if allRules := scenes[ValidSceneAll]; allRules != nil {
+					for name, rule := range allRules {
+						sceneRules[name] = rule
+					}
+				}
+				if specificRules := scenes[scene]; specificRules != nil {
+					for name, rule := range specificRules {
+						sceneRules[name] = rule
+					}
+				}
+				for key, rule := range sceneRules {
+					value, exists := extra[key]
+					if rule.Required && !exists {
+						sl.ReportError(extra, "Extra", "Extra",
+							fmt.Sprintf("required-%s", key), "")
+						continue
+					}
+					if exists && !rule.Validate(value) {
+						sl.ReportError(extra, "Extra", "Extra",
+							fmt.Sprintf("invalid-%s", key), "")
+					}
+				}
+			}, v)
+		}
+
+		// struct
+		if i, ok := v.any.(IStructValidator); ok {
+			v.validate.RegisterStructValidation(func(sl validator.StructLevel) {
+				i.ValidStructRules(sl.Current().Interface(), sl.ReportError)
+			}, v)
+		}
+
+		// cache
+		regTypes[reflect.TypeOf(v.any)] = true
 	}
 
 	// localize
@@ -165,9 +172,9 @@ func (v *Validator) Valid(scene uint16) *err.CodeErrs {
 						if ee.Tag() == kk {
 							for kkk, vvv := range vv {
 								if ee.Field() == kkk {
-									params := vvv[2].([]any)
-									if len(params) == 0 {
-										params = []any{}
+									var params []any
+									if vvv[2] != nil {
+										params = append(params, vvv[2].([]any))
 									}
 									if vvv[1].(bool) {
 										params = append(params, ee.Param())
@@ -179,9 +186,9 @@ func (v *Validator) Valid(scene uint16) *err.CodeErrs {
 					}
 					for kk, vv := range sceneRule2s {
 						if ee.Tag() == kk {
-							params := vv[2].([]any)
-							if len(params) == 0 {
-								params = []any{}
+							var params []any
+							if vv[2] != nil {
+								params = append(params, vv[2].([]any))
 							}
 							if vv[1].(bool) {
 								params = append(params, ee.Param())
