@@ -6,12 +6,18 @@ import (
 )
 
 // CodeErrs 定义多错误结构
-type CodeErrs struct {
-	code      int
-	errs      []error
-	localeIds []string
-	templates []map[string]any
-}
+type (
+	CodeErrs struct {
+		code      int
+		errs      []error
+		localizes []*localize
+	}
+	localize struct {
+		localeId  string
+		template1 []any
+		template2 map[string]any
+	}
+)
 
 func New(errs ...error) *CodeErrs {
 	return &CodeErrs{errs: errs}
@@ -30,12 +36,12 @@ func (c *CodeErrs) WrapErrs(errs ...error) *CodeErrs {
 }
 
 // WrapLocalize 添加本地化信息
-func (c *CodeErrs) WrapLocalize(localeId string, template map[string]any) *CodeErrs {
-	c.localeIds = append(c.localeIds, localeId)
-	if template == nil {
-		template = map[string]any{}
-	}
-	c.templates = append(c.templates, template)
+func (c *CodeErrs) WrapLocalize(localeId string, template1 []any, template2 map[string]any) *CodeErrs {
+	c.localizes = append(c.localizes, &localize{
+		localeId:  localeId,
+		template1: template1,
+		template2: template2,
+	})
 	return c
 }
 
@@ -66,16 +72,6 @@ func (c *CodeErrs) Errs() []error {
 	return c.errs
 }
 
-// LocaleIds 获取本地化ID
-func (c *CodeErrs) LocaleIds() []string {
-	return c.localeIds
-}
-
-// Templates 获取模板数据
-func (c *CodeErrs) Templates() []map[string]any {
-	return c.templates
-}
-
 // Err 获取错误
 func (c *CodeErrs) Err() error {
 	if len(c.errs) == 0 {
@@ -84,13 +80,13 @@ func (c *CodeErrs) Err() error {
 	return c
 }
 
-func (c *CodeErrs) ToLocales(fun func(string, map[string]any) string) string {
-	if len(c.localeIds) > 0 {
+func (c *CodeErrs) ToLocales(fun func(string, []any, map[string]any) string) string {
+	if len(c.localizes) > 0 {
 		var builder strings.Builder
-		for k, v := range c.localeIds {
-			msg := fun(v, c.templates[k])
+		for k, v := range c.localizes {
+			msg := fun(v.localeId, v.template1, v.template2)
 			builder.WriteString(msg)
-			if k < len(c.localeIds)-1 {
+			if k < len(c.localizes)-1 {
 				builder.WriteString("\n")
 			}
 		}

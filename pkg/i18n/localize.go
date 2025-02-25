@@ -91,7 +91,7 @@ func (m *Manager) loadMessageFiles() error {
 		}
 		langs = append(langs, extractLangFromFilename(file))
 	}
-	slog.Info("■ ■ i18n ■ ■ loading i18n files done", slog.Any("languages", files))
+	slog.Info("■ ■ i18n ■ ■ loading i18n langs", slog.Any("languages", langs))
 
 	hasDefault := false
 	for _, lang := range langs {

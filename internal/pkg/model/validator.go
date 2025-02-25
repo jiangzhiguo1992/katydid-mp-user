@@ -179,7 +179,7 @@ func (v *Validator) Valid(scene uint16) *err.CodeErrs {
 									if vvv[1].(bool) {
 										params = append(params, ee.Param())
 									}
-									_ = cErrs.WrapLocalize(fmt.Sprintf(vvv[0].(string), params), nil)
+									_ = cErrs.WrapLocalize(vvv[0].(string), params, nil)
 								}
 							}
 						}
@@ -193,7 +193,7 @@ func (v *Validator) Valid(scene uint16) *err.CodeErrs {
 							if vv[1].(bool) {
 								params = append(params, ee.Param())
 							}
-							_ = cErrs.WrapLocalize(fmt.Sprintf(vv[0].(string), params), nil)
+							_ = cErrs.WrapLocalize(vv[0].(string), params, nil)
 						}
 					}
 				}
