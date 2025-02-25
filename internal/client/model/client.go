@@ -132,28 +132,19 @@ func (c *Client) ValidExtraRules() (utils.KSMap, valid.ExtraValidRules) {
 	}
 }
 
-// TODO:GG test scene
-func (c *Client) ValidStructRules(obj any, fn valid.FuncReportError) {
-	client := obj.(Client)
-	if client.OnlineAt == 0 {
-		fn(client.OnlineAt, "OnlineAt", "online-format", "")
-	}
-}
-
 func (c *Client) ValidRuleLocalizes() valid.LocalizeValidRules {
 	return valid.LocalizeValidRules{
 		valid.SceneAll: valid.LocalizeValidRule{
 			Rule1: map[valid.Tag]map[valid.FieldName][3]interface{}{
 				valid.TagRequired: {
-					"Name": {"bind_sss_refuse_nil", false, []any{"client_name"}},
+					"Name": {"format_s_input_required", false, []any{"client_name"}},
 				},
 			}, Rule2: map[valid.Tag][3]interface{}{
-				"name-format":            {"bind_client_name_error", false, nil},
-				clientExtraKeyWebsite:    {"网站格式不正确", false, nil},
-				clientExtraKeyCopyrights: {"版权格式不正确", false, nil},
-				clientExtraKeySupportUrl: {"服务条款URL格式不正确", false, nil},
-				clientExtraKeyPrivacyUrl: {"隐私政策URL格式不正确", false, nil},
-				"online-format":          {"上线时间格式不正确", false, nil},
+				"name-format":            {"format_client_name_err", false, nil},
+				clientExtraKeyWebsite:    {"format_website_err", false, nil},
+				clientExtraKeyCopyrights: {"format_copyrights_err", false, nil},
+				clientExtraKeySupportUrl: {"format_support_url_err", false, nil},
+				clientExtraKeyPrivacyUrl: {"format_privacy_url_err", false, nil},
 			},
 		},
 	}
