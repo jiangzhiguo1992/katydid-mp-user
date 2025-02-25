@@ -2,7 +2,6 @@ package valid
 
 import (
 	"errors"
-	"fmt"
 	"github.com/go-playground/validator/v10"
 	"katydid-mp-user/pkg/err"
 	"katydid-mp-user/utils"
@@ -11,11 +10,14 @@ import (
 )
 
 const (
-	SceneAll   uint16 = 0
-	SceneBind  uint16 = 1
-	SceneSave  uint16 = 2
-	SceneQuery uint16 = 3
-	SceneShow  uint16 = 4
+	SceneAll   Scene = 0
+	SceneBind  Scene = 1
+	SceneSave  Scene = 2
+	SceneQuery Scene = 3
+	SceneShow  Scene = 4
+
+	TagRequired Tag = "required"
+	TagFormat   Tag = "format"
 )
 
 var (
@@ -25,36 +27,41 @@ var (
 )
 
 type (
-	// FuncReportError validator.StructLevel.FuncReportError
-	FuncReportError = func(field interface{}, fieldName, structFieldName string, tag, param string)
+	Scene     uint16
+	Tag       string
+	FieldName string
 
-	// FieldValidResult 定义字段验证规则
-	FieldValidResult = map[uint16]map[string]func(reflect.Value) bool
+	// FieldValidRules 定义字段验证规则
+	FieldValidRules  = map[Scene]FieldValidRule
+	FieldValidRule   = map[Tag]FieldValidRuleFn
+	FieldValidRuleFn = func(reflect.Value) bool
 
-	// ExtraValidResult 定义额外字段验证规则
-	ExtraValidResult = map[uint16]map[string]ExtraValidationInfo
-
-	// RulesValidLocalize 定义本地化的规则映射
-	RulesValidLocalize = map[uint16]struct {
-		Rule1 map[string]map[string][3]interface{}
-		Rule2 map[string][3]interface{}
+	// ExtraValidRules 定义额外字段验证规则
+	ExtraValidRules    = map[Scene]ExtraValidRule
+	ExtraValidRule     = map[Tag]ExtraValidRuleInfo
+	ExtraValidRuleInfo struct {
+		Field    string
+		Validate func(value interface{}) bool
 	}
 
-	// ExtraValidationInfo 定义额外验证信息
-	ExtraValidationInfo struct {
-		Key      string
-		Required bool
-		Validate func(value interface{}) bool
+	// FuncReportError validator.StructLevel.FuncReportError
+	FuncReportError = func(field interface{}, fieldName FieldName, tag, param string)
+
+	// LocalizeValidRules 定义本地化的规则映射
+	LocalizeValidRules = map[Scene]LocalizeValidRule
+	LocalizeValidRule  struct {
+		Rule1 map[Tag]map[FieldName][3]interface{}
+		Rule2 map[Tag][3]interface{} // {msg, param, []any}
 	}
 
 	// IFieldValidator 定义字段验证接口
 	IFieldValidator interface {
-		ValidFieldRules() FieldValidResult
+		ValidFieldRules() FieldValidRules
 	}
 
 	// IExtraValidator 定义额外字段验证接口
 	IExtraValidator interface {
-		ValidExtraRules() (utils.KSMap, ExtraValidResult)
+		ValidExtraRules() (utils.KSMap, ExtraValidRules)
 	}
 
 	// IStructValidator 定义结构验证接口
@@ -62,102 +69,97 @@ type (
 		ValidStructRules(obj any, fn FuncReportError)
 	}
 
-	// IRuleLocalizes 定义本地化错误规则接口
-	IRuleLocalizes interface {
-		ValidRuleLocalizes() RulesValidLocalize
+	// ILocalizeValidator 定义本地化错误规则接口
+	ILocalizeValidator interface {
+		ValidRuleLocalizes() LocalizeValidRules
 	}
 
-	Validator struct {
-		validate *validator.Validate
-		any
-	}
+	Validator struct{}
 )
 
 func Get() *validator.Validate {
 	once.Do(func() {
 		validate = validator.New(validator.WithRequiredStructEnabled())
-		validate.RegisterTagNameFunc(func(fld reflect.StructField) string {
-			name := fld.Tag.Get("json")
-			if name == "-" {
-				return fld.Name
-			}
-			return name
-		})
-		// TODO:GG trans
+		//validate.RegisterTagNameFunc(func(fld reflect.StructField) string {
+		//	name := fld.Tag.Get("json")
+		//	if name == "-" {
+		//		return fld.Name
+		//	}
+		//	return name
+		//})
 	})
 	return validate
 }
 
-func New(obj any) *Validator {
-	return &Validator{
-		validate: Get(),
-		any:      obj,
-	}
-}
-
 // Valid 根据场景执行验证，并返回本地化错误信息
-func (v *Validator) Valid(scene uint16) *err.CodeErrs {
-	typ := reflect.TypeOf(v.any)
+func (v *Validator) Valid(scene Scene, obj any) *err.CodeErrs {
+	typ := reflect.TypeOf(obj)
 	if _, ok := regTypes.Load(typ); !ok {
-		// -- 字段验证注册 --
-		if fv, ok := v.any.(IFieldValidator); ok {
-			scenes := fv.ValidFieldRules()
-			sceneRules := make(map[string]func(reflect.Value) bool)
-			if allRules := scenes[SceneAll]; allRules != nil {
-				for name, rule := range allRules {
-					sceneRules[name] = rule
+		if fv, okk := obj.(IFieldValidator); okk {
+			// -- 字段验证注册 --
+			sceneRules := fv.ValidFieldRules()
+			tagRules := make(map[Tag]func(reflect.Value) bool)
+			if tRules := sceneRules[SceneAll]; tRules != nil {
+				for tag, rule := range tRules {
+					tagRules[tag] = rule
 				}
 			}
-			if specificRules := scenes[scene]; specificRules != nil {
-				for name, rule := range specificRules {
-					sceneRules[name] = rule
+			if tRules := sceneRules[scene]; tRules != nil {
+				for tag, rule := range tRules {
+					tagRules[tag] = rule
 				}
 			}
-			for name, rule := range sceneRules {
-				if e := v.validate.RegisterValidation(name, func(fl validator.FieldLevel) bool {
+			for tag, rule := range tagRules {
+				if e := Get().RegisterValidation(string(tag), func(fl validator.FieldLevel) bool {
 					return rule(fl.Field())
 				}); e != nil {
 					return err.Match(e)
 				}
 			}
 		}
-		// -- 额外验证注册 --
-		if ev, ok := v.any.(IExtraValidator); ok {
-			v.validate.RegisterStructValidation(func(sl validator.StructLevel) {
-				extra, scenes := ev.ValidExtraRules()
-				sceneRules := make(map[string]ExtraValidationInfo)
-				if allRules := scenes[SceneAll]; allRules != nil {
-					for name, rule := range allRules {
-						sceneRules[name] = rule
+		ev, okk1 := obj.(IExtraValidator)
+		sv, okk2 := obj.(IStructValidator)
+		if okk1 || okk2 {
+			Get().RegisterStructValidation(func(sl validator.StructLevel) {
+				// -- 额外验证注册 --
+				if okk1 {
+					extra, sceneRules := ev.ValidExtraRules()
+					tagRules := make(map[Tag]ExtraValidRuleInfo)
+					if tRules := sceneRules[SceneAll]; tRules != nil {
+						for tag, rule := range tRules {
+							tagRules[tag] = rule
+						}
+					}
+					if tRules := sceneRules[scene]; tRules != nil {
+						for tag, rule := range tRules {
+							tagRules[tag] = rule
+						}
+					}
+					for tag, rule := range tagRules {
+						value, exists := extra[string(tag)]
+						if (tag == TagRequired) && !exists {
+							sl.ReportError(value, rule.Field, rule.Field, string(TagRequired), "")
+							continue
+						}
+						if exists && !rule.Validate(value) {
+							sl.ReportError(value, rule.Field, rule.Field, string(tag), "")
+						}
 					}
 				}
-				if specificRules := scenes[scene]; specificRules != nil {
-					for name, rule := range specificRules {
-						sceneRules[name] = rule
-					}
+				// -- 结构验证注册 --
+				if okk2 {
+					// TODO:GG scene
+					sv.ValidStructRules(sl.Current().Interface(), func(field interface{}, fieldName FieldName, tag, param string) {
+						sl.ReportError(field, string(fieldName), string(fieldName), tag, param)
+					})
 				}
-				for key, rule := range sceneRules {
-					value, exists := extra[key]
-					if rule.Required && !exists {
-						sl.ReportError(extra, "Extra", "Extra", fmt.Sprintf("required-%s", key), "")
-						continue
-					}
-					if exists && !rule.Validate(value) {
-						sl.ReportError(extra, "Extra", "Extra", fmt.Sprintf("invalid-%s", key), "")
-					}
-				}
-			}, v)
-		}
-		// -- 结构验证注册 --
-		if sv, ok := v.any.(IStructValidator); ok {
-			v.validate.RegisterStructValidation(func(sl validator.StructLevel) {
-				sv.ValidStructRules(sl.Current().Interface(), sl.ReportError)
-			}, v)
+			}, obj)
 		}
 		regTypes.Store(typ, true)
 	}
 
-	if e := v.validate.Struct(v.any); e != nil {
+	// -- 执行验证 --
+	if e := Get().Struct(obj); e != nil {
 		var invalidErr *validator.InvalidValidationError
 		if errors.As(e, &invalidErr) {
 			return err.Match(e)
@@ -165,57 +167,59 @@ func (v *Validator) Valid(scene uint16) *err.CodeErrs {
 		var validateErrs validator.ValidationErrors
 		if errors.As(e, &validateErrs) {
 			cErrs := err.New()
-			if rl, ok := v.any.(IRuleLocalizes); ok {
-				scenes := rl.ValidRuleLocalizes()
-				sceneRule1s := make(map[string]map[string][3]interface{})
-				sceneRule2s := make(map[string][3]interface{})
-				if allRules := scenes[SceneAll]; allRules.Rule1 != nil {
-					for name, rule := range allRules.Rule1 {
-						sceneRule1s[name] = rule
+			if rl, ok := obj.(ILocalizeValidator); ok {
+				sceneRules := rl.ValidRuleLocalizes()
+				tagFieldRules := make(map[Tag]map[FieldName][3]interface{})
+				tagRules := make(map[Tag][3]interface{})
+				if tRules := sceneRules[SceneAll]; tRules.Rule1 != nil {
+					for tag, rule := range tRules.Rule1 {
+						tagFieldRules[tag] = rule
 					}
 				}
-				if allRules := scenes[SceneAll]; allRules.Rule2 != nil {
-					for name, rule := range allRules.Rule2 {
-						sceneRule2s[name] = rule
+				if tRules := sceneRules[SceneAll]; tRules.Rule2 != nil {
+					for tag, rule := range tRules.Rule2 {
+						tagRules[tag] = rule
 					}
 				}
-				if specificRules := scenes[scene]; specificRules.Rule1 != nil {
-					for name, rule := range specificRules.Rule1 {
-						sceneRule1s[name] = rule
+				if tRules := sceneRules[scene]; tRules.Rule1 != nil {
+					for tag, rule := range tRules.Rule1 {
+						tagFieldRules[tag] = rule
 					}
 				}
-				if specificRules := scenes[scene]; specificRules.Rule2 != nil {
-					for name, rule := range specificRules.Rule2 {
-						sceneRule2s[name] = rule
+				if tRules := sceneRules[scene]; tRules.Rule2 != nil {
+					for tag, rule := range tRules.Rule2 {
+						tagRules[tag] = rule
 					}
 				}
 				for _, ee := range validateErrs {
-					for kk, vv := range sceneRule1s {
-						if ee.Tag() == kk {
-							for kkk, vvv := range vv {
-								if ee.Field() == kkk {
+					// -- 本地化错误注册(Tag+Field) --
+					for tag, fieldRules := range tagFieldRules {
+						if ee.Tag() == string(tag) {
+							for field, rules := range fieldRules {
+								if ee.Field() == string(field) {
 									var params []any
-									if vvv[2] != nil {
-										params = append(params, vvv[2].([]any)...)
+									if rules[2] != nil {
+										params = append(params, rules[2].([]any)...)
 									}
-									if vvv[1].(bool) {
+									if rules[1].(bool) {
 										params = append(params, ee.Param())
 									}
-									_ = cErrs.WrapLocalize(vvv[0].(string), params, nil)
+									_ = cErrs.WrapLocalize(rules[0].(string), params, nil)
 								}
 							}
 						}
 					}
-					for kk, vv := range sceneRule2s {
-						if ee.Tag() == kk {
+					// -- 本地化错误注册(Tag) --
+					for tag, rules := range tagRules {
+						if ee.Tag() == string(tag) {
 							var params []any
-							if vv[2] != nil {
-								params = append(params, vv[2].([]any)...)
+							if rules[2] != nil {
+								params = append(params, rules[2].([]any)...)
 							}
-							if vv[1].(bool) {
+							if rules[1].(bool) {
 								params = append(params, ee.Param())
 							}
-							_ = cErrs.WrapLocalize(vv[0].(string), params, nil)
+							_ = cErrs.WrapLocalize(rules[0].(string), params, nil)
 						}
 					}
 				}

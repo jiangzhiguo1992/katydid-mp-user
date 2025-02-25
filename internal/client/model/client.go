@@ -53,53 +53,17 @@ func NewClientDefault(
 	return client
 }
 
-func (c *Client) ValidFieldRules() valid.FieldValidResult {
-	rules := map[string]func(reflect.Value) bool{
-		// 名称 (1-50)
-		"client-name": func(refVal reflect.Value) bool {
-			name := refVal.String()
-			if len(name) < 1 || len(name) > 50 {
-				return false
-			}
-			for _, r := range name {
-				if !unicode.IsLetter(r) && !unicode.IsNumber(r) && r != '_' && r != '-' {
+func (c *Client) ValidFieldRules() valid.FieldValidRules {
+	return valid.FieldValidRules{
+		valid.SceneAll: valid.FieldValidRule{
+			// 客户端名称 (1-50)
+			"client-name": func(value reflect.Value) bool {
+				name := value.String()
+				if len(name) < 1 || len(name) > 50 {
 					return false
 				}
-			}
-			return true
-		},
-	}
-	return valid.FieldValidResult{
-		valid.SceneAll: rules,
-	}
-}
-
-func (c *Client) ValidExtraRules() (utils.KSMap, valid.ExtraValidResult) {
-	rules := map[string]valid.ExtraValidationInfo{
-		// 官网 (<=100)
-		clientExtraKeyWebsite: {
-			Required: false,
-			Validate: func(value interface{}) bool {
-				str, ok := value.(string)
-				if !ok {
-					return false
-				}
-				return len(str) <= 100
-			},
-		},
-		// 版权 (<=100)
-		clientExtraKeyCopyrights: {
-			Required: false,
-			Validate: func(value interface{}) bool {
-				copyrights, ok := value.([]string)
-				if !ok {
-					return false
-				}
-				if len(copyrights) > 100 {
-					return false
-				}
-				for _, copyright := range copyrights {
-					if len(copyright) > 1000 {
+				for _, r := range name {
+					if !unicode.IsLetter(r) && !unicode.IsNumber(r) && r != '_' && r != '-' {
 						return false
 					}
 				}
@@ -107,22 +71,65 @@ func (c *Client) ValidExtraRules() (utils.KSMap, valid.ExtraValidResult) {
 			},
 		},
 	}
-	return c.Extra, valid.ExtraValidResult{
-		valid.SceneAll: rules,
+}
+
+func (c *Client) ValidExtraRules() (utils.KSMap, valid.ExtraValidRules) {
+	return c.Extra, valid.ExtraValidRules{
+		valid.SceneAll: valid.ExtraValidRule{
+			// 官网 (<1000)
+			clientExtraKeyWebsite: valid.ExtraValidRuleInfo{
+				Field: clientExtraKeyWebsite,
+				Validate: func(value interface{}) bool {
+					str, ok := value.(string)
+					if !ok {
+						return false
+					}
+					return len(str) <= 1000
+				},
+			},
+			// 版权 (<100)*(<1000)
+			clientExtraKeyCopyrights: valid.ExtraValidRuleInfo{
+				Field: clientExtraKeyCopyrights,
+				Validate: func(value interface{}) bool {
+					copyrights, ok := value.([]string)
+					if !ok {
+						return false
+					}
+					if len(copyrights) > 100 {
+						return false
+					}
+					for _, copyright := range copyrights {
+						if len(copyright) > 1000 {
+							return false
+						}
+					}
+					return true
+				},
+			},
+		},
 	}
 }
 
-func (c *Client) ValidRuleLocalizes() valid.RulesValidLocalize {
-	rule1s := map[string]map[string][3]interface{}{
-		"required": {
-			"name": {"bind_sss_refuse_nil", false, []any{"client_name"}},
+func (c *Client) ValidStructRules(obj any, fn valid.FuncReportError) {
+	client := obj.(Client)
+	if client.OnlineAt == 0 {
+		fn(client.OnlineAt, "onlineAt", "client-online", "")
+	}
+}
+
+func (c *Client) ValidRuleLocalizes() valid.LocalizeValidRules {
+	return valid.LocalizeValidRules{
+		valid.SceneAll: valid.LocalizeValidRule{
+			Rule1: map[valid.Tag]map[valid.FieldName][3]interface{}{
+				valid.TagRequired: {
+					"name": {"bind_sss_refuse_nil", false, []any{"client_name"}},
+				}, "client-online": {
+					"onlineAt": {"上线时间", false, []any{}},
+				},
+			}, Rule2: map[valid.Tag][3]interface{}{
+				"client-name": {"bind_client_name_error", false, nil},
+			},
 		},
-	}
-	rule2s := map[string][3]interface{}{
-		"client-name": {"bind_client_name_error", false, nil},
-	}
-	return valid.RulesValidLocalize{
-		valid.SceneAll: {rule1s, rule2s},
 	}
 }
 
