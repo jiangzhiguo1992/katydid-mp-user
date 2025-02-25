@@ -74,7 +74,7 @@ func (c *Client) ValidFieldRules() model.ValidFieldResult {
 }
 
 func (c *Client) ValidExtraRules() (utils.KSMap, model.ValidExtraResult) {
-	rules := map[string]model.ExtraValidationRule{
+	rules := map[string]model.ValidationExtraInfo{
 		// 官网 (<=100)
 		clientExtraKeyWebsite: {
 			Required: false,
@@ -112,13 +112,19 @@ func (c *Client) ValidExtraRules() (utils.KSMap, model.ValidExtraResult) {
 }
 
 func (c *Client) ValidRuleLocalizes() model.ValidRuleLocalize {
-	rules := map[string]*model.RuleLocalize{
-		"required":    model.NewRuleLocalize("%s不能为空", "客户端", false),
-		"min":         model.NewRuleLocalize("%s长度不能小于%s", "客户端名称", true),
-		"client-name": model.NewRuleLocalize("%s必须是2-50个字符的字母、数字、下划线或中划线", "客户端名称", false),
+	rule1s := map[string]map[string][3]interface{}{
+		"required": {
+			"name": {"%s不能为空", false, []any{"客户端名称"}},
+		},
+		"min": {
+			"name": {"%s长度不能小于%s", true, []any{"客户端名称"}},
+		},
+	}
+	rule2s := map[string][3]interface{}{
+		"client-name": {"%s必须是2-50个字符的字母、数字、下划线或中划线", false, []any{"客户端名称"}},
 	}
 	return model.ValidRuleLocalize{
-		model.ValidSceneAll: rules,
+		model.ValidSceneAll: {rule1s, rule2s},
 	}
 }
 

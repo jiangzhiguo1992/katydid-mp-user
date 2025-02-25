@@ -12,31 +12,43 @@ import (
 
 // TODO:GG 重复注册?
 
-type (
-	// ReportError validator.StructLevel.ReportError
-	ReportError = func(field interface{}, fieldName, structFieldName string, tag, param string)
+const (
+	ValidSceneAll  uint16 = 0
+	ValidSceneBind uint16 = 1
+	ValidSceneSave uint16 = 2
+)
 
-	// ExtraValidationRule 额外验证规则
-	ExtraValidationRule struct {
+type (
+	// ValidReportError validator.StructLevel.ValidReportError
+	ValidReportError = func(field interface{}, fieldName, structFieldName string, tag, param string)
+
+	ValidFieldResult  = map[uint16]map[string]func(reflect.Value) bool
+	ValidExtraResult  = map[uint16]map[string]ValidationExtraInfo
+	ValidRuleLocalize = map[uint16]struct {
+		Rule1 map[string]map[string][3]interface{}
+		Rule2 map[string][3]interface{}
+	}
+
+	ValidationExtraInfo struct {
 		Key      string
 		Required bool
 		Validate func(value interface{}) bool
 	}
 
 	IFieldValidator interface {
-		FieldRules() map[string]func(reflect.Value) bool
+		ValidFieldRules() ValidFieldResult
 	}
 
 	IExtraValidator interface {
-		ExtraRules() (utils.KSMap, map[string]ExtraValidationRule)
+		ValidExtraRules() (utils.KSMap, ValidExtraResult)
 	}
 
 	IStructValidator interface {
-		StructRules(obj any, fn ReportError)
+		ValidStructRules(obj any, fn ValidReportError)
 	}
 
 	IRuleLocalizes interface {
-		RuleLocalizes() (map[string]map[string]string, map[string]string)
+		ValidRuleLocalizes() ValidRuleLocalize
 	}
 
 	Validator struct {
@@ -52,11 +64,22 @@ func NewValidator(obj any) *Validator {
 	}
 }
 
-func (v *Validator) Valid() *err.CodeErrs {
+func (v *Validator) Valid(scene uint16) *err.CodeErrs {
 	// fields
 	if i, ok := v.any.(IFieldValidator); ok {
-		fRules := i.FieldRules()
-		for name, rule := range fRules {
+		scenes := i.ValidFieldRules()
+		sceneRules := make(map[string]func(reflect.Value) bool)
+		if allRules := scenes[ValidSceneAll]; allRules != nil {
+			for name, rule := range allRules {
+				sceneRules[name] = rule
+			}
+		}
+		if specificRules := scenes[scene]; specificRules != nil {
+			for name, rule := range specificRules {
+				sceneRules[name] = rule
+			}
+		}
+		for name, rule := range sceneRules {
 			e := v.validate.RegisterValidation(name, func(fl validator.FieldLevel) bool {
 				return rule(fl.Field())
 			})
@@ -69,9 +92,19 @@ func (v *Validator) Valid() *err.CodeErrs {
 	// extra
 	if i, ok := v.any.(IExtraValidator); ok {
 		v.validate.RegisterStructValidation(func(sl validator.StructLevel) {
-			extra, rules := i.ExtraRules()
-			// 验证Extra字段
-			for key, rule := range rules {
+			extra, scenes := i.ValidExtraRules()
+			sceneRules := make(map[string]ValidationExtraInfo)
+			if allRules := scenes[ValidSceneAll]; allRules != nil {
+				for name, rule := range allRules {
+					sceneRules[name] = rule
+				}
+			}
+			if specificRules := scenes[scene]; specificRules != nil {
+				for name, rule := range specificRules {
+					sceneRules[name] = rule
+				}
+			}
+			for key, rule := range sceneRules {
 				value, exists := extra[key]
 				if rule.Required && !exists {
 					sl.ReportError(extra, "Extra", "Extra",
@@ -89,7 +122,7 @@ func (v *Validator) Valid() *err.CodeErrs {
 	// struct
 	if i, ok := v.any.(IStructValidator); ok {
 		v.validate.RegisterStructValidation(func(sl validator.StructLevel) {
-			i.StructRules(sl.Current().Interface(), sl.ReportError)
+			i.ValidStructRules(sl.Current().Interface(), sl.ReportError)
 		}, v)
 	}
 
@@ -104,20 +137,56 @@ func (v *Validator) Valid() *err.CodeErrs {
 		if errors.As(e, &validateErrs) {
 			var cErrs = err.New()
 			if i, ok := v.any.(IRuleLocalizes); ok {
-				commonTags, customTags := i.RuleLocalizes()
+				scenes := i.ValidRuleLocalizes()
+				sceneRule1s := make(map[string]map[string][3]interface{})
+				sceneRule2s := make(map[string][3]interface{})
+				if allRules := scenes[ValidSceneAll]; allRules.Rule1 != nil {
+					for name, rule := range allRules.Rule1 {
+						sceneRule1s[name] = rule
+					}
+				}
+				if allRules := scenes[ValidSceneAll]; allRules.Rule2 != nil {
+					for name, rule := range allRules.Rule2 {
+						sceneRule2s[name] = rule
+					}
+				}
+				if specificRules := scenes[scene]; specificRules.Rule1 != nil {
+					for name, rule := range specificRules.Rule1 {
+						sceneRule1s[name] = rule
+					}
+				}
+				if specificRules := scenes[scene]; specificRules.Rule2 != nil {
+					for name, rule := range specificRules.Rule2 {
+						sceneRule2s[name] = rule
+					}
+				}
 				for _, ee := range validateErrs {
-					for kk, vv := range commonTags {
+					for kk, vv := range sceneRule1s {
 						if ee.Tag() == kk {
 							for kkk, vvv := range vv {
 								if ee.Field() == kkk {
-									_ = cErrs.WrapLocalize(fmt.Sprintf(vvv, ee.Param()), nil)
+									params := vvv[2].([]any)
+									if len(params) == 0 {
+										params = []any{}
+									}
+									if vvv[1].(bool) {
+										params = append(params, ee.Param())
+									}
+									_ = cErrs.WrapLocalize(fmt.Sprintf(vvv[0].(string), params), nil)
 								}
 							}
 						}
 					}
-					for kk, vv := range customTags {
+					for kk, vv := range sceneRule2s {
 						if ee.Tag() == kk {
-							_ = cErrs.WrapLocalize(fmt.Sprintf(vv, ee.Param()), nil)
+							params := vv[2].([]any)
+							if len(params) == 0 {
+								params = []any{}
+							}
+							if vv[1].(bool) {
+								params = append(params, ee.Param())
+							}
+							_ = cErrs.WrapLocalize(fmt.Sprintf(vv[0].(string), params), nil)
 						}
 					}
 				}
