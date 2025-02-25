@@ -26,7 +26,7 @@ type Client struct {
 	Part   uint   `json:"part"`   // 类型 (eg:单机版)
 
 	Enable bool   `json:"enable"`                               // 是否可用 (一般不用，下架之类的，没有reason)
-	Name   string `json:"name" validate:"required,client-name"` // 客户端名称
+	Name   string `json:"name" validate:"required,name-format"` // 客户端名称
 
 	OnlineAt  int64 `json:"onlineAt"`  // 上线时间 (时间没到时，只能停留在首页，提示bulletins)
 	OfflineAt int64 `json:"offlineAt"` // 下线时间 (时间到后，强制下线+升级/等待/...)
@@ -57,7 +57,7 @@ func (c *Client) ValidFieldRules() valid.FieldValidRules {
 	return valid.FieldValidRules{
 		valid.SceneAll: valid.FieldValidRule{
 			// 客户端名称 (1-50)
-			"client-name": func(value reflect.Value) bool {
+			"name-format": func(value reflect.Value) bool {
 				name := value.String()
 				if len(name) < 1 || len(name) > 50 {
 					return false
@@ -80,40 +80,63 @@ func (c *Client) ValidExtraRules() (utils.KSMap, valid.ExtraValidRules) {
 			clientExtraKeyWebsite: valid.ExtraValidRuleInfo{
 				Field: clientExtraKeyWebsite,
 				Validate: func(value interface{}) bool {
-					str, ok := value.(string)
+					v, ok := value.(string)
 					if !ok {
 						return false
 					}
-					return len(str) <= 1000
+					return len(v) <= 1000
 				},
 			},
 			// 版权 (<100)*(<1000)
 			clientExtraKeyCopyrights: valid.ExtraValidRuleInfo{
 				Field: clientExtraKeyCopyrights,
 				Validate: func(value interface{}) bool {
-					copyrights, ok := value.([]string)
+					vs, ok := value.([]string)
 					if !ok {
 						return false
 					}
-					if len(copyrights) > 100 {
+					if len(vs) > 100 {
 						return false
 					}
-					for _, copyright := range copyrights {
-						if len(copyright) > 1000 {
+					for _, v := range vs {
+						if len(v) > 1000 {
 							return false
 						}
 					}
 					return true
 				},
 			},
+			// 服务条款URL (<1000)
+			clientExtraKeySupportUrl: valid.ExtraValidRuleInfo{
+				Field: clientExtraKeySupportUrl,
+				Validate: func(value interface{}) bool {
+					v, ok := value.(string)
+					if !ok {
+						return false
+					}
+					return len(v) <= 1000
+				},
+			},
+			// 隐私政策URL (<1000)
+			clientExtraKeyPrivacyUrl: valid.ExtraValidRuleInfo{
+				Field: clientExtraKeyPrivacyUrl,
+				Validate: func(value interface{}) bool {
+					v, ok := value.(string)
+					if !ok {
+						return false
+					}
+					return len(v) <= 1000
+				},
+			},
 		},
 	}
 }
 
+// TODO:GG test scene
 func (c *Client) ValidStructRules(obj any, fn valid.FuncReportError) {
 	client := obj.(Client)
 	if client.OnlineAt == 0 {
-		fn(client.OnlineAt, "onlineAt", "client-online", "")
+		fn(client.OnlineAt, "OnlineAt", "online-format", "")
 	}
 }
 
@@ -122,12 +145,15 @@ func (c *Client) ValidRuleLocalizes() valid.LocalizeValidRules {
 		valid.SceneAll: valid.LocalizeValidRule{
 			Rule1: map[valid.Tag]map[valid.FieldName][3]interface{}{
 				valid.TagRequired: {
-					"name": {"bind_sss_refuse_nil", false, []any{"client_name"}},
-				}, "client-online": {
-					"onlineAt": {"上线时间", false, []any{}},
+					"Name": {"bind_sss_refuse_nil", false, []any{"client_name"}},
 				},
 			}, Rule2: map[valid.Tag][3]interface{}{
-				"client-name": {"bind_client_name_error", false, nil},
+				"name-format":            {"bind_client_name_error", false, nil},
+				clientExtraKeyWebsite:    {"网站格式不正确", false, nil},
+				clientExtraKeyCopyrights: {"版权格式不正确", false, nil},
+				clientExtraKeySupportUrl: {"服务条款URL格式不正确", false, nil},
+				clientExtraKeyPrivacyUrl: {"隐私政策URL格式不正确", false, nil},
+				"online-format":          {"上线时间格式不正确", false, nil},
 			},
 		},
 	}

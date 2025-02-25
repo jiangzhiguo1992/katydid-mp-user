@@ -166,6 +166,7 @@ func (v *Validator) Valid(scene Scene, obj any) *err.CodeErrs {
 		}
 		var validateErrs validator.ValidationErrors
 		if errors.As(e, &validateErrs) {
+			// TODO:GG 缓存
 			cErrs := err.New()
 			if rl, ok := obj.(ILocalizeValidator); ok {
 				sceneRules := rl.ValidRuleLocalizes()
