@@ -132,7 +132,7 @@ func (c *Client) ValidExtraRules() (utils.KSMap, valid.ExtraValidRules) {
 	}
 }
 
-func (c *Client) ValidRuleLocalizes() valid.LocalizeValidRules {
+func (c *Client) ValidLocalizeRules() valid.LocalizeValidRules {
 	return valid.LocalizeValidRules{
 		valid.SceneAll: valid.LocalizeValidRule{
 			Rule1: map[valid.Tag]map[valid.FieldName][3]interface{}{

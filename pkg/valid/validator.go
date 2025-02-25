@@ -66,12 +66,12 @@ type (
 
 	// IStructValidator 定义结构验证接口
 	IStructValidator interface {
-		ValidStructRules(obj any, fn FuncReportError)
+		ValidStructRules(scene Scene, obj any, fn FuncReportError)
 	}
 
 	// ILocalizeValidator 定义本地化错误规则接口
 	ILocalizeValidator interface {
-		ValidRuleLocalizes() LocalizeValidRules
+		ValidLocalizeRules() LocalizeValidRules
 	}
 
 	Validator struct{}
@@ -148,8 +148,7 @@ func (v *Validator) Valid(scene Scene, obj any) *err.CodeErrs {
 				}
 				// -- 结构验证注册 --
 				if okk2 {
-					// TODO:GG scene
-					sv.ValidStructRules(sl.Current().Interface(), func(field interface{}, fieldName FieldName, tag, param string) {
+					sv.ValidStructRules(scene, sl.Current().Interface(), func(field interface{}, fieldName FieldName, tag, param string) {
 						sl.ReportError(field, string(fieldName), string(fieldName), tag, param)
 					})
 				}
@@ -169,7 +168,7 @@ func (v *Validator) Valid(scene Scene, obj any) *err.CodeErrs {
 			// TODO:GG 缓存
 			cErrs := err.New()
 			if rl, ok := obj.(ILocalizeValidator); ok {
-				sceneRules := rl.ValidRuleLocalizes()
+				sceneRules := rl.ValidLocalizeRules()
 				tagFieldRules := make(map[Tag]map[FieldName][3]interface{})
 				tagRules := make(map[Tag][3]interface{})
 				if tRules := sceneRules[SceneAll]; tRules.Rule1 != nil {
