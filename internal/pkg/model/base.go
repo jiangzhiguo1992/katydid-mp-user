@@ -38,6 +38,17 @@ func NewBaseEmpty() *Base {
 		//Id: nil, // auto
 		//CreateAt: time.Now().UnixMilli(), // auto
 		//UpdateAt: time.Now().UnixMilli(), // auto
+		//DeleteBy: 0,
+		//DeleteAt: nil,
+		Extra: map[string]any{},
+	}
+}
+
+func NewBaseDefault() *Base {
+	return &Base{
+		//Id: nil, // auto
+		//CreateAt: time.Now().UnixMilli(), // auto
+		//UpdateAt: time.Now().UnixMilli(), // auto
 		DeleteBy: 0,
 		DeleteAt: nil,
 		Extra:    map[string]any{},

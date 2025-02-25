@@ -43,16 +43,16 @@ func NewClientDefault(
 	enable bool, name string,
 ) *Client {
 	client := &Client{
-		Base:   model.NewBaseEmpty(),
+		Base:   model.NewBaseDefault(),
 		TeamId: teamId, IP: IP, Part: part,
 		Enable: enable, Name: name,
 		OnlineAt: 0, OfflineAt: 0,
-		//Platforms: make(map[uint16]map[uint16]*Platform),
+		Platforms: []*Platform{},
 	}
 	return client
 }
 
-func (c *Client) FieldRules() map[uint16]map[string]func(reflect.Value) bool {
+func (c *Client) ValidFieldRules() model.ValidFieldResult {
 	rules := map[string]func(reflect.Value) bool{
 		// 名称 (1-50)
 		"client-name": func(refVal reflect.Value) bool {
@@ -68,12 +68,12 @@ func (c *Client) FieldRules() map[uint16]map[string]func(reflect.Value) bool {
 			return true
 		},
 	}
-	return map[uint16]map[string]func(reflect.Value) bool{
+	return model.ValidFieldResult{
 		model.ValidSceneAll: rules,
 	}
 }
 
-func (c *Client) ExtraRules() (utils.KSMap, map[uint16]map[string]model.ExtraValidationRule) {
+func (c *Client) ValidExtraRules() (utils.KSMap, model.ValidExtraResult) {
 	rules := map[string]model.ExtraValidationRule{
 		// 官网 (<=100)
 		clientExtraKeyWebsite: {
@@ -106,18 +106,18 @@ func (c *Client) ExtraRules() (utils.KSMap, map[uint16]map[string]model.ExtraVal
 			},
 		},
 	}
-	return c.Extra, map[uint16]map[string]model.ExtraValidationRule{
+	return c.Extra, model.ValidExtraResult{
 		model.ValidSceneAll: rules,
 	}
 }
 
-func (c *Client) RuleLocalizes() map[uint16]map[string]*model.RuleLocalize {
+func (c *Client) ValidRuleLocalizes() model.ValidRuleLocalize {
 	rules := map[string]*model.RuleLocalize{
 		"required":    model.NewRuleLocalize("%s不能为空", "客户端", false),
 		"min":         model.NewRuleLocalize("%s长度不能小于%s", "客户端名称", true),
 		"client-name": model.NewRuleLocalize("%s必须是2-50个字符的字母、数字、下划线或中划线", "客户端名称", false),
 	}
-	return map[uint16]map[string]*model.RuleLocalize{
+	return model.ValidRuleLocalize{
 		model.ValidSceneAll: rules,
 	}
 }
