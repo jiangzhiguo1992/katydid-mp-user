@@ -3,11 +3,9 @@ package init
 import (
 	"katydid-mp-user/configs"
 	"katydid-mp-user/internal/pkg/text"
-	"katydid-mp-user/internal/pkg/validation"
 	"katydid-mp-user/pkg/err"
 	"katydid-mp-user/pkg/i18n"
 	"katydid-mp-user/pkg/log"
-	"katydid-mp-user/pkg/valid"
 	"time"
 )
 
@@ -50,12 +48,4 @@ func init() {
 	err.Init(text.CodeMsgIds, text.MsgPatterns, func(msg string) {
 		log.Error(msg)
 	})
-
-	// validate
-	valid.RegisterRules(
-		validation.NilTips,
-		validation.FiledValidators,
-		validation.GroupValidators,
-		validation.Structs,
-	)
 }

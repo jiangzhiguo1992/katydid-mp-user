@@ -2,6 +2,7 @@ package model
 
 import (
 	"katydid-mp-user/internal/pkg/model"
+	"katydid-mp-user/pkg/valid"
 	"katydid-mp-user/utils"
 	"reflect"
 	"time"
@@ -52,7 +53,7 @@ func NewClientDefault(
 	return client
 }
 
-func (c *Client) ValidFieldRules() model.ValidFieldResult {
+func (c *Client) ValidFieldRules() valid.FieldValidResult {
 	rules := map[string]func(reflect.Value) bool{
 		// 名称 (1-50)
 		"client-name": func(refVal reflect.Value) bool {
@@ -68,13 +69,13 @@ func (c *Client) ValidFieldRules() model.ValidFieldResult {
 			return true
 		},
 	}
-	return model.ValidFieldResult{
-		model.ValidSceneAll: rules,
+	return valid.FieldValidResult{
+		valid.SceneAll: rules,
 	}
 }
 
-func (c *Client) ValidExtraRules() (utils.KSMap, model.ValidExtraResult) {
-	rules := map[string]model.ValidationExtraInfo{
+func (c *Client) ValidExtraRules() (utils.KSMap, valid.ExtraValidResult) {
+	rules := map[string]valid.ExtraValidationInfo{
 		// 官网 (<=100)
 		clientExtraKeyWebsite: {
 			Required: false,
@@ -106,12 +107,12 @@ func (c *Client) ValidExtraRules() (utils.KSMap, model.ValidExtraResult) {
 			},
 		},
 	}
-	return c.Extra, model.ValidExtraResult{
-		model.ValidSceneAll: rules,
+	return c.Extra, valid.ExtraValidResult{
+		valid.SceneAll: rules,
 	}
 }
 
-func (c *Client) ValidRuleLocalizes() model.ValidRuleLocalize {
+func (c *Client) ValidRuleLocalizes() valid.RulesValidLocalize {
 	rule1s := map[string]map[string][3]interface{}{
 		"required": {
 			"name": {"bind_sss_refuse_nil", false, []any{"client_name"}},
@@ -120,8 +121,8 @@ func (c *Client) ValidRuleLocalizes() model.ValidRuleLocalize {
 	rule2s := map[string][3]interface{}{
 		"client-name": {"bind_client_name_error", false, nil},
 	}
-	return model.ValidRuleLocalize{
-		model.ValidSceneAll: {rule1s, rule2s},
+	return valid.RulesValidLocalize{
+		valid.SceneAll: {rule1s, rule2s},
 	}
 }
 

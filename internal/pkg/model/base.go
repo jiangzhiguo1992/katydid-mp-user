@@ -1,9 +1,7 @@
 package model
 
 import (
-	"errors"
-	"katydid-mp-user/internal/pkg/text"
-	"katydid-mp-user/pkg/err"
+	"katydid-mp-user/pkg/valid"
 	"katydid-mp-user/utils"
 	"time"
 )
@@ -53,6 +51,36 @@ func NewBaseDefault() *Base {
 		DeleteAt: nil,
 		Extra:    map[string]any{},
 	}
+}
+
+func (b *Base) ValidFieldRules() valid.FieldValidResult {
+	return valid.FieldValidResult{}
+}
+
+func (b *Base) ValidExtraRules() (utils.KSMap, valid.ExtraValidResult) {
+	rules := map[string]valid.ExtraValidationInfo{
+		// 管理员备注 (0-10000)
+		extraKeyAdminNote: {
+			Required: false,
+			Validate: func(value interface{}) bool {
+				str, ok := value.(string)
+				if !ok {
+					return false
+				}
+				return len(str) <= extraValAdminNoteMaxLen
+			},
+		},
+	}
+	return b.Extra, valid.ExtraValidResult{
+		valid.SceneAll: rules,
+	}
+}
+
+func (b *Base) ValidStructRules(_ any, _ valid.FuncReportError) {
+}
+
+func (b *Base) ValidRuleLocalizes() valid.RulesValidLocalize {
+	return valid.RulesValidLocalize{}
 }
 
 func (b *Base) CreatedTime() time.Time {
@@ -108,15 +136,4 @@ func (b *Base) GetDelBy(id uint64) int64 {
 	default:
 		return int64(id)
 	}
-}
-
-func (b *Base) Valid() *err.CodeErrs {
-	var errs = new(err.CodeErrs)
-	// extra
-	if note, ok := b.Extra.GetString(extraKeyAdminNote); ok {
-		if len(note) > extraValAdminNoteMaxLen {
-			errs = errs.WrapErrs(errors.New(text.MsgIdDBFieldLarge))
-		}
-	}
-	return errs
 }
