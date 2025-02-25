@@ -21,6 +21,7 @@ const (
 var (
 	validate *validator.Validate
 	once     sync.Once
+	regTypes sync.Map // 避免重复注册
 )
 
 type (
@@ -68,32 +69,9 @@ type (
 
 	Validator struct {
 		validate *validator.Validate
-		regTypes sync.Map // 避免重复注册
 		any
 	}
 )
-
-var validatorPool = sync.Pool{
-	New: func() interface{} {
-		return &Validator{
-			validate: Get(),
-		}
-	},
-}
-
-// AcquireValidator 从对象池获取验证器实例
-func AcquireValidator(obj any) *Validator {
-	v := validatorPool.Get().(*Validator)
-	v.any = obj
-	return v
-}
-
-// ReleaseValidator 将实例还回池中
-func ReleaseValidator(v *Validator) {
-	v.any = nil
-	v.regTypes = sync.Map{}
-	validatorPool.Put(v)
-}
 
 func Get() *validator.Validate {
 	once.Do(func() {
@@ -120,7 +98,7 @@ func New(obj any) *Validator {
 // Valid 根据场景执行验证，并返回本地化错误信息
 func (v *Validator) Valid(scene uint16) *err.CodeErrs {
 	typ := reflect.TypeOf(v.any)
-	if _, ok := v.regTypes.Load(typ); !ok {
+	if _, ok := regTypes.Load(typ); !ok {
 		// -- 字段验证注册 --
 		if fv, ok := v.any.(IFieldValidator); ok {
 			scenes := fv.ValidFieldRules()
@@ -176,7 +154,7 @@ func (v *Validator) Valid(scene uint16) *err.CodeErrs {
 				sv.ValidStructRules(sl.Current().Interface(), sl.ReportError)
 			}, v)
 		}
-		v.regTypes.Store(typ, true)
+		regTypes.Store(typ, true)
 	}
 
 	if e := v.validate.Struct(v.any); e != nil {
