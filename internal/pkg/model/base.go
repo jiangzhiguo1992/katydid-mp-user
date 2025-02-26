@@ -66,9 +66,8 @@ func (b *Base) ValidFieldRules() valid.FieldValidRules {
 	}
 }
 
-func (b *Base) ValidExtraRules(obj any) (utils.KSMap, valid.ExtraValidRules) {
-	cObj := obj.(*Base)
-	return cObj.Extra, valid.ExtraValidRules{
+func (b *Base) ValidExtraRules() (utils.KSMap, valid.ExtraValidRules) {
+	return b.Extra, valid.ExtraValidRules{
 		valid.SceneAll: map[valid.Tag]valid.ExtraValidRuleInfo{
 			// 管理员备注 (0-10000)
 			extraKeyAdminNote: {
@@ -85,17 +84,16 @@ func (b *Base) ValidExtraRules(obj any) (utils.KSMap, valid.ExtraValidRules) {
 	}
 }
 
-func (b *Base) ValidStructRules(scene valid.Scene, obj any, fn valid.FuncReportError) {
-	cObj := obj.(*Base)
+func (b *Base) ValidStructRules(scene valid.Scene, fn valid.FuncReportError) {
 	switch scene {
 	case valid.SceneQuery:
-		if cObj.CreateAt < cObj.UpdateAt {
-			fn(cObj, "CreateAt", valid.TagFormat, "")
+		if b.CreateAt < b.UpdateAt {
+			fn(b, "CreateAt", valid.TagFormat, "")
 		}
-		if (cObj.DeleteAt == nil) && (cObj.DeleteBy != 0) {
-			fn(cObj, "DeleteAt", valid.TagFormat, "")
-		} else if (cObj.DeleteAt != nil) && (cObj.DeleteBy == 0) {
-			fn(cObj, "DeleteBy", valid.TagFormat, "")
+		if (b.DeleteAt == nil) && (b.DeleteBy != 0) {
+			fn(b, "DeleteAt", valid.TagFormat, "")
+		} else if (b.DeleteAt != nil) && (b.DeleteBy == 0) {
+			fn(b, "DeleteBy", valid.TagFormat, "")
 		}
 	}
 }

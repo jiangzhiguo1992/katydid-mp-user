@@ -67,12 +67,12 @@ type (
 
 	// IExtraValidator 定义额外字段验证接口
 	IExtraValidator interface {
-		ValidExtraRules(obj any) (utils.KSMap, ExtraValidRules)
+		ValidExtraRules() (utils.KSMap, ExtraValidRules)
 	}
 
 	// IStructValidator 定义结构验证接口
 	IStructValidator interface {
-		ValidStructRules(scene Scene, obj any, fn FuncReportError)
+		ValidStructRules(scene Scene, fn FuncReportError)
 	}
 
 	// ILocalizeValidator 定义本地化错误规则接口
@@ -146,6 +146,9 @@ func (v *Validator) validFields(obj any, scene Scene) *err.CodeErrs {
 	}
 
 	sceneRules := fv.ValidFieldRules()
+	if sceneRules == nil {
+		return nil
+	}
 	tagRules := make(map[Tag]FieldValidRuleFn)
 	if tRules := sceneRules[SceneAll]; tRules != nil {
 		for tag, rule := range tRules {
@@ -176,7 +179,10 @@ func (v *Validator) validExtra(obj any, sl validator.StructLevel, scene Scene) {
 		return
 	}
 
-	extra, sceneRules := ev.ValidExtraRules(obj)
+	extra, sceneRules := ev.ValidExtraRules()
+	if (extra == nil) || (sceneRules == nil) {
+		return
+	}
 	tagRules := make(map[Tag]ExtraValidRuleInfo)
 	if tRules := sceneRules[SceneAll]; tRules != nil {
 		for tag, rule := range tRules {
@@ -209,7 +215,7 @@ func (v *Validator) validStruct(obj any, sl validator.StructLevel, scene Scene) 
 		return
 	}
 
-	sv.ValidStructRules(scene, obj, func(field interface{}, fieldName FieldName, tag Tag, param string) {
+	sv.ValidStructRules(scene, func(field interface{}, fieldName FieldName, tag Tag, param string) {
 		sl.ReportError(field, string(fieldName), string(fieldName), string(tag), param)
 	})
 }
@@ -295,6 +301,9 @@ func (v *Validator) validLocalize(scene Scene, typ reflect.Type, obj any, rl ILo
 	cacheRules, ok := regLocs.Load(typ)
 	if !ok {
 		sceneRules := rl.ValidLocalizeRules()
+		if sceneRules == nil {
+			return cErrs
+		}
 		if tRules := sceneRules[SceneAll]; tRules.Rule1 != nil {
 			for tag, rule := range tRules.Rule1 {
 				tagFieldRules[tag] = rule
