@@ -1,10 +1,13 @@
 package params
 
 import (
+	"errors"
 	"fmt"
 	"github.com/gin-gonic/gin"
+	"github.com/gin-gonic/gin/binding"
 	"katydid-mp-user/pkg/err"
 	"katydid-mp-user/pkg/i18n"
+	"strings"
 )
 
 func Response(c *gin.Context, code int, msg string, data any) {
@@ -16,10 +19,11 @@ func Response(c *gin.Context, code int, msg string, data any) {
 }
 
 func ResponseErr(c *gin.Context, code int, data error) {
-	lang := c.GetHeader("Accept-Language")
+	lang := c.GetHeader("Accept-Language") // TODO:GG 需要过滤吗/转换吗?
 
 	var cErr *err.CodeErrs
-	if v, ok := data.(*err.CodeErrs); !ok {
+	var v *err.CodeErrs
+	if !errors.As(data, &v) {
 		cErr = err.Match(data)
 	} else {
 		cErr = v
@@ -46,8 +50,33 @@ func ResponseErr(c *gin.Context, code int, data error) {
 	response(c, code, msg, nil)
 }
 
-// TODO:GG 根据accesscontentTypes来判断返回json还是prof?
 func response(c *gin.Context, code int, msg string, data any) {
-	// TODO:GG 有些字段，返回的时候是要忽略的
-	c.JSON(code, gin.H{"code": code, "msg": msg, "data": data})
+	// TODO:GG 有些字段，返回的时候是要忽略的(利用json:"-"来做吗?)
+	body := gin.H{"code": code, "msg": msg, "data": data}
+
+	accept := c.GetHeader("Accept")
+	if accept == "" {
+		accept = binding.MIMEJSON
+	} else if strings.Contains(accept, "*/*") {
+		accept = binding.MIMEJSON
+	} else if strings.Contains(accept, "application/*") {
+		accept = binding.MIMEJSON
+	} else if strings.Contains(accept, "text/*") {
+		accept = binding.MIMEXML
+	}
+	if strings.Contains(accept, binding.MIMEJSON) {
+		c.JSON(code, body)
+	} else if strings.Contains(accept, binding.MIMEPROTOBUF) {
+		c.ProtoBuf(code, body)
+	} else if strings.Contains(accept, binding.MIMEHTML) {
+		c.HTML(code, "", msg)
+	} else if strings.Contains(accept, binding.MIMEXML) || strings.Contains(accept, binding.MIMEXML2) {
+		c.XML(code, body)
+	} else if strings.Contains(accept, binding.MIMETOML) {
+		c.TOML(code, body)
+	} else if strings.Contains(accept, binding.MIMEYAML) || strings.Contains(accept, binding.MIMEYAML2) {
+		c.YAML(code, body)
+	} else {
+		c.String(code, msg)
+	}
 }

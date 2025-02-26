@@ -28,6 +28,7 @@ type Config struct {
 
 type Manager struct {
 	config Config
+	langs  []string
 	bundle *i18n.Bundle
 }
 
@@ -52,15 +53,25 @@ func NewManager(cfg Config) (*Manager, error) {
 
 	m := &Manager{
 		config: cfg,
+		langs:  nil,
 		bundle: i18n.NewBundle(defaultTag),
 	}
 
 	m.registerUnmarshalFuncs()
 
-	if err := m.loadMessageFiles(); err != nil {
+	if err = m.loadMessageFiles(); err != nil {
 		return nil, err
 	}
 	return m, nil
+}
+
+func HasLang(lang string) bool {
+	for _, e := range defaultManager.langs {
+		if lang == e {
+			return true
+		}
+	}
+	return false
 }
 
 func (m *Manager) registerUnmarshalFuncs() {
@@ -84,17 +95,17 @@ func (m *Manager) loadMessageFiles() error {
 	}
 	slog.Info("■ ■ i18n ■ ■ loading i18n files", slog.Any("files", files))
 
-	langs := make([]string, 0, len(files))
+	m.langs = make([]string, 0, len(files))
 	for _, file := range files {
 		if _, err := m.bundle.LoadMessageFile(file); err != nil {
 			return fmt.Errorf("■ ■ i18n ■ ■ load message file %s failed: %w", file, err)
 		}
-		langs = append(langs, extractLangFromFilename(file))
+		m.langs = append(m.langs, extractLangFromFilename(file))
 	}
-	slog.Info("■ ■ i18n ■ ■ loading i18n langs", slog.Any("languages", langs))
+	slog.Info("■ ■ i18n ■ ■ loading i18n langs", slog.Any("languages", m.langs))
 
 	hasDefault := false
-	for _, lang := range langs {
+	for _, lang := range m.langs {
 		if lang == m.config.DefaultLang {
 			hasDefault = true
 			break
@@ -129,9 +140,12 @@ func extractLangFromFilename(file string) string {
 
 func (m *Manager) Localize(lang, msgID string, data map[string]any, nilBackId bool) string {
 	// 构建语言标签列表，实现回退链
-	tags := []string{lang}
+	var tags []string
+	if HasLang(lang) {
+		tags = append(tags, lang)
+	}
 	base := strings.Split(lang, "-")[0]
-	if base != lang {
+	if base != lang && HasLang(base) {
 		tags = append(tags, base)
 	}
 	tags = append(tags, m.config.DefaultLang)
