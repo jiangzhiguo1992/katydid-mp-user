@@ -36,7 +36,7 @@ func Match(err error) *CodeErrs {
 	if err == nil {
 		return nil
 	} else if matcher == nil {
-		return New(err)
+		return New(err).Real()
 	}
 
 	// 如果已经是自定义错误，直接返回
@@ -71,7 +71,7 @@ func Match(err error) *CodeErrs {
 		for code, locIds := range matcher.codeLocIds {
 			for _, locId := range locIds {
 				if locId == matchLocId {
-					return New(err).WithCode(code).WrapLocalize(locId, nil, nil)
+					return New(err).WithCode(code).WrapLocalize(locId, nil, nil).Real()
 				}
 			}
 		}
@@ -81,5 +81,5 @@ func Match(err error) *CodeErrs {
 	}
 
 	// 未匹配到，返回通用错误
-	return New(err)
+	return New(err).Real()
 }

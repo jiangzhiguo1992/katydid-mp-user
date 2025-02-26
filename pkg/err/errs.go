@@ -80,6 +80,17 @@ func (c *CodeErrs) Err() error {
 	return c
 }
 
+func (c *CodeErrs) IsNil() bool {
+	return (c.Err() == nil) && (len(c.localizes) == 0)
+}
+
+func (c *CodeErrs) Real() *CodeErrs {
+	if c.IsNil() {
+		return nil
+	}
+	return c
+}
+
 func (c *CodeErrs) ToLocales(fun func(string, []any, map[string]any) string) string {
 	if len(c.localizes) > 0 {
 		var builder strings.Builder

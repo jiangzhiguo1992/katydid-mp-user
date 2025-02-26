@@ -26,8 +26,8 @@ const (
 var (
 	validate *validator.Validate
 	once     sync.Once
-	regTypes sync.Map // 验证注册类型
-	regLocs  sync.Map // 本地化文本缓存
+	regTypes = &sync.Map{} // 验证注册类型
+	regLocs  = &sync.Map{} // 本地化文本缓存
 )
 
 type (
@@ -85,7 +85,11 @@ type (
 
 func Get() *validator.Validate {
 	once.Do(func() {
-		validate = validator.New(validator.WithRequiredStructEnabled())
+		opts := []validator.Option{
+			validator.WithRequiredStructEnabled(),
+		}
+		validate = validator.New(opts...)
+		// 默认json标签处理
 		validate.RegisterTagNameFunc(func(fld reflect.StructField) string {
 			name := fld.Tag.Get("json")
 			if name == "-" {
@@ -266,5 +270,5 @@ func (v *Validator) validLocalize(typ reflect.Type, scene Scene, rl ILocalizeVal
 			}
 		}
 	}
-	return cErrs
+	return cErrs.Real()
 }
