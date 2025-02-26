@@ -16,20 +16,21 @@ const (
 	clientExtraKeyPrivacyUrl     = "privacyUrl"     // 隐私政策URL
 	clientExtraKeyUserMaxAccount = "userMaxAccount" // 用户最多账户数
 	clientExtraKeyUserMaxToken   = "userMaxToken"   // 用户最多令牌数 (同时登录最大数，防止工作室?)
+	// TODO:GG 支持的账号认证，必须的账号认证?
 )
 
 // Client 客户端
 type Client struct {
 	*model.Base
-	TeamId uint64 `json:"teamId"` // 团队
-	IP     uint   `json:"IP"`     // 系列 (eg:大富翁IP)
-	Part   uint   `json:"part"`   // 类型 (eg:单机版)
+	TeamId uint64 `json:"teamId" validate:"required"` // 团队
+	IP     uint   `json:"IP"`                         // 系列 (eg:大富翁IP)
+	Part   uint   `json:"part"`                       // 类型 (eg:单机版)
 
-	Enable bool   `json:"enable"`                               // 是否可用 (一般不用，下架之类的，没有reason)
-	Name   string `json:"name" validate:"required,name-format"` // 客户端名称
+	Enable    bool   `json:"enable"`                               // 是否可用 (一般不用，下架之类的，没有reason)
+	Name      string `json:"name" validate:"required,name-format"` // 客户端名称
+	OnlineAt  int64  `json:"onlineAt"`                             // 上线时间 (时间没到时，只能停留在首页，提示bulletins)
+	OfflineAt int64  `json:"offlineAt"`                            // 下线时间 (时间到后，强制下线+升级/等待/...)
 
-	OnlineAt  int64 `json:"onlineAt"`  // 上线时间 (时间没到时，只能停留在首页，提示bulletins)
-	OfflineAt int64 `json:"offlineAt"` // 下线时间 (时间到后，强制下线+升级/等待/...)
 	//RemainingTime // TODO:GG 维护信息
 
 	Platforms []*Platform `json:"platforms" gorm:"-:all"` // [platform][area]平台列表
@@ -43,14 +44,13 @@ func NewClientDefault(
 	teamId uint64, IP, part uint,
 	enable bool, name string,
 ) *Client {
-	client := &Client{
+	return &Client{
 		Base:   model.NewBaseDefault(),
 		TeamId: teamId, IP: IP, Part: part,
 		Enable: enable, Name: name,
 		OnlineAt: 0, OfflineAt: 0,
 		Platforms: []*Platform{},
 	}
-	return client
 }
 
 func (c *Client) ValidFieldRules() valid.FieldValidRules {
