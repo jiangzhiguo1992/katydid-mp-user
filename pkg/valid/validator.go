@@ -10,11 +10,12 @@ import (
 )
 
 const (
-	SceneAll   Scene = 0
-	SceneBind  Scene = 1
-	SceneSave  Scene = 2
-	SceneQuery Scene = 3
-	SceneShow  Scene = 4
+	SceneAll    Scene = 0
+	SceneBind   Scene = 1
+	SceneSave   Scene = 2
+	SceneQuery  Scene = 3
+	SceneShow   Scene = 4
+	SceneCustom Scene = 1000
 
 	TagRequired Tag = "required"
 	TagFormat   Tag = "format"
@@ -63,7 +64,7 @@ type (
 
 	// IExtraValidator 定义额外字段验证接口
 	IExtraValidator interface {
-		ValidExtraRules() (utils.KSMap, ExtraValidRules)
+		ValidExtraRules(obj any) (utils.KSMap, ExtraValidRules)
 	}
 
 	// IStructValidator 定义结构验证接口
@@ -111,13 +112,13 @@ func (v *Validator) Valid(scene Scene, obj any) *err.CodeErrs {
 				if hasExtra {
 					// -- 额外验证注册 --
 					if ev, okk := cObj.(IExtraValidator); okk {
-						v.validExtra(scene, ev, sl)
+						v.validExtra(cObj, scene, ev, sl)
 					}
 				}
 				if hasStruct {
 					// -- 结构验证注册 --
 					if sv, okk := cObj.(IStructValidator); okk {
-						v.validStruct(scene, sv, sl)
+						v.validStruct(cObj, scene, sv, sl)
 					}
 				}
 			}, obj)
@@ -133,66 +134,10 @@ func (v *Validator) Valid(scene Scene, obj any) *err.CodeErrs {
 		}
 		var validateErrs validator.ValidationErrors
 		if errors.As(e, &validateErrs) {
-			// TODO:GG 缓存
-			cErrs := err.New()
+			// -- 本地化错误注册 --
 			if rl, ok := obj.(ILocalizeValidator); ok {
-				sceneRules := rl.ValidLocalizeRules()
-				tagFieldRules := make(map[Tag]map[FieldName]LocalizeValidRuleParam)
-				tagRules := make(map[Tag]LocalizeValidRuleParam)
-				if tRules := sceneRules[SceneAll]; tRules.Rule1 != nil {
-					for tag, rule := range tRules.Rule1 {
-						tagFieldRules[tag] = rule
-					}
-				}
-				if tRules := sceneRules[SceneAll]; tRules.Rule2 != nil {
-					for tag, rule := range tRules.Rule2 {
-						tagRules[tag] = rule
-					}
-				}
-				if tRules := sceneRules[scene]; tRules.Rule1 != nil {
-					for tag, rule := range tRules.Rule1 {
-						tagFieldRules[tag] = rule
-					}
-				}
-				if tRules := sceneRules[scene]; tRules.Rule2 != nil {
-					for tag, rule := range tRules.Rule2 {
-						tagRules[tag] = rule
-					}
-				}
-				for _, ee := range validateErrs {
-					// -- 本地化错误注册(Tag+Field) --
-					for tag, fieldRules := range tagFieldRules {
-						if ee.Tag() == string(tag) {
-							for field, rules := range fieldRules {
-								if ee.Field() == string(field) {
-									var params []any
-									if rules[2] != nil {
-										params = append(params, rules[2].([]any)...)
-									}
-									if rules[1].(bool) {
-										params = append(params, ee.Param())
-									}
-									_ = cErrs.WrapLocalize(rules[0].(string), params, nil)
-								}
-							}
-						}
-					}
-					// -- 本地化错误注册(Tag) --
-					for tag, rules := range tagRules {
-						if ee.Tag() == string(tag) {
-							var params []any
-							if rules[2] != nil {
-								params = append(params, rules[2].([]any)...)
-							}
-							if rules[1].(bool) {
-								params = append(params, ee.Param())
-							}
-							_ = cErrs.WrapLocalize(rules[0].(string), params, nil)
-						}
-					}
-				}
+				return v.validLocalize(scene, rl, validateErrs)
 			}
-			return cErrs
 		}
 		return err.Match(e)
 	}
@@ -222,8 +167,8 @@ func (v *Validator) validFields(scene Scene, fv IFieldValidator) *err.CodeErrs {
 	return nil
 }
 
-func (v *Validator) validExtra(scene Scene, ev IExtraValidator, sl validator.StructLevel) {
-	extra, sceneRules := ev.ValidExtraRules()
+func (v *Validator) validExtra(obj any, scene Scene, ev IExtraValidator, sl validator.StructLevel) {
+	extra, sceneRules := ev.ValidExtraRules(obj)
 	tagRules := make(map[Tag]ExtraValidRuleInfo)
 	if tRules := sceneRules[SceneAll]; tRules != nil {
 		for tag, rule := range tRules {
@@ -247,9 +192,69 @@ func (v *Validator) validExtra(scene Scene, ev IExtraValidator, sl validator.Str
 	}
 }
 
-func (v *Validator) validStruct(scene Scene, sv IStructValidator, sl validator.StructLevel) {
-	cObj := sl.Current().Addr().Interface()
-	sv.ValidStructRules(scene, cObj, func(field interface{}, fieldName FieldName, tag Tag, param string) {
+func (v *Validator) validStruct(obj any, scene Scene, sv IStructValidator, sl validator.StructLevel) {
+	sv.ValidStructRules(scene, obj, func(field interface{}, fieldName FieldName, tag Tag, param string) {
 		sl.ReportError(field, string(fieldName), string(fieldName), string(tag), param)
 	})
+}
+
+// TODO:GG 缓存 做在这里，还是model里?
+func (v *Validator) validLocalize(scene Scene, rl ILocalizeValidator, validateErrs validator.ValidationErrors) *err.CodeErrs {
+	sceneRules := rl.ValidLocalizeRules()
+	tagFieldRules := make(map[Tag]map[FieldName]LocalizeValidRuleParam)
+	tagRules := make(map[Tag]LocalizeValidRuleParam)
+	if tRules := sceneRules[SceneAll]; tRules.Rule1 != nil {
+		for tag, rule := range tRules.Rule1 {
+			tagFieldRules[tag] = rule
+		}
+	}
+	if tRules := sceneRules[SceneAll]; tRules.Rule2 != nil {
+		for tag, rule := range tRules.Rule2 {
+			tagRules[tag] = rule
+		}
+	}
+	if tRules := sceneRules[scene]; tRules.Rule1 != nil {
+		for tag, rule := range tRules.Rule1 {
+			tagFieldRules[tag] = rule
+		}
+	}
+	if tRules := sceneRules[scene]; tRules.Rule2 != nil {
+		for tag, rule := range tRules.Rule2 {
+			tagRules[tag] = rule
+		}
+	}
+	cErrs := err.New()
+	for _, ee := range validateErrs {
+		// -- 本地化错误注册(Tag+Field) --
+		for tag, fieldRules := range tagFieldRules {
+			if ee.Tag() == string(tag) {
+				for field, rules := range fieldRules {
+					if ee.Field() == string(field) {
+						var params []any
+						if rules[2] != nil {
+							params = append(params, rules[2].([]any)...)
+						}
+						if rules[1].(bool) {
+							params = append(params, ee.Param())
+						}
+						_ = cErrs.WrapLocalize(rules[0].(string), params, nil)
+					}
+				}
+			}
+		}
+		// -- 本地化错误注册(Tag) --
+		for tag, rules := range tagRules {
+			if ee.Tag() == string(tag) {
+				var params []any
+				if rules[2] != nil {
+					params = append(params, rules[2].([]any)...)
+				}
+				if rules[1].(bool) {
+					params = append(params, ee.Param())
+				}
+				_ = cErrs.WrapLocalize(rules[0].(string), params, nil)
+			}
+		}
+	}
+	return cErrs
 }

@@ -73,8 +73,9 @@ func (c *Client) ValidFieldRules() valid.FieldValidRules {
 	}
 }
 
-func (c *Client) ValidExtraRules() (utils.KSMap, valid.ExtraValidRules) {
-	return c.Extra, valid.ExtraValidRules{
+func (c *Client) ValidExtraRules(obj any) (utils.KSMap, valid.ExtraValidRules) {
+	cObj := obj.(*Client)
+	return cObj.Extra, valid.ExtraValidRules{
 		valid.SceneAll: valid.ExtraValidRule{
 			// 官网 (<1000)
 			clientExtraKeyWebsite: valid.ExtraValidRuleInfo{
