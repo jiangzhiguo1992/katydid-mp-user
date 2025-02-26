@@ -3,6 +3,7 @@ hellos = "app, 你好s {{.Name}}, {{.Count}}"
 
 # ....
 unknown_err = "未知异常"
+unknown_validator_err = "未知验证异常"
 
 err_db_add_nil = "数据库错误，插入对象为空"
 err_db_del_nil = "数据库错误，删除对象为空"
@@ -28,6 +29,7 @@ format_email_err = "邮箱地址格式不正确"
 format_phone_err = "手机号格式不正确"
 format_pwd_err = "密码格式不正确,必须包含至少一个数字和一个字母,长度必须在6-20个字符之间"
 format_client_name_err = "客户端名称必须是1-50个字符的字母、数字、下划线或中划线"
+format_admin_note_err = "管理员备注格式不正确"
 format_website_err = "网站地址格式不正确"
 format_copyrights_err = "版权信息格式不正确"
 format_support_url_err = "服务条款URL格式不正确"

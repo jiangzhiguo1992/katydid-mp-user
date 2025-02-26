@@ -256,13 +256,18 @@ func (v *Validator) handleValidationError(e error, typ reflect.Type, scene Scene
 	if errors.As(e, &validateErrs) {
 		// -- 本地化错误注册 --
 		if rl, ok := obj.(ILocalizeValidator); ok {
-			return v.validLocalize(typ, scene, rl, validateErrs)
+			return v.validLocalize(scene, typ, obj, rl, validateErrs)
 		}
 	}
 	return err.Match(e)
 }
 
-func (v *Validator) validLocalize(typ reflect.Type, scene Scene, rl ILocalizeValidator, validateErrs validator.ValidationErrors) *err.CodeErrs {
+func (v *Validator) validLocalize(scene Scene, typ reflect.Type, obj any, rl ILocalizeValidator, validateErrs validator.ValidationErrors) *err.CodeErrs {
+	// 处理组合类型的验证规则
+	if e := v.registerEmbeddedLocalizes(scene, typ, obj, validateErrs); e != nil {
+		return e
+	}
+
 	tagFieldRules := make(map[Tag]map[FieldName]LocalizeValidRuleParam)
 	tagRules := make(map[Tag]LocalizeValidRuleParam)
 	cacheRules, ok := regLocs.Load(typ)
@@ -328,7 +333,49 @@ func (v *Validator) validLocalize(typ reflect.Type, scene Scene, rl ILocalizeVal
 		}
 	}
 	if cErrs.IsNil() {
-		_ = cErrs.WrapLocalize("unknown_err", nil, nil)
+		_ = cErrs.WrapLocalize("unknown_validator_err", nil, nil)
 	}
 	return cErrs.Real()
+}
+
+// registerEmbeddedLocalizes 递归注册组合类型的本地化规则
+func (v *Validator) registerEmbeddedLocalizes(scene Scene, typ reflect.Type, obj any, validateErrs validator.ValidationErrors) *err.CodeErrs {
+	val := reflect.ValueOf(obj)
+	if val.Kind() == reflect.Ptr {
+		val = val.Elem()
+		typ = typ.Elem()
+	}
+
+	// 遍历所有字段
+	for i := 0; i < typ.NumField(); i++ {
+		field := typ.Field(i)
+		fieldVal := val.Field(i)
+
+		// 检查是否是组合类型的字段
+		if field.Anonymous {
+			fieldType := field.Type
+			var embedObj any
+
+			// 处理指针类型的组合字段
+			if fieldType.Kind() == reflect.Ptr {
+				if !fieldVal.IsNil() {
+					embedObj = fieldVal.Interface()
+					fieldType = fieldType.Elem()
+				}
+			} else {
+				// 处理非指针类型的组合字段
+				embedObj = fieldVal.Addr().Interface()
+			}
+
+			// 只处理实现了 ILocalizeValidator 接口的组合字段
+			if fieldType.Kind() == reflect.Struct && embedObj != nil {
+				if embedLocalizer, ok := embedObj.(ILocalizeValidator); ok {
+					if e := v.validLocalize(scene, reflect.TypeOf(embedObj), embedObj, embedLocalizer, validateErrs); e != nil {
+						return e
+					}
+				}
+			}
+		}
+	}
+	return nil
 }

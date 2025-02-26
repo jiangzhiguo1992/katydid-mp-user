@@ -15,7 +15,7 @@ const (
 
 	// Extra 相关常量
 	extraKeyAdminNote       = "adminNote" // 管理员备注
-	extraValAdminNoteMaxLen = 10000       // 最大长度
+	extraValAdminNoteMaxLen = 100000      // 最大长度
 )
 
 type (
@@ -53,34 +53,50 @@ func NewBaseDefault() *Base {
 	}
 }
 
-func (b *Base) ValidFieldRules() valid.FieldValidResult {
-	return valid.FieldValidResult{}
+func (b *Base) ValidFieldRules() valid.FieldValidRules {
+	return valid.FieldValidRules{
+		valid.SceneAll:        valid.FieldValidRule{},
+		valid.SceneBind:       valid.FieldValidRule{},
+		valid.SceneSave:       valid.FieldValidRule{},
+		valid.SceneInsert:     valid.FieldValidRule{},
+		valid.SceneUpdate:     valid.FieldValidRule{},
+		valid.SceneQuery:      valid.FieldValidRule{},
+		valid.SceneShow:       valid.FieldValidRule{},
+		valid.SceneCustom + 1: valid.FieldValidRule{},
+	}
 }
 
-func (b *Base) ValidExtraRules() (utils.KSMap, valid.ExtraValidResult) {
-	rules := map[string]valid.ExtraValidationInfo{
-		// 管理员备注 (0-10000)
-		extraKeyAdminNote: {
-			Required: false,
-			Validate: func(value interface{}) bool {
-				str, ok := value.(string)
-				if !ok {
-					return false
-				}
-				return len(str) <= extraValAdminNoteMaxLen
+func (b *Base) ValidExtraRules(obj any) (utils.KSMap, valid.ExtraValidRules) {
+	cObj := obj.(*Base)
+	return cObj.Extra, valid.ExtraValidRules{
+		valid.SceneAll: map[valid.Tag]valid.ExtraValidRuleInfo{
+			// 管理员备注 (0-10000)
+			extraKeyAdminNote: {
+				Field: extraKeyAdminNote,
+				ValidFn: func(value interface{}) bool {
+					str, ok := value.(string)
+					if !ok {
+						return false
+					}
+					return len(str) <= extraValAdminNoteMaxLen
+				},
 			},
 		},
 	}
-	return b.Extra, valid.ExtraValidResult{
-		valid.SceneAll: rules,
+}
+
+func (b *Base) ValidStructRules(scene valid.Scene, obj any, fn valid.FuncReportError) {
+	//_ = obj.(*Base) TODO:GG 报错?
+}
+
+func (b *Base) ValidLocalizeRules() valid.LocalizeValidRules {
+	return valid.LocalizeValidRules{
+		valid.SceneAll: valid.LocalizeValidRule{
+			Rule1: nil, Rule2: map[valid.Tag]valid.LocalizeValidRuleParam{
+				extraKeyAdminNote: {"format_admin_note_err", false, nil},
+			},
+		},
 	}
-}
-
-func (b *Base) ValidStructRules(_ any, _ valid.FuncReportError) {
-}
-
-func (b *Base) ValidRuleLocalizes() valid.RulesValidLocalize {
-	return valid.RulesValidLocalize{}
 }
 
 func (b *Base) CreatedTime() time.Time {
