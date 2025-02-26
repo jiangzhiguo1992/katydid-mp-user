@@ -2,6 +2,8 @@ hello = "app, 你好 {{.Name}}, {{.Count}}"
 hellos = "app, 你好s {{.Name}}, {{.Count}}"
 
 # ....
+unknown_err = "未知异常"
+
 err_db_add_nil = "数据库错误，插入对象为空"
 err_db_del_nil = "数据库错误，删除对象为空"
 err_db_upd_nil = "数据库错误，更新对象为空"
@@ -30,3 +32,4 @@ format_website_err = "网站地址格式不正确"
 format_copyrights_err = "版权信息格式不正确"
 format_support_url_err = "服务条款URL格式不正确"
 format_privacy_url_err = "隐私政策URL格式不正确"
+
