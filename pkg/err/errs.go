@@ -45,6 +45,17 @@ func (c *CodeErrs) WrapLocalize(localeId string, template1 []any, template2 map[
 	return c
 }
 
+// WrapCodeErrs 添加新错误
+func (c *CodeErrs) WrapCodeErrs(errs ...*CodeErrs) *CodeErrs {
+	for _, v := range errs {
+		_ = c.WrapErrs(v.Errs()...)
+		for _, vv := range v.localizes {
+			_ = c.WrapLocalize(vv.localeId, vv.template1, vv.template2)
+		}
+	}
+	return c
+}
+
 // Error 实现 error 接口
 func (c *CodeErrs) Error() string {
 	if len(c.errs) == 0 {

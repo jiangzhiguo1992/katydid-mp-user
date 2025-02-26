@@ -133,6 +133,10 @@ func (c *Client) ValidExtraRules(obj any) (utils.KSMap, valid.ExtraValidRules) {
 	}
 }
 
+func (c *Client) ValidStructRules(_ valid.Scene, obj any, _ valid.FuncReportError) {
+	_ = obj.(*Client)
+}
+
 func (c *Client) ValidLocalizeRules() valid.LocalizeValidRules {
 	return valid.LocalizeValidRules{
 		valid.SceneAll: valid.LocalizeValidRule{

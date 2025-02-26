@@ -89,14 +89,14 @@ func Get() *validator.Validate {
 			validator.WithRequiredStructEnabled(),
 		}
 		validate = validator.New(opts...)
-		// 默认json标签处理
-		validate.RegisterTagNameFunc(func(fld reflect.StructField) string {
-			name := fld.Tag.Get("json")
-			if name == "-" {
-				return fld.Name
-			}
-			return name
-		})
+		// 设置Tag <= 默认json标签
+		//validate.RegisterTagNameFunc(func(fld reflect.StructField) string {
+		//	name := fld.Tag.Get("json")
+		//	if name == "-" {
+		//		return fld.Name
+		//	}
+		//	return name
+		//})
 	})
 	return validate
 }
@@ -121,37 +121,28 @@ func (v *Validator) Valid(obj any, scene Scene) *err.CodeErrs {
 
 func (v *Validator) registerValidations(obj any, scene Scene) *err.CodeErrs {
 	// -- 字段验证注册 --
-	if fv, okk := obj.(IFieldValidator); okk {
-		if errs := v.validFields(fv, scene); errs != nil {
-			return errs
-		}
+	if errs := v.validFields(obj, scene); errs != nil {
+		return errs
 	}
-	_, hasExtra := obj.(IExtraValidator)
-	_, hasStruct := obj.(IStructValidator)
-	if hasExtra || hasStruct {
-		Get().RegisterStructValidation(func(sl validator.StructLevel) {
-			cObj := sl.Current().Addr().Interface()
-			if hasExtra {
-				// -- 额外验证注册 --
-				if _, okk := cObj.(IExtraValidator); okk {
-					v.validExtra(cObj, sl, scene)
-				}
-			}
-			if hasStruct {
-				// -- 结构验证注册 --
-				if _, okk := cObj.(IStructValidator); okk {
-					v.validStruct(cObj, sl, scene)
-				}
-			}
-		}, obj)
-	}
+	Get().RegisterStructValidation(func(sl validator.StructLevel) {
+		cObj := sl.Current().Addr().Interface()
+		// -- 额外验证注册 --
+		v.validExtra(cObj, sl, scene)
+		// -- 结构验证注册 --
+		v.validStruct(cObj, sl, scene)
+	}, obj)
 	return nil
 }
 
-func (v *Validator) validFields(fv IFieldValidator, scene Scene) *err.CodeErrs {
+func (v *Validator) validFields(obj any, scene Scene) *err.CodeErrs {
 	// 处理嵌入字段的验证规则
-	if e := v.registerEmbeddedValidations(fv, reflect.TypeOf(fv), scene, 1, nil); e != nil {
+	if e := v.registerEmbeddedValidations(obj, reflect.TypeOf(obj), scene, 1, nil); e != nil {
 		return e
+	}
+
+	fv, ok := obj.(IFieldValidator)
+	if !ok {
+		return nil
 	}
 
 	sceneRules := fv.ValidFieldRules()
@@ -180,7 +171,12 @@ func (v *Validator) validExtra(obj any, sl validator.StructLevel, scene Scene) {
 	// 处理嵌入字段的验证规则
 	_ = v.registerEmbeddedValidations(obj, reflect.TypeOf(obj), scene, 2, sl)
 
-	extra, sceneRules := obj.(IExtraValidator).ValidExtraRules(obj)
+	ev, ok := obj.(IExtraValidator)
+	if !ok {
+		return
+	}
+
+	extra, sceneRules := ev.ValidExtraRules(obj)
 	tagRules := make(map[Tag]ExtraValidRuleInfo)
 	if tRules := sceneRules[SceneAll]; tRules != nil {
 		for tag, rule := range tRules {
@@ -208,7 +204,12 @@ func (v *Validator) validStruct(obj any, sl validator.StructLevel, scene Scene) 
 	// 处理嵌入字段的验证规则
 	_ = v.registerEmbeddedValidations(obj, reflect.TypeOf(obj), scene, 3, sl)
 
-	obj.(IStructValidator).ValidStructRules(scene, obj, func(field interface{}, fieldName FieldName, tag Tag, param string) {
+	sv, ok := obj.(IStructValidator)
+	if !ok {
+		return
+	}
+
+	sv.ValidStructRules(scene, obj, func(field interface{}, fieldName FieldName, tag Tag, param string) {
 		sl.ReportError(field, string(fieldName), string(fieldName), string(tag), param)
 	})
 }
@@ -284,8 +285,9 @@ func (v *Validator) handleValidationError(obj any, typ reflect.Type, scene Scene
 
 func (v *Validator) validLocalize(scene Scene, typ reflect.Type, obj any, rl ILocalizeValidator, validateErrs validator.ValidationErrors) *err.CodeErrs {
 	// 处理组合类型的验证规则
+	cErrs := err.New()
 	if e := v.registerEmbeddedLocalizes(scene, typ, obj, validateErrs); e != nil {
-		return e
+		_ = cErrs.WrapCodeErrs(e)
 	}
 
 	tagFieldRules := make(map[Tag]map[FieldName]LocalizeValidRuleParam)
@@ -319,7 +321,6 @@ func (v *Validator) validLocalize(scene Scene, typ reflect.Type, obj any, rl ILo
 		tagRules = cacheRules.(LocalizeValidRule).Rule2
 	}
 
-	cErrs := err.New()
 	for _, ee := range validateErrs {
 		// -- 本地化错误注册(Tag+Field) --
 		for tag, fieldRules := range tagFieldRules {
@@ -353,7 +354,7 @@ func (v *Validator) validLocalize(scene Scene, typ reflect.Type, obj any, rl ILo
 		}
 	}
 	if cErrs.IsNil() {
-		_ = cErrs.WrapLocalize("unknown_validator_err", nil, nil)
+		//_ = cErrs.WrapLocalize("unknown_validator_err", nil, nil)
 	}
 	return cErrs.Real()
 }
