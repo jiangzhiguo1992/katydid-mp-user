@@ -86,13 +86,30 @@ func (b *Base) ValidExtraRules(obj any) (utils.KSMap, valid.ExtraValidRules) {
 }
 
 func (b *Base) ValidStructRules(scene valid.Scene, obj any, fn valid.FuncReportError) {
-	//_ = obj.(*Base) TODO:GG 报错?
+	cObj := obj.(*Base)
+	switch scene {
+	case valid.SceneQuery:
+		if cObj.CreateAt < cObj.UpdateAt {
+			fn(cObj, "CreateAt", valid.TagFormat, "")
+		}
+		if (cObj.DeleteAt == nil) && (cObj.DeleteBy != 0) {
+			fn(cObj, "DeleteAt", valid.TagFormat, "")
+		} else if (cObj.DeleteAt != nil) && (cObj.DeleteBy == 0) {
+			fn(cObj, "DeleteBy", valid.TagFormat, "")
+		}
+	}
 }
 
 func (b *Base) ValidLocalizeRules() valid.LocalizeValidRules {
 	return valid.LocalizeValidRules{
 		valid.SceneAll: valid.LocalizeValidRule{
-			Rule1: nil, Rule2: map[valid.Tag]valid.LocalizeValidRuleParam{
+			Rule1: map[valid.Tag]map[valid.FieldName]valid.LocalizeValidRuleParam{
+				valid.TagFormat: {
+					"CreateAt": {"format_create_at_err", false, nil},
+					"DeleteAt": {"format_delete_at_err", false, nil},
+					"DeleteBy": {"format_delete_by_err", false, nil},
+				},
+			}, Rule2: map[valid.Tag]valid.LocalizeValidRuleParam{
 				extraKeyAdminNote: {"format_admin_note_err", false, nil},
 			},
 		},
