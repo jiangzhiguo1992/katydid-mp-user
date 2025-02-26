@@ -12,9 +12,11 @@ import (
 const (
 	SceneAll    Scene = 0
 	SceneBind   Scene = 1
-	SceneSave   Scene = 2
-	SceneQuery  Scene = 3
-	SceneShow   Scene = 4
+	SceneSave   Scene = 10
+	SceneInsert Scene = 11
+	SceneUpdate Scene = 12
+	SceneQuery  Scene = 13
+	SceneShow   Scene = 20
 	SceneCustom Scene = 1000
 
 	TagRequired Tag = "required"
@@ -24,7 +26,8 @@ const (
 var (
 	validate *validator.Validate
 	once     sync.Once
-	regTypes sync.Map // 避免重复注册
+	regTypes sync.Map // 验证注册类型
+	regLocs  sync.Map // 本地化文本缓存
 )
 
 type (
@@ -83,13 +86,13 @@ type (
 func Get() *validator.Validate {
 	once.Do(func() {
 		validate = validator.New(validator.WithRequiredStructEnabled())
-		//validate.RegisterTagNameFunc(func(fld reflect.StructField) string {
-		//	name := fld.Tag.Get("json")
-		//	if name == "-" {
-		//		return fld.Name
-		//	}
-		//	return name
-		//})
+		validate.RegisterTagNameFunc(func(fld reflect.StructField) string {
+			name := fld.Tag.Get("json")
+			if name == "-" {
+				return fld.Name
+			}
+			return name
+		})
 	})
 	return validate
 }
@@ -136,7 +139,7 @@ func (v *Validator) Valid(scene Scene, obj any) *err.CodeErrs {
 		if errors.As(e, &validateErrs) {
 			// -- 本地化错误注册 --
 			if rl, ok := obj.(ILocalizeValidator); ok {
-				return v.validLocalize(scene, rl, validateErrs)
+				return v.validLocalize(typ, scene, rl, validateErrs)
 			}
 		}
 		return err.Match(e)
@@ -198,31 +201,38 @@ func (v *Validator) validStruct(obj any, scene Scene, sv IStructValidator, sl va
 	})
 }
 
-// TODO:GG 缓存 做在这里，还是model里?
-func (v *Validator) validLocalize(scene Scene, rl ILocalizeValidator, validateErrs validator.ValidationErrors) *err.CodeErrs {
-	sceneRules := rl.ValidLocalizeRules()
+func (v *Validator) validLocalize(typ reflect.Type, scene Scene, rl ILocalizeValidator, validateErrs validator.ValidationErrors) *err.CodeErrs {
 	tagFieldRules := make(map[Tag]map[FieldName]LocalizeValidRuleParam)
 	tagRules := make(map[Tag]LocalizeValidRuleParam)
-	if tRules := sceneRules[SceneAll]; tRules.Rule1 != nil {
-		for tag, rule := range tRules.Rule1 {
-			tagFieldRules[tag] = rule
+	cacheRules, ok := regLocs.Load(typ)
+	if !ok {
+		sceneRules := rl.ValidLocalizeRules()
+		if tRules := sceneRules[SceneAll]; tRules.Rule1 != nil {
+			for tag, rule := range tRules.Rule1 {
+				tagFieldRules[tag] = rule
+			}
 		}
-	}
-	if tRules := sceneRules[SceneAll]; tRules.Rule2 != nil {
-		for tag, rule := range tRules.Rule2 {
-			tagRules[tag] = rule
+		if tRules := sceneRules[SceneAll]; tRules.Rule2 != nil {
+			for tag, rule := range tRules.Rule2 {
+				tagRules[tag] = rule
+			}
 		}
-	}
-	if tRules := sceneRules[scene]; tRules.Rule1 != nil {
-		for tag, rule := range tRules.Rule1 {
-			tagFieldRules[tag] = rule
+		if tRules := sceneRules[scene]; tRules.Rule1 != nil {
+			for tag, rule := range tRules.Rule1 {
+				tagFieldRules[tag] = rule
+			}
 		}
-	}
-	if tRules := sceneRules[scene]; tRules.Rule2 != nil {
-		for tag, rule := range tRules.Rule2 {
-			tagRules[tag] = rule
+		if tRules := sceneRules[scene]; tRules.Rule2 != nil {
+			for tag, rule := range tRules.Rule2 {
+				tagRules[tag] = rule
+			}
 		}
+		regLocs.Store(typ, LocalizeValidRule{tagFieldRules, tagRules})
+	} else {
+		tagFieldRules = cacheRules.(LocalizeValidRule).Rule1
+		tagRules = cacheRules.(LocalizeValidRule).Rule2
 	}
+
 	cErrs := err.New()
 	for _, ee := range validateErrs {
 		// -- 本地化错误注册(Tag+Field) --
