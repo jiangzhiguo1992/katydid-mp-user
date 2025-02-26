@@ -102,31 +102,27 @@ func Get() *validator.Validate {
 }
 
 // Valid 根据场景执行验证，并返回本地化错误信息
-func (v *Validator) Valid(scene Scene, obj any) *err.CodeErrs {
+func (v *Validator) Valid(obj any, scene Scene) *err.CodeErrs {
 	typ := reflect.TypeOf(obj)
 	// -- 注册验证 --
 	if _, ok := regTypes.Load(typ); !ok {
-		if e := v.registerValidations(scene, typ, obj); e != nil {
+		if e := v.registerValidations(obj, scene); e != nil {
 			return e
 		}
+		regTypes.Store(typ, true)
 	}
 
 	// -- 执行验证 --
 	if e := Get().Struct(obj); e != nil {
-		return v.handleValidationError(e, typ, scene, obj)
+		return v.handleValidationError(obj, typ, scene, e)
 	}
 	return nil
 }
 
-func (v *Validator) registerValidations(scene Scene, typ reflect.Type, obj any) *err.CodeErrs {
-	// 处理组合类型的验证规则
-	if e := v.registerEmbeddedValidations(scene, typ, obj); e != nil {
-		return e
-	}
-
+func (v *Validator) registerValidations(obj any, scene Scene) *err.CodeErrs {
 	// -- 字段验证注册 --
 	if fv, okk := obj.(IFieldValidator); okk {
-		if errs := v.validFields(scene, fv); errs != nil {
+		if errs := v.validFields(fv, scene); errs != nil {
 			return errs
 		}
 	}
@@ -137,24 +133,88 @@ func (v *Validator) registerValidations(scene Scene, typ reflect.Type, obj any) 
 			cObj := sl.Current().Addr().Interface()
 			if hasExtra {
 				// -- 额外验证注册 --
-				if ev, okk := cObj.(IExtraValidator); okk {
-					v.validExtra(cObj, scene, ev, sl)
+				if _, okk := cObj.(IExtraValidator); okk {
+					v.validExtra(cObj, sl, scene)
 				}
 			}
 			if hasStruct {
 				// -- 结构验证注册 --
-				if sv, okk := cObj.(IStructValidator); okk {
-					v.validStruct(cObj, scene, sv, sl)
+				if _, okk := cObj.(IStructValidator); okk {
+					v.validStruct(cObj, sl, scene)
 				}
 			}
 		}, obj)
 	}
-	regTypes.Store(typ, true)
 	return nil
 }
 
+func (v *Validator) validFields(fv IFieldValidator, scene Scene) *err.CodeErrs {
+	// 处理嵌入字段的验证规则
+	if e := v.registerEmbeddedValidations(fv, reflect.TypeOf(fv), scene, 1, nil); e != nil {
+		return e
+	}
+
+	sceneRules := fv.ValidFieldRules()
+	tagRules := make(map[Tag]FieldValidRuleFn)
+	if tRules := sceneRules[SceneAll]; tRules != nil {
+		for tag, rule := range tRules {
+			tagRules[tag] = rule
+		}
+	}
+	if tRules := sceneRules[scene]; tRules != nil {
+		for tag, rule := range tRules {
+			tagRules[tag] = rule
+		}
+	}
+	for tag, rule := range tagRules {
+		if e := Get().RegisterValidation(string(tag), func(fl validator.FieldLevel) bool {
+			return rule(fl.Field(), fl.Param())
+		}); e != nil {
+			return err.Match(e)
+		}
+	}
+	return nil
+}
+
+func (v *Validator) validExtra(obj any, sl validator.StructLevel, scene Scene) {
+	// 处理嵌入字段的验证规则
+	_ = v.registerEmbeddedValidations(obj, reflect.TypeOf(obj), scene, 2, sl)
+
+	extra, sceneRules := obj.(IExtraValidator).ValidExtraRules(obj)
+	tagRules := make(map[Tag]ExtraValidRuleInfo)
+	if tRules := sceneRules[SceneAll]; tRules != nil {
+		for tag, rule := range tRules {
+			tagRules[tag] = rule
+		}
+	}
+	if tRules := sceneRules[scene]; tRules != nil {
+		for tag, rule := range tRules {
+			tagRules[tag] = rule
+		}
+	}
+	for tag, rule := range tagRules {
+		value, exists := extra[string(tag)]
+		if (tag == TagRequired) && !exists {
+			sl.ReportError(value, rule.Field, rule.Field, string(tag), rule.Param)
+			continue
+		}
+		if exists && !rule.ValidFn(value) {
+			sl.ReportError(value, rule.Field, rule.Field, string(tag), rule.Param)
+		}
+	}
+}
+
+func (v *Validator) validStruct(obj any, sl validator.StructLevel, scene Scene) {
+	// 处理嵌入字段的验证规则
+	_ = v.registerEmbeddedValidations(obj, reflect.TypeOf(obj), scene, 3, sl)
+
+	obj.(IStructValidator).ValidStructRules(scene, obj, func(field interface{}, fieldName FieldName, tag Tag, param string) {
+		sl.ReportError(field, string(fieldName), string(fieldName), string(tag), param)
+	})
+}
+
 // registerEmbeddedValidations 递归注册组合类型的验证规则
-func (v *Validator) registerEmbeddedValidations(scene Scene, typ reflect.Type, obj any) *err.CodeErrs {
+func (v *Validator) registerEmbeddedValidations(obj any, typ reflect.Type, scene Scene, ttt int, sl validator.StructLevel) *err.CodeErrs {
 	val := reflect.ValueOf(obj)
 	if val.Kind() == reflect.Ptr {
 		val = val.Elem()
@@ -184,8 +244,22 @@ func (v *Validator) registerEmbeddedValidations(scene Scene, typ reflect.Type, o
 
 			// 只处理结构体类型的组合字段
 			if fieldType.Kind() == reflect.Struct && embedObj != nil {
-				if e := v.registerValidations(scene, reflect.TypeOf(embedObj), embedObj); e != nil {
-					return e
+				//if e := v.registerValidations(embedObj, scene); e != nil {
+				//	return e
+				//}
+				switch ttt {
+				case 1:
+					if fv, okk := embedObj.(IFieldValidator); okk {
+						return v.validFields(fv, scene)
+					}
+				case 2:
+					if _, okk := embedObj.(IExtraValidator); okk {
+						v.validExtra(embedObj, sl, scene)
+					}
+				case 3:
+					if _, okk := embedObj.(IStructValidator); okk {
+						v.validStruct(embedObj, sl, scene)
+					}
 				}
 			}
 		}
@@ -193,61 +267,7 @@ func (v *Validator) registerEmbeddedValidations(scene Scene, typ reflect.Type, o
 	return nil
 }
 
-func (v *Validator) validFields(scene Scene, fv IFieldValidator) *err.CodeErrs {
-	sceneRules := fv.ValidFieldRules()
-	tagRules := make(map[Tag]FieldValidRuleFn)
-	if tRules := sceneRules[SceneAll]; tRules != nil {
-		for tag, rule := range tRules {
-			tagRules[tag] = rule
-		}
-	}
-	if tRules := sceneRules[scene]; tRules != nil {
-		for tag, rule := range tRules {
-			tagRules[tag] = rule
-		}
-	}
-	for tag, rule := range tagRules {
-		if e := Get().RegisterValidation(string(tag), func(fl validator.FieldLevel) bool {
-			return rule(fl.Field(), fl.Param())
-		}); e != nil {
-			return err.Match(e)
-		}
-	}
-	return nil
-}
-
-func (v *Validator) validExtra(obj any, scene Scene, ev IExtraValidator, sl validator.StructLevel) {
-	extra, sceneRules := ev.ValidExtraRules(obj)
-	tagRules := make(map[Tag]ExtraValidRuleInfo)
-	if tRules := sceneRules[SceneAll]; tRules != nil {
-		for tag, rule := range tRules {
-			tagRules[tag] = rule
-		}
-	}
-	if tRules := sceneRules[scene]; tRules != nil {
-		for tag, rule := range tRules {
-			tagRules[tag] = rule
-		}
-	}
-	for tag, rule := range tagRules {
-		value, exists := extra[string(tag)]
-		if (tag == TagRequired) && !exists {
-			sl.ReportError(value, rule.Field, rule.Field, string(tag), rule.Param)
-			continue
-		}
-		if exists && !rule.ValidFn(value) {
-			sl.ReportError(value, rule.Field, rule.Field, string(tag), rule.Param)
-		}
-	}
-}
-
-func (v *Validator) validStruct(obj any, scene Scene, sv IStructValidator, sl validator.StructLevel) {
-	sv.ValidStructRules(scene, obj, func(field interface{}, fieldName FieldName, tag Tag, param string) {
-		sl.ReportError(field, string(fieldName), string(fieldName), string(tag), param)
-	})
-}
-
-func (v *Validator) handleValidationError(e error, typ reflect.Type, scene Scene, obj any) *err.CodeErrs {
+func (v *Validator) handleValidationError(obj any, typ reflect.Type, scene Scene, e error) *err.CodeErrs {
 	var invalidErr *validator.InvalidValidationError
 	if errors.As(e, &invalidErr) {
 		return err.Match(e)
