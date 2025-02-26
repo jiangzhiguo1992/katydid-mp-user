@@ -34,14 +34,15 @@ type (
 	// FieldValidRules 定义字段验证规则
 	FieldValidRules  = map[Scene]FieldValidRule
 	FieldValidRule   = map[Tag]FieldValidRuleFn
-	FieldValidRuleFn = func(reflect.Value) bool
+	FieldValidRuleFn = func(value reflect.Value, param string) bool
 
 	// ExtraValidRules 定义额外字段验证规则
 	ExtraValidRules    = map[Scene]ExtraValidRule
 	ExtraValidRule     = map[Tag]ExtraValidRuleInfo
 	ExtraValidRuleInfo struct {
-		Field    string
-		Validate func(value interface{}) bool
+		Field   string
+		Param   string
+		ValidFn func(value interface{}) bool
 	}
 
 	// FuncReportError validator.StructLevel.FuncReportError
@@ -50,9 +51,10 @@ type (
 	// LocalizeValidRules 定义本地化的规则映射
 	LocalizeValidRules = map[Scene]LocalizeValidRule
 	LocalizeValidRule  struct {
-		Rule1 map[Tag]map[FieldName][3]interface{}
-		Rule2 map[Tag][3]interface{} // {msg, param, []any}
+		Rule1 map[Tag]map[FieldName]LocalizeValidRuleParam
+		Rule2 map[Tag]LocalizeValidRuleParam
 	}
+	LocalizeValidRuleParam = [3]interface{} // {msg, param, []any}
 
 	// IFieldValidator 定义字段验证接口
 	IFieldValidator interface {
@@ -98,7 +100,7 @@ func (v *Validator) Valid(scene Scene, obj any) *err.CodeErrs {
 		if fv, okk := obj.(IFieldValidator); okk {
 			// -- 字段验证注册 --
 			sceneRules := fv.ValidFieldRules()
-			tagRules := make(map[Tag]func(reflect.Value) bool)
+			tagRules := make(map[Tag]FieldValidRuleFn)
 			if tRules := sceneRules[SceneAll]; tRules != nil {
 				for tag, rule := range tRules {
 					tagRules[tag] = rule
@@ -111,7 +113,7 @@ func (v *Validator) Valid(scene Scene, obj any) *err.CodeErrs {
 			}
 			for tag, rule := range tagRules {
 				if e := Get().RegisterValidation(string(tag), func(fl validator.FieldLevel) bool {
-					return rule(fl.Field())
+					return rule(fl.Field(), fl.Param())
 				}); e != nil {
 					return err.Match(e)
 				}
@@ -138,11 +140,11 @@ func (v *Validator) Valid(scene Scene, obj any) *err.CodeErrs {
 					for tag, rule := range tagRules {
 						value, exists := extra[string(tag)]
 						if (tag == TagRequired) && !exists {
-							sl.ReportError(value, rule.Field, rule.Field, string(TagRequired), "")
+							sl.ReportError(value, rule.Field, rule.Field, string(tag), rule.Param)
 							continue
 						}
-						if exists && !rule.Validate(value) {
-							sl.ReportError(value, rule.Field, rule.Field, string(tag), "")
+						if exists && !rule.ValidFn(value) {
+							sl.ReportError(value, rule.Field, rule.Field, string(tag), rule.Param)
 						}
 					}
 				}
@@ -169,8 +171,8 @@ func (v *Validator) Valid(scene Scene, obj any) *err.CodeErrs {
 			cErrs := err.New()
 			if rl, ok := obj.(ILocalizeValidator); ok {
 				sceneRules := rl.ValidLocalizeRules()
-				tagFieldRules := make(map[Tag]map[FieldName][3]interface{})
-				tagRules := make(map[Tag][3]interface{})
+				tagFieldRules := make(map[Tag]map[FieldName]LocalizeValidRuleParam)
+				tagRules := make(map[Tag]LocalizeValidRuleParam)
 				if tRules := sceneRules[SceneAll]; tRules.Rule1 != nil {
 					for tag, rule := range tRules.Rule1 {
 						tagFieldRules[tag] = rule
