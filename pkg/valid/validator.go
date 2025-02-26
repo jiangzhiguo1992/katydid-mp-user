@@ -399,8 +399,8 @@ func (v *Validator) registerEmbeddedLocalizes(scene Scene, typ reflect.Type, obj
 
 			// 只处理实现了 ILocalizeValidator 接口的组合字段
 			if fieldType.Kind() == reflect.Struct && embedObj != nil {
-				if embedLocalizer, ok := embedObj.(ILocalizeValidator); ok {
-					if e := v.validLocalize(scene, reflect.TypeOf(embedObj), embedObj, embedLocalizer, validateErrs); e != nil {
+				if embedLocValidator, ok := embedObj.(ILocalizeValidator); ok {
+					if e := v.validLocalize(scene, reflect.TypeOf(embedObj), embedObj, embedLocValidator, validateErrs); e != nil {
 						return e
 					}
 				}
