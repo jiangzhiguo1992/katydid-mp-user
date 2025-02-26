@@ -37,7 +37,10 @@ type Client struct {
 }
 
 func NewClientEmpty() *Client {
-	return &Client{Base: model.NewBaseEmpty()}
+	return &Client{
+		Base:      model.NewBaseEmpty(),
+		Platforms: []*Platform{},
+	}
 }
 
 func NewClientDefault(

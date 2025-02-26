@@ -20,7 +20,7 @@ const (
 type Team struct {
 	*model.Base
 
-	ParentId uint64 `json:"parentId" validate:"required"` // 父级团队 默认0
+	ParentId uint64 `json:"parentId"` // 父级团队 默认0
 
 	Enable bool   `json:"enable"`                               // 是否可用
 	Name   string `json:"name" validate:"required,name-format"` // 团队名称
@@ -30,7 +30,12 @@ type Team struct {
 }
 
 func NewTeamEmpty() *Team {
-	return &Team{Base: model.NewBaseEmpty()}
+	return &Team{
+		Base:     model.NewBaseEmpty(),
+		ParentId: TeamParentRoot,
+		Children: []*Team{},
+		Clients:  []*Client{},
+	}
 }
 
 func NewTeamDefault(
@@ -137,6 +142,7 @@ func (t *Team) ValidLocalizeRules() valid.LocalizeValidRules {
 			Rule1: map[valid.Tag]map[valid.FieldName]valid.LocalizeValidRuleParam{
 				valid.TagRequired: {
 					"Name": {"format_s_input_required", false, []any{"team_name"}},
+					//"ParentId": {"format_s_input_required", false, []any{"team_parent"}},
 				},
 			}, Rule2: map[valid.Tag]valid.LocalizeValidRuleParam{
 				"name-format":         {"format_team_name_err", false, nil},

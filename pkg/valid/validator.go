@@ -302,7 +302,7 @@ func (v *Validator) validLocalize(scene Scene, typ reflect.Type, obj any, rl ILo
 	if !ok {
 		sceneRules := rl.ValidLocalizeRules()
 		if sceneRules == nil {
-			return cErrs
+			return cErrs.Real()
 		}
 		if tRules := sceneRules[SceneAll]; tRules.Rule1 != nil {
 			for tag, rule := range tRules.Rule1 {

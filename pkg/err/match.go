@@ -31,6 +31,48 @@ func Init(codes map[int][]string, patterns map[string]string, onError func(strin
 	})
 }
 
+func MatchByMsg(msg string) *CodeErrs {
+	if msg == "" {
+		return nil
+	}
+
+	//matcher.mu.RLock()
+	//defer matcher.mu.RUnlock()
+
+	// 先从patterns里找locId
+	var matchLocId string
+	for pattern, msgID := range matcher.patterns {
+		if strings.Contains(msg, pattern) {
+			matchLocId = msgID
+			break
+		}
+	}
+
+	// 未匹配到，返回通用错误
+	common := false
+	if len(matchLocId) <= 0 {
+		common = true
+		matchLocId = msg
+	}
+
+	// 再从codeLocIds里找code
+	if len(matchLocId) > 0 {
+		for code, locIds := range matcher.codeLocIds {
+			for _, locId := range locIds {
+				if locId == matchLocId {
+					return New().WithCode(code).WrapLocalize(locId, nil, nil).Real()
+				}
+			}
+		}
+		if !common && (matcher.onError != nil) {
+			matcher.onError(fmt.Sprintf("■ ■ Err ■ ■ matchMsg pattern no code: %s", matchLocId))
+		}
+	}
+
+	// 未匹配到，返回通用错误
+	return New().WrapLocalize(msg, nil, nil).Real()
+}
+
 // Match 匹配错误
 func Match(err error) *CodeErrs {
 	if err == nil {
@@ -45,8 +87,8 @@ func Match(err error) *CodeErrs {
 		return e
 	}
 
-	matcher.mu.RLock()
-	defer matcher.mu.RUnlock()
+	//matcher.mu.RLock()
+	//defer matcher.mu.RUnlock()
 
 	errMsg := err.Error()
 
