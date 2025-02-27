@@ -22,7 +22,7 @@ const (
 // Application 应用
 type Application struct {
 	*model.Base
-	OrgId uint64 `json:"orgId" validate:"required"` // 团队
+	OrgId uint64 `json:"orgId" validate:"required"` // 组织
 	IP    uint   `json:"IP"`                        // 系列 (eg:大富翁IP)
 	Part  uint   `json:"part"`                      // 类型 (eg:单机版)
 
@@ -33,13 +33,13 @@ type Application struct {
 
 	//RemainingTime // TODO:GG 维护信息
 
-	Platforms []*Platform `json:"platforms" gorm:"-:all"` // [platform][area]平台列表
+	Clients []*Client `json:"clients" gorm:"-:all"` // [platform][area]平台列表
 }
 
 func NewApplicationEmpty() *Application {
 	return &Application{
-		Base:      model.NewBaseEmpty(),
-		Platforms: []*Platform{},
+		Base:    model.NewBaseEmpty(),
+		Clients: []*Client{},
 	}
 }
 
@@ -52,7 +52,7 @@ func NewApplicationDefault(
 		OrgId: orgId, IP: IP, Part: part,
 		Enable: enable, Name: name,
 		OnlineAt: 0, OfflineAt: 0,
-		Platforms: []*Platform{},
+		Clients: []*Client{},
 	}
 }
 
@@ -241,9 +241,9 @@ func (a *Application) IsComingOffline() bool {
 	return a.OfflineAt > currentTime && (a.OnlineAt == -1 || a.OnlineAt < currentTime)
 }
 
-func (a *Application) GetPlatformsByPlat(platform uint16) []*Platform {
-	var platforms []*Platform
-	for _, p := range a.Platforms {
+func (a *Application) GetPlatformsByPlat(platform uint16) []*Client {
+	var platforms []*Client
+	for _, p := range a.Clients {
 		if p.Platform == platform {
 			platforms = append(platforms, p)
 		}
@@ -251,9 +251,9 @@ func (a *Application) GetPlatformsByPlat(platform uint16) []*Platform {
 	return platforms
 }
 
-func (a *Application) GetPlatformsByArea(area uint) []*Platform {
-	var platforms []*Platform
-	for _, p := range a.Platforms {
+func (a *Application) GetPlatformsByArea(area uint) []*Client {
+	var platforms []*Client
+	for _, p := range a.Clients {
 		if p.Area == area {
 			platforms = append(platforms, p)
 		}
@@ -261,8 +261,8 @@ func (a *Application) GetPlatformsByArea(area uint) []*Platform {
 	return platforms
 }
 
-func (a *Application) GetPlatform(platform uint16, area uint) *Platform {
-	for _, p := range a.Platforms {
+func (a *Application) GetPlatform(platform uint16, area uint) *Client {
+	for _, p := range a.Clients {
 		if p.Platform == platform && p.Area == area {
 			return p
 		}
