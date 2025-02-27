@@ -43,15 +43,15 @@ func NewClientDefault(
 }
 
 const (
-	ClientPlatformLinux   uint = 1
-	ClientPlatformWindows uint = 2
-	ClientPlatformMacOS   uint = 3
-	ClientPlatformWeb     uint = 4
-	ClientPlatformAndroid uint = 5
-	ClientPlatformIOS     uint = 6
-	ClientPlatformApplet  uint = 7
-	ClientPlatformTvAnd   uint = 8
-	ClientPlatformTvIOS   uint = 9
+	ClientPlatformLinux   uint = 1 // Linux
+	ClientPlatformWindows uint = 2 // Windows
+	ClientPlatformMacOS   uint = 3 // MacOS
+	ClientPlatformWeb     uint = 4 // Web
+	ClientPlatformAndroid uint = 5 // Android
+	ClientPlatformIOS     uint = 6 // IOS
+	ClientPlatformApplet  uint = 7 // Applet
+	ClientPlatformTvAnd   uint = 8 // TvAnd
+	ClientPlatformTvIOS   uint = 9 // TvIOS
 
 	ClientAreaWord      uint = 1 // 全球 (默认英文，泛指海外)
 	ClientAreaChinaLand uint = 2 // 中国大陆 (简体中文)
@@ -59,23 +59,51 @@ const (
 	ClientAreaEurope    uint = 4 // 欧洲 (默认英文，GDPR)
 	// 后面可能会划分更多的区域
 
-	ClientSocialLinkEmail     uint = 1
-	ClientSocialLinkPhone     uint = 2
-	ClientSocialLinkQQ        uint = 3
-	ClientSocialLinkWeChat    uint = 4
-	ClientSocialLinkWeibo     uint = 5
-	ClientSocialLinkFacebook  uint = 6
-	ClientSocialLinkTwitter   uint = 7
-	ClientSocialLinkTelegram  uint = 8
-	ClientSocialLinkDiscord   uint = 9
-	ClientSocialLinkInstagram uint = 10
-	ClientSocialLinkYouTube   uint = 11
-	ClientSocialLinkTikTok    uint = 12
+	ClientSocialLinkEmail     uint = 1  // 邮箱
+	ClientSocialLinkPhone     uint = 2  // 手机
+	ClientSocialLinkQQ        uint = 3  // QQ
+	ClientSocialLinkWeChat    uint = 4  // 微信
+	ClientSocialLinkWeibo     uint = 5  // 微博
+	ClientSocialLinkFacebook  uint = 6  // Facebook
+	ClientSocialLinkTwitter   uint = 7  // Twitter
+	ClientSocialLinkTelegram  uint = 8  // Telegram
+	ClientSocialLinkDiscord   uint = 9  // Discord
+	ClientSocialLinkInstagram uint = 10 // Instagram
+	ClientSocialLinkYouTube   uint = 11 // YouTube
+	ClientSocialLinkTikTok    uint = 12 // TikTok
 )
+
+func (c *Client) GetPlatformName() string {
+	return GetClientPlatformName(c.Platform)
+}
+
+func (c *Client) GetAreaName() string {
+	return GetClientAreaName(c.Area)
+}
+
+func (c *Client) IsOnline() bool {
+	currentTime := time.Now().UnixMilli()
+	return (c.OnlineAt > 0 && (c.OnlineAt <= currentTime)) && (c.OfflineAt == 0 || c.OfflineAt > currentTime)
+}
+
+func (c *Client) IsOffline() bool {
+	currentTime := time.Now().UnixMilli()
+	return (c.OfflineAt > 0 && (c.OfflineAt <= currentTime)) && (c.OnlineAt == 0 || c.OnlineAt > currentTime)
+}
+
+func (c *Client) IsComingOnline() bool {
+	currentTime := time.Now().UnixMilli()
+	return c.OnlineAt > currentTime && (c.OfflineAt == -1 || c.OfflineAt < currentTime)
+}
+
+func (c *Client) IsComingOffline() bool {
+	currentTime := time.Now().UnixMilli()
+	return c.OfflineAt > currentTime && (c.OnlineAt == -1 || c.OnlineAt < currentTime)
+}
 
 func (c *Client) GetSocialLink(social uint) (string, string) {
 	if v, ok := c.GetSocialLinks()[social]; ok {
-		return socialLinkName(social), v
+		return GetClientSocialLinkName(social), v
 	}
 	return "", ""
 }
@@ -92,14 +120,6 @@ func (c *Client) GetLatestVersion(market uint) *Version {
 		return v
 	}
 	return nil
-}
-
-func (c *Client) GetPlatformName() string {
-	return platformName(c.Platform)
-}
-
-func (c *Client) GetAreaName() string {
-	return areaName(c.Area)
 }
 
 const (
@@ -203,32 +223,8 @@ func (c *Client) GetIosId() string {
 	return data
 }
 
-// IsOnline 是否上线
-func (c *Client) IsOnline() bool {
-	currentTime := time.Now().UnixMilli()
-	return (c.OnlineAt > 0 && (c.OnlineAt <= currentTime)) && (c.OfflineAt == 0 || c.OfflineAt > currentTime)
-}
-
-// IsOffline 是否下线
-func (c *Client) IsOffline() bool {
-	currentTime := time.Now().UnixMilli()
-	return (c.OfflineAt > 0 && (c.OfflineAt <= currentTime)) && (c.OnlineAt == 0 || c.OnlineAt > currentTime)
-}
-
-// IsComingOnline 是否即将上线
-func (c *Client) IsComingOnline() bool {
-	currentTime := time.Now().UnixMilli()
-	return c.OnlineAt > currentTime && (c.OfflineAt == -1 || c.OfflineAt < currentTime)
-}
-
-// IsComingOffline 是否即将下线
-func (c *Client) IsComingOffline() bool {
-	currentTime := time.Now().UnixMilli()
-	return c.OfflineAt > currentTime && (c.OnlineAt == -1 || c.OnlineAt < currentTime)
-}
-
-func IsClientPlatformOk(clientPlatform uint) bool {
-	switch clientPlatform {
+func IsClientPlatformOk(platform uint) bool {
+	switch platform {
 	case ClientPlatformLinux,
 		ClientPlatformWindows,
 		ClientPlatformMacOS,
@@ -243,8 +239,8 @@ func IsClientPlatformOk(clientPlatform uint) bool {
 	return false
 }
 
-func IsClientAreaOk(clientArea uint) bool {
-	switch clientArea {
+func IsClientAreaOk(area uint) bool {
+	switch area {
 	case ClientAreaWord,
 		ClientAreaChinaLand,
 		ClientAreaChinaHMT,
@@ -254,8 +250,8 @@ func IsClientAreaOk(clientArea uint) bool {
 	return false
 }
 
-func IsClientSocialLinkOk(clientSocialLink uint) bool {
-	switch clientSocialLink {
+func IsClientSocialLinkOk(socialLink uint) bool {
+	switch socialLink {
 	case ClientSocialLinkEmail,
 		ClientSocialLinkPhone,
 		ClientSocialLinkQQ,
@@ -281,8 +277,8 @@ var platformInfos = map[uint]string{
 	ClientPlatformAndroid: "Android",
 	ClientPlatformIOS:     "IOS",
 	ClientPlatformApplet:  "Applet",
-	//ClientPlatformTvAnd: "TvAnd",
-	//ClientPlatformTvIOS: "TvIOS",
+	ClientPlatformTvAnd:   "TvAnd",
+	ClientPlatformTvIOS:   "TvIOS",
 }
 
 var areaInfos = map[uint]string{
@@ -307,21 +303,21 @@ var socialLinkInfos = map[uint]string{
 	ClientSocialLinkTikTok:    "TikTok",
 }
 
-func platformName(ClientPlatform uint) string {
+func GetClientPlatformName(ClientPlatform uint) string {
 	if v, ok := platformInfos[ClientPlatform]; ok {
 		return v
 	}
 	return ""
 }
 
-func areaName(ClientArea uint) string {
+func GetClientAreaName(ClientArea uint) string {
 	if v, ok := areaInfos[ClientArea]; ok {
 		return v
 	}
 	return ""
 }
 
-func socialLinkName(ClientSocialLink uint) string {
+func GetClientSocialLinkName(ClientSocialLink uint) string {
 	if v, ok := socialLinkInfos[ClientSocialLink]; ok {
 		return v
 	}

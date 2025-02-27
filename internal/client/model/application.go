@@ -142,6 +142,26 @@ func (a *Application) ValidLocalizeRules() valid.LocalizeValidRules {
 	}
 }
 
+func (a *Application) IsOnline() bool {
+	currentTime := time.Now().UnixMilli()
+	return (a.OnlineAt > 0 && (a.OnlineAt <= currentTime)) && (a.OfflineAt == -1 || a.OfflineAt > currentTime)
+}
+
+func (a *Application) IsOffline() bool {
+	currentTime := time.Now().UnixMilli()
+	return (a.OfflineAt > 0 && (a.OfflineAt <= currentTime)) && (a.OnlineAt == -1 || a.OnlineAt > currentTime)
+}
+
+func (a *Application) IsComingOnline() bool {
+	currentTime := time.Now().UnixMilli()
+	return a.OnlineAt > currentTime && (a.OfflineAt == -1 || a.OfflineAt < currentTime)
+}
+
+func (a *Application) IsComingOffline() bool {
+	currentTime := time.Now().UnixMilli()
+	return a.OfflineAt > currentTime && (a.OnlineAt == -1 || a.OnlineAt < currentTime)
+}
+
 func (a *Application) OverUserMaxAccount(count int) bool {
 	maxCount := a.GetUserMaxAccount()
 	return (maxCount >= 0) && (count > maxCount)
@@ -150,30 +170,6 @@ func (a *Application) OverUserMaxAccount(count int) bool {
 func (a *Application) OverUserMaxToken(count int) bool {
 	maxCount := a.GetUserMaxToken()
 	return (maxCount >= 0) && (count > maxCount)
-}
-
-// IsOnline 是否上线
-func (a *Application) IsOnline() bool {
-	currentTime := time.Now().UnixMilli()
-	return (a.OnlineAt > 0 && (a.OnlineAt <= currentTime)) && (a.OfflineAt == -1 || a.OfflineAt > currentTime)
-}
-
-// IsOffline 是否下线
-func (a *Application) IsOffline() bool {
-	currentTime := time.Now().UnixMilli()
-	return (a.OfflineAt > 0 && (a.OfflineAt <= currentTime)) && (a.OnlineAt == -1 || a.OnlineAt > currentTime)
-}
-
-// IsComingOnline 是否即将上线
-func (a *Application) IsComingOnline() bool {
-	currentTime := time.Now().UnixMilli()
-	return a.OnlineAt > currentTime && (a.OfflineAt == -1 || a.OfflineAt < currentTime)
-}
-
-// IsComingOffline 是否即将下线
-func (a *Application) IsComingOffline() bool {
-	currentTime := time.Now().UnixMilli()
-	return a.OfflineAt > currentTime && (a.OnlineAt == -1 || a.OnlineAt < currentTime)
 }
 
 func (a *Application) GetClientsByPlatform(platform uint) []*Client {

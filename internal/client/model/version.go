@@ -40,63 +40,63 @@ func NewVersionDefault(
 }
 
 const (
-	VersionMarketLinuxOfficial uint = 1
-	VersionMarketLinuxSteam    uint = 2
+	VersionMarketLinuxOfficial uint = 1 // 官网
+	VersionMarketLinuxSteam    uint = 2 // Steam
 
-	VersionMarketWindowsOfficial uint = 1
-	VersionMarketWindowsSteam    uint = 2
+	VersionMarketWindowsOfficial uint = 1 // 官网
+	VersionMarketWindowsSteam    uint = 2 // Steam
 
-	VersionMarketMacOsOfficial uint = 1
-	VersionMarketMacOsAppStore uint = 2
-	VersionMarketMacOsSteam    uint = 3
+	VersionMarketMacOsOfficial uint = 1 // 官网
+	VersionMarketMacOsAppStore uint = 2 // 应用商店
+	VersionMarketMacOsSteam    uint = 3 // Steam
 
-	VersionMarketWebOfficial uint = 1
-	VersionMarketWebChrome   uint = 2
-	VersionMarketWebSafari   uint = 3
-	VersionMarketWebFirefox  uint = 4
-	VersionMarketWebEdge     uint = 5
-	VersionMarketWebOpera    uint = 6
-	VersionMarketWebIE       uint = 7
-	VersionMarketWeb360      uint = 8
-	VersionMarketWebQQ       uint = 9
-	VersionMarketWebHuoHu    uint = 10
-	VersionMarketWebLieBao   uint = 11
-	VersionMarketWebSouGou   uint = 12
+	VersionMarketWebOfficial uint = 1  // 官网
+	VersionMarketWebChrome   uint = 2  // Chrome
+	VersionMarketWebSafari   uint = 3  // Safari
+	VersionMarketWebFirefox  uint = 4  // Firefox
+	VersionMarketWebEdge     uint = 5  // Edge
+	VersionMarketWebOpera    uint = 6  // Opera
+	VersionMarketWebIE       uint = 7  // IE
+	VersionMarketWeb360      uint = 8  // 360
+	VersionMarketWebQQ       uint = 9  // QQ
+	VersionMarketWebHuoHu    uint = 10 // 火狐
+	VersionMarketWebLieBao   uint = 11 // 猎豹
+	VersionMarketWebSouGou   uint = 12 // 搜狗
 
-	VersionMarketAndroidOfficial   uint = 1
-	VersionMarketAndroidGooglePlay uint = 2
-	VersionMarketAndroidTapTap     uint = 3
-	VersionMarketAndroidHuawei     uint = 4
-	VersionMarketAndroidXiaomi     uint = 5
-	VersionMarketAndroidOppo       uint = 6
-	VersionMarketAndroidVivo       uint = 7
-	VersionMarketAndroidMeizu      uint = 8
-	VersionMarketAndroidOnePlus    uint = 9
-	VersionMarketAndroidSamsung    uint = 10
-	VersionMarketAndroidLenovo     uint = 11
-	VersionMarketAndroidSony       uint = 12
-	VersionMarketAndroidLG         uint = 13
-	VersionMarketAndroidHTC        uint = 14
-	VersionMarketAndroidMotorola   uint = 15
-	VersionMarketAndroidNokia      uint = 16
-	VersionMarketAndroidTencent    uint = 30
-	VersionMarketAndroidBaidu      uint = 31
-	VersionMarketAndroid360        uint = 32
+	VersionMarketAndroidOfficial   uint = 1  // 官网
+	VersionMarketAndroidGooglePlay uint = 2  // 谷歌
+	VersionMarketAndroidTapTap     uint = 3  // TapTap
+	VersionMarketAndroidHuawei     uint = 4  // 华为
+	VersionMarketAndroidXiaomi     uint = 5  // 小米
+	VersionMarketAndroidOppo       uint = 6  // oppo
+	VersionMarketAndroidVivo       uint = 7  // vivo
+	VersionMarketAndroidMeizu      uint = 8  // 魅族
+	VersionMarketAndroidOnePlus    uint = 9  // 一加
+	VersionMarketAndroidSamsung    uint = 10 // 三星
+	VersionMarketAndroidLenovo     uint = 11 // 联想
+	VersionMarketAndroidSony       uint = 12 // 索尼
+	VersionMarketAndroidLG         uint = 13 // LG
+	VersionMarketAndroidHTC        uint = 14 // HTC
+	VersionMarketAndroidMotorola   uint = 15 // 摩托罗拉
+	VersionMarketAndroidNokia      uint = 16 // 诺基亚
+	VersionMarketAndroidTencent    uint = 30 // 腾讯
+	VersionMarketAndroidBaidu      uint = 31 // 百度
+	VersionMarketAndroid360        uint = 32 // 360
 
-	VersionMarketIOSOfficial uint = 1
-	VersionMarketIOSAppStore uint = 2
+	VersionMarketIOSOfficial uint = 1 // 官网
+	VersionMarketIOSAppStore uint = 2 // 应用商店
 
-	VersionMarketAppletOfficial    uint = 1
-	VersionMarketAppletWeChat      uint = 2
-	VersionMarketAppletQQ          uint = 3
-	VersionMarketAppletDouYin      uint = 4
-	VersionMarketAppletKuaiShou    uint = 5
-	VersionMarketAppletXiaoHongShu uint = 6
-	VersionMarketAppletBaidu       uint = 7
-	VersionMarketAppletZhiFuBao    uint = 8
-	VersionMarketAppletTaoBao      uint = 9
-	VersionMarketAppletJingDong    uint = 10
-	VersionMarketAppletDingDing    uint = 11
+	VersionMarketAppletOfficial    uint = 1  // 官网
+	VersionMarketAppletWeChat      uint = 2  // 微信
+	VersionMarketAppletQQ          uint = 3  // QQ
+	VersionMarketAppletDouYin      uint = 4  // 抖音
+	VersionMarketAppletKuaiShou    uint = 5  // 快手
+	VersionMarketAppletXiaoHongShu uint = 6  // 小红书
+	VersionMarketAppletBaidu       uint = 7  // 百度
+	VersionMarketAppletZhiFuBao    uint = 8  // 支付宝
+	VersionMarketAppletTaoBao      uint = 9  // 淘宝
+	VersionMarketAppletJingDong    uint = 10 // 京东
+	VersionMarketAppletDingDing    uint = 11 // 钉钉
 
 	//ItchIo     uint = 2
 	//KongReGate uint = 3
