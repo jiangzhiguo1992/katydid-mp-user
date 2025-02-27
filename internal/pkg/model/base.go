@@ -43,7 +43,7 @@ func NewBaseEmpty() *Base {
 		//UpdateAt: time.Now().UnixMilli(), // auto
 		DeleteBy: 0,
 		DeleteAt: nil,
-		Extra:    map[string]any{},
+		Extra:    make(utils.KSMap),
 	}
 }
 
@@ -54,7 +54,7 @@ func NewBaseDefault() *Base {
 		//UpdateAt: time.Now().UnixMilli(), // auto
 		DeleteBy: 0,
 		DeleteAt: nil,
-		Extra:    map[string]any{},
+		Extra:    make(utils.KSMap),
 	}
 }
 

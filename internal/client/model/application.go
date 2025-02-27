@@ -10,13 +10,28 @@ import (
 )
 
 const (
-	appExtraKeyWebsite        = "website"        // 官网
+	appExtraKeyCerts        = "certs"
+	appExtraKeyClientSecret = "clientSecret"
+
+	appExtraKeyDesc           = "desc"           // 简介
+	appExtraKeyLogoUrl        = "logoUrl"        // 图标
+	appExtraKeyWebsiteUrl     = "websiteUrl"     // 官网
 	appExtraKeyCopyrights     = "copyrights"     // 版权
 	appExtraKeySupportUrl     = "supportUrl"     // 服务条款URL
 	appExtraKeyPrivacyUrl     = "privacyUrl"     // 隐私政策URL
 	appExtraKeyUserMaxAccount = "userMaxAccount" // 用户最多账户数
 	appExtraKeyUserMaxToken   = "userMaxToken"   // 用户最多令牌数 (同时登录最大数，防止工作室?)
-	// TODO:GG 支持的账号认证，必须的账号认证?
+
+	// TODO:GG
+	appExtraKeyCanPwd           = "enablePwd" // 是否支持密码登录
+	appExtraKeyCanSignUp        = "canSignUp" // 是否支持密码登录
+	appExtraKeyCanSignUpCode    = "enableSession"
+	appExtraKeyCanSignInSession = "enableSession"
+	// SigninMethods // TODO:GG 支持的账号认证，必须的账号认证?
+	//Providers           []*ProviderItem `xorm:"mediumtext" json:"providers"`
+	//SignupItems         []*SignupItem   `xorm:"varchar(1000)" json:"signupItems"`
+	//ExpireInHours        int            `json:"expireInHours"`
+	//RefreshExpireInHours int            `json:"refreshExpireInHours"`
 )
 
 // Application 应用
@@ -26,33 +41,32 @@ type Application struct {
 	IP    uint   `json:"IP"`                        // 系列 (eg:大富翁IP)
 	Part  uint   `json:"part"`                      // 类型 (eg:单机版)
 
-	Enable    bool   `json:"enable"`                               // 是否可用 (一般不用，下架之类的，没有reason)
 	Name      string `json:"name" validate:"required,name-format"` // 应用名称
 	OnlineAt  int64  `json:"onlineAt"`                             // 上线时间 (时间没到时，只能停留在首页，提示bulletins)
 	OfflineAt int64  `json:"offlineAt"`                            // 下线时间 (时间到后，强制下线+升级/等待/...)
 
-	//RemainingTime // TODO:GG 维护信息
-
-	Clients []*Client `json:"clients" gorm:"-:all"` // [platform][area]平台列表
+	Maintenances []*Maintenance `json:"maintenances" gorm:"-:all"` // 维护时间(App的)
+	Clients      []*Client      `json:"clients" gorm:"-:all"`      // [platform][area]平台列表
 }
 
 func NewApplicationEmpty() *Application {
 	return &Application{
-		Base:    model.NewBaseEmpty(),
-		Clients: []*Client{},
+		Base:         model.NewBaseEmpty(),
+		Maintenances: make([]*Maintenance, 0),
+		Clients:      make([]*Client, 0),
 	}
 }
 
 func NewApplicationDefault(
 	orgId uint64, IP, part uint,
-	enable bool, name string,
+	name string,
 ) *Application {
 	return &Application{
 		Base:  model.NewBaseDefault(),
 		OrgId: orgId, IP: IP, Part: part,
-		Enable: enable, Name: name,
-		OnlineAt: 0, OfflineAt: 0,
-		Clients: []*Client{},
+		Name: name, OnlineAt: 0, OfflineAt: 0,
+		Maintenances: make([]*Maintenance, 0),
+		Clients:      make([]*Client, 0),
 	}
 }
 
@@ -80,8 +94,8 @@ func (a *Application) ValidExtraRules() (utils.KSMap, valid.ExtraValidRules) {
 	return a.Extra, valid.ExtraValidRules{
 		valid.SceneAll: valid.ExtraValidRule{
 			// 官网 (<1000)
-			appExtraKeyWebsite: valid.ExtraValidRuleInfo{
-				Field: appExtraKeyWebsite,
+			appExtraKeyWebsiteUrl: valid.ExtraValidRuleInfo{
+				Field: appExtraKeyWebsiteUrl,
 				ValidFn: func(value interface{}) bool {
 					v, ok := value.(string)
 					if !ok {
@@ -144,7 +158,7 @@ func (a *Application) ValidLocalizeRules() valid.LocalizeValidRules {
 				},
 			}, Rule2: map[valid.Tag]valid.LocalizeValidRuleParam{
 				"name-format":         {"format_app_name_err", false, nil},
-				appExtraKeyWebsite:    {"format_website_err", false, nil},
+				appExtraKeyWebsiteUrl: {"format_website_err", false, nil},
 				appExtraKeyCopyrights: {"format_copyrights_err", false, nil},
 				appExtraKeySupportUrl: {"format_support_url_err", false, nil},
 				appExtraKeyPrivacyUrl: {"format_privacy_url_err", false, nil},
@@ -153,12 +167,48 @@ func (a *Application) ValidLocalizeRules() valid.LocalizeValidRules {
 	}
 }
 
-func (a *Application) SetWebsite(website *string) {
-	a.Extra.SetString(appExtraKeyWebsite, website)
+func (a *Application) SetCerts(certs *[]any) {
+	a.Extra.SetSlice(appExtraKeyCerts, certs)
 }
 
-func (a *Application) GetWebsite() string {
-	data, _ := a.Extra.GetString(appExtraKeyWebsite)
+func (a *Application) GetCerts() []any {
+	data, _ := a.Extra.GetSlice(appExtraKeyCerts)
+	return data
+}
+
+func (a *Application) SetClientSecret(clientSecret *string) {
+	a.Extra.SetString(appExtraKeyClientSecret, clientSecret)
+}
+
+func (a *Application) GetClientSecret() string {
+	data, _ := a.Extra.GetString(appExtraKeyClientSecret)
+	return data
+}
+
+func (a *Application) SetDesc(desc *string) {
+	a.Extra.SetString(appExtraKeyDesc, desc)
+}
+
+func (a *Application) GetDesc() string {
+	data, _ := a.Extra.GetString(appExtraKeyDesc)
+	return data
+}
+
+func (a *Application) SetLogoUrl(logoUrl *string) {
+	a.Extra.SetString(appExtraKeyLogoUrl, logoUrl)
+}
+
+func (a *Application) GetLogoUrl() string {
+	data, _ := a.Extra.GetString(appExtraKeyLogoUrl)
+	return data
+}
+
+func (a *Application) SetWebsiteUrl(website *string) {
+	a.Extra.SetString(appExtraKeyWebsiteUrl, website)
+}
+
+func (a *Application) GetWebsiteUrl() string {
+	data, _ := a.Extra.GetString(appExtraKeyWebsiteUrl)
 	return data
 }
 
@@ -241,36 +291,36 @@ func (a *Application) IsComingOffline() bool {
 	return a.OfflineAt > currentTime && (a.OnlineAt == -1 || a.OnlineAt < currentTime)
 }
 
-func (a *Application) GetPlatformsByPlat(platform uint16) []*Client {
-	var platforms []*Client
-	for _, p := range a.Clients {
-		if p.Platform == platform {
-			platforms = append(platforms, p)
+func (a *Application) GetClientsByPlatform(platform uint) []*Client {
+	var clients []*Client
+	for _, c := range a.Clients {
+		if c.Platform == platform {
+			clients = append(clients, c)
 		}
 	}
-	return platforms
+	return clients
 }
 
-func (a *Application) GetPlatformsByArea(area uint) []*Client {
-	var platforms []*Client
-	for _, p := range a.Clients {
-		if p.Area == area {
-			platforms = append(platforms, p)
+func (a *Application) GetClientsByArea(area uint) []*Client {
+	var clients []*Client
+	for _, c := range a.Clients {
+		if c.Area == area {
+			clients = append(clients, c)
 		}
 	}
-	return platforms
+	return clients
 }
 
-func (a *Application) GetPlatform(platform uint16, area uint) *Client {
-	for _, p := range a.Clients {
-		if p.Platform == platform && p.Area == area {
-			return p
+func (a *Application) GetClient(platform, area uint) *Client {
+	for _, c := range a.Clients {
+		if c.Platform == platform && c.Area == area {
+			return c
 		}
 	}
 	return nil
 }
 
-//func (c *Application) GetLatestVersion(platform, area uint16, market uint) *Version {
-//	p := c.GetPlatform(platform, area)
-//	return p.GetLatestVersion(market)
-//}
+func (a *Application) GetLatestVersion(platform, area uint, market uint) *Version {
+	p := a.GetClient(platform, area)
+	return p.GetLatestVersion(market)
+}

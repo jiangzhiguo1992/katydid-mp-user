@@ -36,10 +36,10 @@ const (
 type Organization struct {
 	*model.Base
 
-	OwnerIds  []uint64 `json:"ownerIds" validate:"required"` // 所属账号们
-	ParentIds []uint64 `json:"parentId"`                     // 父级组织 默认0
+	OwnAccountIds []uint64 `json:"ownAccountIds" validate:"required"` // 所属账号们
+	ParentIds     []uint64 `json:"parentId"`                          // 父级组织 默认0
 
-	Enable   bool     `json:"enable"`                                  // 是否可用
+	Enable   bool     `json:"enable"`                                  // 是否可用(拉黑等)
 	IsPublic bool     `json:"isPublic"`                                // 是否公开
 	Kind     uint8    `json:"kind" validate:"required,kind-check"`     // 组织类型
 	Become   uint8    `json:"become" validate:"required,become-check"` // 加入方式
@@ -54,25 +54,25 @@ type Organization struct {
 
 func NewOrganizationEmpty() *Organization {
 	return &Organization{
-		Base:      model.NewBaseEmpty(),
-		OwnerIds:  []uint64{},
-		ParentIds: []uint64{},
-		Tags:      []string{},
-		Children:  []*Organization{},
-		Apps:      []*Application{},
+		Base:          model.NewBaseEmpty(),
+		OwnAccountIds: make([]uint64, 0),
+		ParentIds:     make([]uint64, 0),
+		Tags:          make([]string, 0),
+		Children:      make([]*Organization, 0),
+		Apps:          make([]*Application, 0),
 	}
 }
 
 func NewOrganizationDefault(
-	ownerIds, parentIds []uint64,
+	ownAccountIds, parentIds []uint64,
 	enable, isPublic bool, kind, become uint8, name, display string, tags []string,
 ) *Organization {
 	return &Organization{
-		Base:     model.NewBaseEmpty(),
-		OwnerIds: ownerIds, ParentIds: parentIds,
+		Base:          model.NewBaseEmpty(),
+		OwnAccountIds: ownAccountIds, ParentIds: parentIds,
 		Enable: enable, IsPublic: isPublic, Kind: kind, Become: become, Name: name, Display: display, Tags: tags,
-		Children: []*Organization{},
-		Apps:     []*Application{},
+		Children: make([]*Organization, 0),
+		Apps:     make([]*Application, 0),
 	}
 }
 

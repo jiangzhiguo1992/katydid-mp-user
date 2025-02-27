@@ -21,6 +21,15 @@ func (m KSMap) SetPtr(key string, value *any) {
 	m.Set(key, *value)
 }
 
+// SetSlice 设置[]any类型值
+func (m KSMap) SetSlice(key string, value *[]any) {
+	if value == nil {
+		delete(m, key)
+		return
+	}
+	m[key] = *value
+}
+
 // Delete 删除指定key
 func (m KSMap) Delete(key string) {
 	delete(m, key)
