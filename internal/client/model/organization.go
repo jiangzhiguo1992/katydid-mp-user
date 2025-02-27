@@ -198,11 +198,11 @@ const (
 	orgExtraKeyRootPwd  = "rootPwd"  // 根密码
 	orgExtraKeyMultiJob = "multiJob" // 是否允许单用户多任职
 
-	orgExtraKeyWebsiteUrl = "website"   // 官网
-	orgExtraKeyFaviconUrl = "favicon"   // 图标
-	orgExtraKeyDesc       = "desc"      // 简介
-	orgExtraKeyAddresses  = "addresses" // 地址
-	orgExtraKeyContacts   = "contacts"  // 联系方式
+	orgExtraKeyWebsiteUrl = "websiteUrl" // 官网
+	orgExtraKeyFaviconUrl = "faviconUrl" // 图标
+	orgExtraKeyDesc       = "desc"       // 简介
+	orgExtraKeyAddresses  = "addresses"  // 地址
+	orgExtraKeyContacts   = "contacts"   // 联系方式
 
 	// TODO:GG 支持的Account的认证方式? 支持的Permission的方式?
 	// TODO:GG PasswordType, PasswordSalt
