@@ -9,10 +9,18 @@ import (
 )
 
 const (
-	OrganizationParentRoot uint64 = 0 // 根组织
+	OrgParentRootId uint64 = 0 // 根组织
+
+	OrgKindPhysical uint8 = 0 // 实体组织 (同时存在数受orgExtraKeyMultiJob影响)
+	OrgKindVirtual  uint8 = 1 // 虚拟组织 (能同时存在多个)
+
+	OrgBecomePublic uint8 = 0 // 公开
+	OrgBecomeApply  uint8 = 1 // 申请
+	OrgBecomeInvite uint8 = 2 // 邀请
 
 	// TODO:GG 有成员的时候，获取需要各种auth?登录不需要
-	orgExtraKeyRootPwd = "rootPwd" // 根密码
+	orgExtraKeyRootPwd  = "rootPwd"  // 根密码
+	orgExtraKeyMultiJob = "multiJob" // 是否允许单用户多任职
 
 	orgExtraKeyWebsiteUrl = "website"   // 官网
 	orgExtraKeyFaviconUrl = "favicon"   // 图标
@@ -28,14 +36,16 @@ const (
 type Organization struct {
 	*model.Base
 
-	ParentId uint64   `json:"parentId"`                     // 父级组织 默认0
-	OwnerIds []uint64 `json:"ownerIds" validate:"required"` // 所属用户们
+	OwnerIds  []uint64 `json:"ownerIds" validate:"required"` // 所属账号们
+	ParentIds []uint64 `json:"parentId"`                     // 父级组织 默认0
 
-	Enable   bool     `json:"enable"`                               // 是否可用
-	IsPublic bool     `json:"isPublic"`                             // 是否公开
-	Name     string   `json:"name" validate:"required,name-format"` // 组织名称
-	Display  string   `json:"display" validate:"display-format"`    // 组织显示名称
-	Tags     []string `json:"tags"`                                 // 组织标签们
+	Enable   bool     `json:"enable"`                                  // 是否可用
+	IsPublic bool     `json:"isPublic"`                                // 是否公开
+	Kind     uint8    `json:"kind" validate:"required,kind-check"`     // 组织类型
+	Become   uint8    `json:"become" validate:"required,become-check"` // 加入方式
+	Name     string   `json:"name" validate:"required,name-format"`    // 组织名称
+	Display  string   `json:"display" validate:"display-format"`       // 组织显示名称
+	Tags     []string `json:"tags"`                                    // 组织标签们
 
 	Children []*Organization `json:"children" gorm:"-:all"` // 子组织列表
 	Apps     []*Application  `json:"apps" gorm:"-:all"`     // 项目列表
@@ -44,19 +54,23 @@ type Organization struct {
 
 func NewOrganizationEmpty() *Organization {
 	return &Organization{
-		Base:     model.NewBaseEmpty(),
-		ParentId: OrganizationParentRoot,
-		Children: []*Organization{},
-		Apps:     []*Application{},
+		Base:      model.NewBaseEmpty(),
+		OwnerIds:  []uint64{},
+		ParentIds: []uint64{},
+		Tags:      []string{},
+		Children:  []*Organization{},
+		Apps:      []*Application{},
 	}
 }
 
 func NewOrganizationDefault(
-	parentId uint64, enable bool, name string,
+	ownerIds, parentIds []uint64,
+	enable, isPublic bool, kind, become uint8, name, display string, tags []string,
 ) *Organization {
 	return &Organization{
 		Base:     model.NewBaseEmpty(),
-		ParentId: parentId, Enable: enable, Name: name,
+		OwnerIds: ownerIds, ParentIds: parentIds,
+		Enable: enable, IsPublic: isPublic, Kind: kind, Become: become, Name: name, Display: display, Tags: tags,
 		Children: []*Organization{},
 		Apps:     []*Application{},
 	}
@@ -168,6 +182,24 @@ func (o *Organization) ValidLocalizeRules() valid.LocalizeValidRules {
 	}
 }
 
+func (o *Organization) SetRootPwd(pwd *string) {
+	o.Extra.SetString(orgExtraKeyRootPwd, pwd)
+}
+
+func (o *Organization) GetRootPwd() string {
+	data, _ := o.Extra.GetString(orgExtraKeyRootPwd)
+	return data
+}
+
+func (o *Organization) SetMultiJob(multiJob *bool) {
+	o.Extra.SetBool(orgExtraKeyMultiJob, multiJob)
+}
+
+func (o *Organization) GetMultiJob() bool {
+	data, _ := o.Extra.GetBool(orgExtraKeyMultiJob)
+	return data
+}
+
 func (o *Organization) SetWebsiteUrl(website *string) {
 	o.Extra.SetString(orgExtraKeyWebsiteUrl, website)
 }
@@ -214,7 +246,9 @@ func (o *Organization) GetContacts() []string {
 }
 
 func (o *Organization) IsTopParent() bool {
-	return o.ParentId == OrganizationParentRoot
+	zero := len(o.ParentIds) == 0
+	one := len(o.ParentIds) == 1
+	return zero || (one && (o.ParentIds[0] == OrgParentRootId))
 }
 
 func (o *Organization) IsBotChild() bool {
