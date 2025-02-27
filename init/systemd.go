@@ -11,16 +11,11 @@ import (
 
 func init() {
 	// configs
-	config, e := configs.Init(
-		configs.ConfDir,
-		func() bool {
-			// TODO:GG reConfig
-			return true
-		},
-	)
+	config, e := configs.Init(configs.ConfDir)
 	if e != nil {
 		log.Fatal("", log.FError(e))
 	}
+	//configs.Subscribe() // TODO:GG 订阅reload
 
 	// logger
 	log.Init(log.Config{

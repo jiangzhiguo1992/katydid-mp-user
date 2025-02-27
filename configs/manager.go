@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"fmt"
 	"github.com/fsnotify/fsnotify"
+	"github.com/google/uuid"
 	"github.com/spf13/viper"
 	_ "github.com/spf13/viper/remote"
 	"log/slog"
@@ -11,6 +12,7 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"time"
 )
 
 const (
@@ -32,21 +34,18 @@ type Manager struct {
 
 // ChangeSubscriber 配置变更订阅
 type ChangeSubscriber struct {
+	ID       string
 	Key      string
 	Callback func(interface{})
 }
 
-func GetManager() *Manager {
-	//manager.mu.RLock()
-	//defer manager.mu.RUnlock()
-	return manager
-}
-
 // Get 获取配置管理器单例
 func Get() *Config {
-	//manager.mu.RLock()
-	//defer manager.mu.RUnlock()
-	return manager.config
+	manager.mu.RLock()
+	defer manager.mu.RUnlock()
+	// 返回只读副本而非直接引用
+	config := *manager.config
+	return &config
 }
 
 // Init 初始化配置
@@ -65,13 +64,30 @@ func Init(confDir string) (*Config, error) {
 }
 
 // Subscribe 注册配置监听
-func (m *Manager) Subscribe(key string, callback func(interface{})) {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	m.subscribers = append(m.subscribers, ChangeSubscriber{
+func Subscribe(key string, callback func(interface{})) func() {
+	manager.mu.Lock()
+	defer manager.mu.Unlock()
+
+	id := uuid.New().String()
+	manager.subscribers = append(manager.subscribers, ChangeSubscriber{
+		ID:       id,
 		Key:      key,
 		Callback: callback,
 	})
+
+	// 返回取消订阅函数
+	return func() {
+		manager.mu.Lock()
+		defer manager.mu.Unlock()
+
+		for i, sub := range manager.subscribers {
+			if sub.ID == id {
+				// 删除订阅
+				manager.subscribers = append(manager.subscribers[:i], manager.subscribers[i+1:]...)
+				break
+			}
+		}
+	}
 }
 
 // Load 加载配置
@@ -113,12 +129,12 @@ func (m *Manager) load(confDir string) error {
 	// 设置配置监听
 	m.watchConfig()
 
-	// 在Load方法中添加 TODO:GG 根据config里的配置，来启动远程配置监听
-	//if m.remoteEnabled {
-	//	if err := m.loadRemoteConfig(); err != nil {
-	//		return fmt.Errorf("■ ■ Conf ■ ■ load remote config failed: %w", err)
-	//	}
-	//}
+	// 远程配置加载
+	if m.config.RemoteConf.Enabled {
+		if err := m.loadRemoteConfig(); err != nil {
+			return fmt.Errorf("■ ■ Conf ■ ■ load remote config failed: %w", err)
+		}
+	}
 	return nil
 }
 
@@ -194,30 +210,49 @@ func (m *Manager) watchConfig() {
 	m.v.WatchConfig()
 }
 
-//// loadRemoteConfig 加载远程配置
-//func (m *Manager) loadRemoteConfig(kind, addr, key string) error {
-//	err := m.v.AddRemoteProvider(kind, addr, key)
-//	if err != nil {
-//		return err
-//	}
-//
-//	err = m.v.ReadRemoteConfig()
-//	if err != nil {
-//		return err
-//	}
-//
-//	// 启动远程配置监听
-//	go func() {
-//		for {
-//			time.Sleep(30 * time.Second)
-//			err := m.v.WatchRemoteConfig()
-//			if err != nil {
-//				slog.Error("■ ■ Conf ■ ■ watch remote config failed", slog.Any("err", err))
-//				continue
-//			}
-//			if err := m.parseConfig(); err != nil {
-//				slog.Error("■ ■ Conf ■ ■ parse remote config failed", slog.Any("err", err))
-//			}
-//		}
-//	}()
-//}
+// loadRemoteConfig 加载远程配置
+func (m *Manager) loadRemoteConfig() error {
+	if !m.config.RemoteConf.Enabled {
+		return nil
+	}
+
+	err := m.v.AddRemoteProvider(
+		m.config.RemoteConf.Provider,
+		m.config.RemoteConf.Endpoint,
+		m.config.RemoteConf.Path,
+	)
+	if err != nil {
+		return err
+	}
+
+	// 设置远程配置类型
+	m.v.SetConfigType("toml")
+
+	if err := m.v.ReadRemoteConfig(); err != nil {
+		return err
+	}
+
+	// 启动远程配置监听
+	refreshInterval := time.Duration(m.config.RemoteConf.RefreshInterval) * time.Second
+	if refreshInterval < 10*time.Second {
+		refreshInterval = 30 * time.Second // 默认最小刷新间隔
+	}
+
+	go func() {
+		for {
+			time.Sleep(refreshInterval)
+			err := m.v.WatchRemoteConfig()
+			if err != nil {
+				slog.Error("■ ■ Conf ■ ■ watch remote config failed", slog.Any("err", err))
+				continue
+			}
+
+			m.mu.Lock()
+			if err := m.parseConfig(); err != nil {
+				slog.Error("■ ■ Conf ■ ■ parse remote config failed", slog.Any("err", err))
+			}
+			m.mu.Unlock()
+		}
+	}()
+	return nil
+}

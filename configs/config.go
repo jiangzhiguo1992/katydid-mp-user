@@ -21,15 +21,26 @@ type (
 		Env     string `toml:"env" mapstructure:"env"`
 		EnvName string `toml:"env_name" mapstructure:"env_name"`
 
-		DefLang string `toml:"def_lang" mapstructure:"def_lang"`
-
 		LogConf `toml:"log" mapstructure:"log"`
+
+		RemoteConf `toml:"remote_conf" mapstructure:"remote_conf"`
+
+		DefLang string `toml:"def_lang" mapstructure:"def_lang"`
 
 		AppConf `mapstructure:",squash"`
 
 		Account AccountConf `toml:"account" mapstructure:"account"`
 		Client  ClientConf  `toml:"client" mapstructure:"client"`
 		User    UserConf    `toml:"user" mapstructure:"user"`
+	}
+
+	RemoteConf struct {
+		Enabled         bool   `toml:"enabled" mapstructure:"enabled"`
+		Provider        string `toml:"provider" mapstructure:"provider"` // etcd, consul, firestore
+		Endpoint        string `toml:"endpoint" mapstructure:"endpoint"`
+		Path            string `toml:"path" mapstructure:"path"`
+		SecretKey       string `toml:"secret_key" mapstructure:"secret_key"`
+		RefreshInterval int    `toml:"refresh_interval" mapstructure:"refresh_interval"`
 	}
 
 	LogConf struct {
