@@ -9,31 +9,6 @@ import (
 	"unicode"
 )
 
-const (
-	appExtraKeyCerts        = "certs"
-	appExtraKeyClientSecret = "clientSecret"
-
-	appExtraKeyDesc           = "desc"           // 简介
-	appExtraKeyLogoUrl        = "logoUrl"        // 图标
-	appExtraKeyWebsiteUrl     = "websiteUrl"     // 官网
-	appExtraKeyCopyrights     = "copyrights"     // 版权
-	appExtraKeySupportUrl     = "supportUrl"     // 服务条款URL
-	appExtraKeyPrivacyUrl     = "privacyUrl"     // 隐私政策URL
-	appExtraKeyUserMaxAccount = "userMaxAccount" // 用户最多账户数
-	appExtraKeyUserMaxToken   = "userMaxToken"   // 用户最多令牌数 (同时登录最大数，防止工作室?)
-
-	// TODO:GG
-	appExtraKeyCanPwd           = "enablePwd" // 是否支持密码登录
-	appExtraKeyCanSignUp        = "canSignUp" // 是否支持密码登录
-	appExtraKeyCanSignUpCode    = "enableSession"
-	appExtraKeyCanSignInSession = "enableSession"
-	// SigninMethods // TODO:GG 支持的账号认证，必须的账号认证?
-	//Providers           []*ProviderItem `xorm:"mediumtext" json:"providers"`
-	//SignupItems         []*SignupItem   `xorm:"varchar(1000)" json:"signupItems"`
-	//ExpireInHours        int            `json:"expireInHours"`
-	//RefreshExpireInHours int            `json:"refreshExpireInHours"`
-)
-
 // Application 应用
 type Application struct {
 	*model.Base
@@ -167,21 +142,104 @@ func (a *Application) ValidLocalizeRules() valid.LocalizeValidRules {
 	}
 }
 
+func (a *Application) OverUserMaxAccount(count int) bool {
+	maxCount := a.GetUserMaxAccount()
+	return (maxCount >= 0) && (count > maxCount)
+}
+
+func (a *Application) OverUserMaxToken(count int) bool {
+	maxCount := a.GetUserMaxToken()
+	return (maxCount >= 0) && (count > maxCount)
+}
+
+// IsOnline 是否上线
+func (a *Application) IsOnline() bool {
+	currentTime := time.Now().UnixMilli()
+	return (a.OnlineAt > 0 && (a.OnlineAt <= currentTime)) && (a.OfflineAt == -1 || a.OfflineAt > currentTime)
+}
+
+// IsOffline 是否下线
+func (a *Application) IsOffline() bool {
+	currentTime := time.Now().UnixMilli()
+	return (a.OfflineAt > 0 && (a.OfflineAt <= currentTime)) && (a.OnlineAt == -1 || a.OnlineAt > currentTime)
+}
+
+// IsComingOnline 是否即将上线
+func (a *Application) IsComingOnline() bool {
+	currentTime := time.Now().UnixMilli()
+	return a.OnlineAt > currentTime && (a.OfflineAt == -1 || a.OfflineAt < currentTime)
+}
+
+// IsComingOffline 是否即将下线
+func (a *Application) IsComingOffline() bool {
+	currentTime := time.Now().UnixMilli()
+	return a.OfflineAt > currentTime && (a.OnlineAt == -1 || a.OnlineAt < currentTime)
+}
+
+func (a *Application) GetClientsByPlatform(platform uint) []*Client {
+	var clients []*Client
+	for _, c := range a.Clients {
+		if c.Platform == platform {
+			clients = append(clients, c)
+		}
+	}
+	return clients
+}
+
+func (a *Application) GetClientsByArea(area uint) []*Client {
+	var clients []*Client
+	for _, c := range a.Clients {
+		if c.Area == area {
+			clients = append(clients, c)
+		}
+	}
+	return clients
+}
+
+func (a *Application) GetClient(platform, area uint) *Client {
+	for _, c := range a.Clients {
+		if c.Platform == platform && c.Area == area {
+			return c
+		}
+	}
+	return nil
+}
+
+func (a *Application) GetLatestVersion(platform, area uint, market uint) *Version {
+	p := a.GetClient(platform, area)
+	return p.GetLatestVersion(market)
+}
+
+const (
+	appExtraKeyCerts = "certs"
+
+	appExtraKeyDesc           = "desc"           // 简介
+	appExtraKeyLogoUrl        = "logoUrl"        // 图标
+	appExtraKeyWebsiteUrl     = "websiteUrl"     // 官网
+	appExtraKeyCopyrights     = "copyrights"     // 版权
+	appExtraKeySupportUrl     = "supportUrl"     // 服务条款URL
+	appExtraKeyPrivacyUrl     = "privacyUrl"     // 隐私政策URL
+	appExtraKeyUserMaxAccount = "userMaxAccount" // 用户最多账户数
+	appExtraKeyUserMaxToken   = "userMaxToken"   // 用户最多令牌数 (同时登录最大数，防止工作室?)
+
+	// TODO:GG
+	appExtraKeyCanPwd           = "enablePwd" // 是否支持密码登录
+	appExtraKeyCanSignUp        = "canSignUp" // 是否支持密码登录
+	appExtraKeyCanSignUpCode    = "enableSession"
+	appExtraKeyCanSignInSession = "enableSession"
+	// SigninMethods // TODO:GG 支持的账号认证，必须的账号认证?
+	//Providers           []*ProviderItem `xorm:"mediumtext" json:"providers"`
+	//SignupItems         []*SignupItem   `xorm:"varchar(1000)" json:"signupItems"`
+	//ExpireInHours        int            `json:"expireInHours"`
+	//RefreshExpireInHours int            `json:"refreshExpireInHours"`
+)
+
 func (a *Application) SetCerts(certs *[]any) {
 	a.Extra.SetSlice(appExtraKeyCerts, certs)
 }
 
 func (a *Application) GetCerts() []any {
 	data, _ := a.Extra.GetSlice(appExtraKeyCerts)
-	return data
-}
-
-func (a *Application) SetClientSecret(clientSecret *string) {
-	a.Extra.SetString(appExtraKeyClientSecret, clientSecret)
-}
-
-func (a *Application) GetClientSecret() string {
-	data, _ := a.Extra.GetString(appExtraKeyClientSecret)
 	return data
 }
 
@@ -248,11 +306,6 @@ func (a *Application) GetUserMaxAccount() int {
 	return data
 }
 
-func (a *Application) OverUserMaxAccount(count int) bool {
-	maxCount := a.GetUserMaxAccount()
-	return (maxCount >= 0) && (count > maxCount)
-}
-
 func (a *Application) SetUserMaxToken(userMaxToken *int) {
 	a.Extra.SetInt(appExtraKeyUserMaxToken, userMaxToken)
 }
@@ -260,67 +313,4 @@ func (a *Application) SetUserMaxToken(userMaxToken *int) {
 func (a *Application) GetUserMaxToken() int {
 	data, _ := a.Extra.GetInt(appExtraKeyUserMaxToken)
 	return data
-}
-
-func (a *Application) OverUserMaxToken(count int) bool {
-	maxCount := a.GetUserMaxToken()
-	return (maxCount >= 0) && (count > maxCount)
-}
-
-// IsOnline 是否上线
-func (a *Application) IsOnline() bool {
-	currentTime := time.Now().UnixMilli()
-	return (a.OnlineAt > 0 && (a.OnlineAt <= currentTime)) && (a.OfflineAt == -1 || a.OfflineAt > currentTime)
-}
-
-// IsOffline 是否下线
-func (a *Application) IsOffline() bool {
-	currentTime := time.Now().UnixMilli()
-	return (a.OfflineAt > 0 && (a.OfflineAt <= currentTime)) && (a.OnlineAt == -1 || a.OnlineAt > currentTime)
-}
-
-// IsComingOnline 是否即将上线
-func (a *Application) IsComingOnline() bool {
-	currentTime := time.Now().UnixMilli()
-	return a.OnlineAt > currentTime && (a.OfflineAt == -1 || a.OfflineAt < currentTime)
-}
-
-// IsComingOffline 是否即将下线
-func (a *Application) IsComingOffline() bool {
-	currentTime := time.Now().UnixMilli()
-	return a.OfflineAt > currentTime && (a.OnlineAt == -1 || a.OnlineAt < currentTime)
-}
-
-func (a *Application) GetClientsByPlatform(platform uint) []*Client {
-	var clients []*Client
-	for _, c := range a.Clients {
-		if c.Platform == platform {
-			clients = append(clients, c)
-		}
-	}
-	return clients
-}
-
-func (a *Application) GetClientsByArea(area uint) []*Client {
-	var clients []*Client
-	for _, c := range a.Clients {
-		if c.Area == area {
-			clients = append(clients, c)
-		}
-	}
-	return clients
-}
-
-func (a *Application) GetClient(platform, area uint) *Client {
-	for _, c := range a.Clients {
-		if c.Platform == platform && c.Area == area {
-			return c
-		}
-	}
-	return nil
-}
-
-func (a *Application) GetLatestVersion(platform, area uint, market uint) *Version {
-	p := a.GetClient(platform, area)
-	return p.GetLatestVersion(market)
 }

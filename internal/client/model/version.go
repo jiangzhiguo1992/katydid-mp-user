@@ -119,7 +119,6 @@ const (
 	versionExtraKeyLog        = "log"        // 更新日志
 	versionExtraKeySize       = "size"       // 安装包大小
 	versionExtraKeyCompact    = "compact"    // 兼容信息
-	versionExtraKeyIconUrl    = "iconUrl"    // icon地址
 	versionExtraKeyImgUrls    = "imgUrls"    // 版本介绍图片地址
 	versionExtraKeyVideoUrls  = "videoUrls"  // 版本介绍视频地址
 	versionExtraKeyMarketName = "marketName" // 设置广告渠道名称 (广告投放)
@@ -167,15 +166,6 @@ func (v *Version) SetCompact(compact *string) {
 
 func (v *Version) GetCompact() string {
 	data, _ := v.Extra.GetString(versionExtraKeyCompact)
-	return data
-}
-
-func (v *Version) SetIconUrl(iconUrl *string) {
-	v.Extra.SetString(versionExtraKeyIconUrl, iconUrl)
-}
-
-func (v *Version) GetIconUrl() string {
-	data, _ := v.Extra.GetString(versionExtraKeyIconUrl)
 	return data
 }
 
