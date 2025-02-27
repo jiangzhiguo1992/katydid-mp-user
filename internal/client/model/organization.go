@@ -9,28 +9,35 @@ import (
 )
 
 const (
-	OrganizationParentRoot uint64 = 0 // 根团队
+	OrganizationParentRoot uint64 = 0 // 根组织
+
+	// TODO:GG 有成员的时候，获取需要各种auth?登录不需要
+	orgExtraKeyRootPwd = "rootPwd" // 根密码
 
 	orgExtraKeyWebsiteUrl = "website"   // 官网
 	orgExtraKeyFaviconUrl = "favicon"   // 图标
 	orgExtraKeyDesc       = "desc"      // 简介
 	orgExtraKeyAddresses  = "addresses" // 地址
 	orgExtraKeyContacts   = "contacts"  // 联系方式
+
 	// TODO:GG 支持的Account的认证方式? 支持的Permission的方式?
+	// TODO:GG PasswordType, PasswordSalt
 )
 
+// Organization 组织
 type Organization struct {
 	*model.Base
 
-	ParentId uint64   `json:"parentId"` // 父级团队 默认0
-	OwnerIds []uint64 `json:"ownerIds"` // 所属用户们
+	ParentId uint64   `json:"parentId"`                     // 父级组织 默认0
+	OwnerIds []uint64 `json:"ownerIds" validate:"required"` // 所属用户们
 
-	Enable   bool   `json:"enable"`                               // 是否可用
-	IsPublic bool   `json:"isPublic"`                             // 是否公开
-	Name     string `json:"name" validate:"required,name-format"` // 团队名称
-	Display  string `json:"display" validate:"display-format"`    // 团队显示名称
+	Enable   bool     `json:"enable"`                               // 是否可用
+	IsPublic bool     `json:"isPublic"`                             // 是否公开
+	Name     string   `json:"name" validate:"required,name-format"` // 组织名称
+	Display  string   `json:"display" validate:"display-format"`    // 组织显示名称
+	Tags     []string `json:"tags"`                                 // 组织标签们
 
-	Children []*Organization `json:"children" gorm:"-:all"` // 子团队列表
+	Children []*Organization `json:"children" gorm:"-:all"` // 子组织列表
 	Apps     []*Application  `json:"apps" gorm:"-:all"`     // 项目列表
 	// TODO:GG Permission + Account + User
 }
@@ -55,10 +62,10 @@ func NewOrganizationDefault(
 	}
 }
 
-func (t *Organization) ValidFieldRules() valid.FieldValidRules {
+func (o *Organization) ValidFieldRules() valid.FieldValidRules {
 	return valid.FieldValidRules{
 		valid.SceneAll: valid.FieldValidRule{
-			// 团队名称 (1-50)
+			// 组织名称 (1-50)
 			"name-format": func(value reflect.Value, param string) bool {
 				name := value.String()
 				if len(name) < 1 || len(name) > 50 {
@@ -75,8 +82,8 @@ func (t *Organization) ValidFieldRules() valid.FieldValidRules {
 	}
 }
 
-func (t *Organization) ValidExtraRules() (utils.KSMap, valid.ExtraValidRules) {
-	return t.Extra, valid.ExtraValidRules{
+func (o *Organization) ValidExtraRules() (utils.KSMap, valid.ExtraValidRules) {
+	return o.Extra, valid.ExtraValidRules{
 		valid.SceneAll: valid.ExtraValidRule{
 			// 官网 (<1000)
 			orgExtraKeyWebsiteUrl: valid.ExtraValidRuleInfo{
@@ -142,7 +149,7 @@ func (t *Organization) ValidExtraRules() (utils.KSMap, valid.ExtraValidRules) {
 	}
 }
 
-func (t *Organization) ValidLocalizeRules() valid.LocalizeValidRules {
+func (o *Organization) ValidLocalizeRules() valid.LocalizeValidRules {
 	return valid.LocalizeValidRules{
 		valid.SceneAll: valid.LocalizeValidRule{
 			Rule1: map[valid.Tag]map[valid.FieldName]valid.LocalizeValidRuleParam{
@@ -161,63 +168,63 @@ func (t *Organization) ValidLocalizeRules() valid.LocalizeValidRules {
 	}
 }
 
-func (t *Organization) SetWebsiteUrl(website *string) {
-	t.Extra.SetString(orgExtraKeyWebsiteUrl, website)
+func (o *Organization) SetWebsiteUrl(website *string) {
+	o.Extra.SetString(orgExtraKeyWebsiteUrl, website)
 }
 
-func (t *Organization) GetWebsiteUrl() string {
-	data, _ := t.Extra.GetString(orgExtraKeyWebsiteUrl)
+func (o *Organization) GetWebsiteUrl() string {
+	data, _ := o.Extra.GetString(orgExtraKeyWebsiteUrl)
 	return data
 }
 
-func (t *Organization) SetFaviconUrl(website *string) {
-	t.Extra.SetString(orgExtraKeyFaviconUrl, website)
+func (o *Organization) SetFaviconUrl(website *string) {
+	o.Extra.SetString(orgExtraKeyFaviconUrl, website)
 }
 
-func (t *Organization) GetFaviconUrl() string {
-	data, _ := t.Extra.GetString(orgExtraKeyFaviconUrl)
+func (o *Organization) GetFaviconUrl() string {
+	data, _ := o.Extra.GetString(orgExtraKeyFaviconUrl)
 	return data
 }
 
-func (t *Organization) SetDesc(desc *string) {
-	t.Extra.SetString(orgExtraKeyDesc, desc)
+func (o *Organization) SetDesc(desc *string) {
+	o.Extra.SetString(orgExtraKeyDesc, desc)
 }
 
-func (t *Organization) GetDesc() string {
-	data, _ := t.Extra.GetString(orgExtraKeyDesc)
+func (o *Organization) GetDesc() string {
+	data, _ := o.Extra.GetString(orgExtraKeyDesc)
 	return data
 }
 
-func (t *Organization) SetAddresses(addresses *[]string) {
-	t.Extra.SetStringSlice(orgExtraKeyAddresses, addresses)
+func (o *Organization) SetAddresses(addresses *[]string) {
+	o.Extra.SetStringSlice(orgExtraKeyAddresses, addresses)
 }
 
-func (t *Organization) GetAddresses() []string {
-	data, _ := t.Extra.GetStringSlice(orgExtraKeyAddresses)
+func (o *Organization) GetAddresses() []string {
+	data, _ := o.Extra.GetStringSlice(orgExtraKeyAddresses)
 	return data
 }
 
-func (t *Organization) SetContacts(contacts *[]string) {
-	t.Extra.SetStringSlice(orgExtraKeyContacts, contacts)
+func (o *Organization) SetContacts(contacts *[]string) {
+	o.Extra.SetStringSlice(orgExtraKeyContacts, contacts)
 }
 
-func (t *Organization) GetContacts() []string {
-	data, _ := t.Extra.GetStringSlice(orgExtraKeyContacts)
+func (o *Organization) GetContacts() []string {
+	data, _ := o.Extra.GetStringSlice(orgExtraKeyContacts)
 	return data
 }
 
-func (t *Organization) IsTopParent() bool {
-	return t.ParentId == OrganizationParentRoot
+func (o *Organization) IsTopParent() bool {
+	return o.ParentId == OrganizationParentRoot
 }
 
-func (t *Organization) IsBotChild() bool {
-	return (t.Children == nil) || (len(t.Children) <= 0)
+func (o *Organization) IsBotChild() bool {
+	return (o.Children == nil) || (len(o.Children) <= 0)
 }
 
-func (t *Organization) GetAllApps() map[uint64][]*Application {
+func (o *Organization) GetAllApps() map[uint64][]*Application {
 	apps := map[uint64][]*Application{}
-	apps[t.Id] = t.Apps
-	for _, child := range t.Children {
+	apps[o.Id] = o.Apps
+	for _, child := range o.Children {
 		childApps := child.GetAllApps()
 		for k, v := range childApps {
 			apps[k] = v
