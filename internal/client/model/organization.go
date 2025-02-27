@@ -8,30 +8,6 @@ import (
 	"unicode"
 )
 
-const (
-	OrgParentRootId uint64 = 0 // 根组织
-
-	OrgKindPhysical uint8 = 0 // 实体组织 (同时存在数受orgExtraKeyMultiJob影响)
-	OrgKindVirtual  uint8 = 1 // 虚拟组织 (能同时存在多个)
-
-	OrgBecomePublic uint8 = 0 // 公开
-	OrgBecomeApply  uint8 = 1 // 申请
-	OrgBecomeInvite uint8 = 2 // 邀请
-
-	// TODO:GG 有成员的时候，获取需要各种auth?登录不需要
-	orgExtraKeyRootPwd  = "rootPwd"  // 根密码
-	orgExtraKeyMultiJob = "multiJob" // 是否允许单用户多任职
-
-	orgExtraKeyWebsiteUrl = "website"   // 官网
-	orgExtraKeyFaviconUrl = "favicon"   // 图标
-	orgExtraKeyDesc       = "desc"      // 简介
-	orgExtraKeyAddresses  = "addresses" // 地址
-	orgExtraKeyContacts   = "contacts"  // 联系方式
-
-	// TODO:GG 支持的Account的认证方式? 支持的Permission的方式?
-	// TODO:GG PasswordType, PasswordSalt
-)
-
 // Organization 组织
 type Organization struct {
 	*model.Base
@@ -182,6 +158,56 @@ func (o *Organization) ValidLocalizeRules() valid.LocalizeValidRules {
 	}
 }
 
+// const
+const (
+	OrgParentRootId uint64 = 0 // 根组织
+
+	OrgKindPhysical uint8 = 0 // 实体组织 (同时存在数受orgExtraKeyMultiJob影响)
+	OrgKindVirtual  uint8 = 1 // 虚拟组织 (能同时存在多个)
+
+	OrgBecomePublic uint8 = 0 // 公开
+	OrgBecomeApply  uint8 = 1 // 申请
+	OrgBecomeInvite uint8 = 2 // 邀请
+)
+
+func (o *Organization) IsTopParent() bool {
+	zero := len(o.ParentIds) == 0
+	one := len(o.ParentIds) == 1
+	return zero || (one && (o.ParentIds[0] == OrgParentRootId))
+}
+
+func (o *Organization) IsBotChild() bool {
+	return (o.Children == nil) || (len(o.Children) <= 0)
+}
+
+func (o *Organization) GetAllApps() map[uint64][]*Application {
+	apps := map[uint64][]*Application{}
+	apps[o.Id] = o.Apps
+	for _, child := range o.Children {
+		childApps := child.GetAllApps()
+		for k, v := range childApps {
+			apps[k] = v
+		}
+	}
+	return apps
+}
+
+// extra
+const (
+	// TODO:GG 有成员的时候，获取需要各种auth?登录不需要
+	orgExtraKeyRootPwd  = "rootPwd"  // 根密码
+	orgExtraKeyMultiJob = "multiJob" // 是否允许单用户多任职
+
+	orgExtraKeyWebsiteUrl = "website"   // 官网
+	orgExtraKeyFaviconUrl = "favicon"   // 图标
+	orgExtraKeyDesc       = "desc"      // 简介
+	orgExtraKeyAddresses  = "addresses" // 地址
+	orgExtraKeyContacts   = "contacts"  // 联系方式
+
+	// TODO:GG 支持的Account的认证方式? 支持的Permission的方式?
+	// TODO:GG PasswordType, PasswordSalt
+)
+
 func (o *Organization) SetRootPwd(pwd *string) {
 	o.Extra.SetString(orgExtraKeyRootPwd, pwd)
 }
@@ -243,26 +269,4 @@ func (o *Organization) SetContacts(contacts *[]string) {
 func (o *Organization) GetContacts() []string {
 	data, _ := o.Extra.GetStringSlice(orgExtraKeyContacts)
 	return data
-}
-
-func (o *Organization) IsTopParent() bool {
-	zero := len(o.ParentIds) == 0
-	one := len(o.ParentIds) == 1
-	return zero || (one && (o.ParentIds[0] == OrgParentRootId))
-}
-
-func (o *Organization) IsBotChild() bool {
-	return (o.Children == nil) || (len(o.Children) <= 0)
-}
-
-func (o *Organization) GetAllApps() map[uint64][]*Application {
-	apps := map[uint64][]*Application{}
-	apps[o.Id] = o.Apps
-	for _, child := range o.Children {
-		childApps := child.GetAllApps()
-		for k, v := range childApps {
-			apps[k] = v
-		}
-	}
-	return apps
 }
