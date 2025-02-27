@@ -2,7 +2,6 @@ package configs
 
 import (
 	"bytes"
-	"context"
 	"fmt"
 	"github.com/fsnotify/fsnotify"
 	"github.com/spf13/viper"
@@ -10,15 +9,12 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
-	"time"
 )
 
 const (
 	envKey = "env" // 环境key
-
-	reConfigMaxRetries = 3               // 重试次数
-	reConfigInterval   = 2 * time.Second // 重试间隔
 )
 
 var (
@@ -28,41 +24,76 @@ var (
 
 // Manager 配置管理器
 type Manager struct {
-	v        *viper.Viper
-	config   *Config
-	reConfig func() bool
-	mu       sync.RWMutex
+	v           *viper.Viper
+	config      *Config
+	subscribers []ChangeSubscriber
+	mu          sync.RWMutex
+}
+
+// ChangeSubscriber 配置变更订阅
+type ChangeSubscriber struct {
+	Key      string
+	Callback func(interface{})
+}
+
+func GetManager() *Manager {
+	//manager.mu.RLock()
+	//defer manager.mu.RUnlock()
+	return manager
 }
 
 // Get 获取配置管理器单例
 func Get() *Config {
-	manager.mu.RLock()
-	defer manager.mu.RUnlock()
+	//manager.mu.RLock()
+	//defer manager.mu.RUnlock()
 	return manager.config
 }
 
 // Init 初始化配置
-func Init(confDir string, reConfig func() bool) (*Config, error) {
+func Init(confDir string) (*Config, error) {
 	once.Do(func() {
 		manager = &Manager{
-			v:        viper.New(),
-			config:   new(Config),
-			reConfig: reConfig,
+			v:           viper.New(),
+			config:      new(Config),
+			subscribers: make([]ChangeSubscriber, 0),
 		}
 	})
-	if err := manager.Load(confDir); err != nil {
+	if err := manager.load(confDir); err != nil {
 		return nil, err
 	}
 	return manager.config, nil
 }
 
+// Subscribe 注册配置监听
+func (m *Manager) Subscribe(key string, callback func(interface{})) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.subscribers = append(m.subscribers, ChangeSubscriber{
+		Key:      key,
+		Callback: callback,
+	})
+}
+
 // Load 加载配置
-func (m *Manager) Load(confDir string) error {
+func (m *Manager) load(confDir string) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
-	// 设置基本配置
-	m.v.SetConfigType("toml")
+	// 设置环境变量前缀
+	m.v.SetEnvPrefix("APP")
+	// 自动查找环境变量
+	m.v.AutomaticEnv()
+	// 使用 . 替换环境变量中的 _
+	m.v.SetEnvKeyReplacer(strings.NewReplacer(".", "_"))
+
+	// 支持多种配置格式
+	m.v.SetConfigType("toml") // 默认格式
+	// 如果需要自动识别
+	if strings.HasSuffix(confDir, ".yaml") || strings.HasSuffix(confDir, ".yml") {
+		m.v.SetConfigType("yaml")
+	} else if strings.HasSuffix(confDir, ".json") {
+		m.v.SetConfigType("json")
+	}
 
 	// 加载内置配置
 	if err := m.loadEmbedConfigs(); err != nil {
@@ -82,6 +113,12 @@ func (m *Manager) Load(confDir string) error {
 	// 设置配置监听
 	m.watchConfig()
 
+	// 在Load方法中添加 TODO:GG 根据config里的配置，来启动远程配置监听
+	//if m.remoteEnabled {
+	//	if err := m.loadRemoteConfig(); err != nil {
+	//		return fmt.Errorf("■ ■ Conf ■ ■ load remote config failed: %w", err)
+	//	}
+	//}
 	return nil
 }
 
@@ -140,75 +177,47 @@ func (m *Manager) parseConfig() error {
 // watchConfig 监听配置变化
 func (m *Manager) watchConfig() {
 	m.v.OnConfigChange(func(e fsnotify.Event) {
-		if m.reConfig == nil {
-			return
-		}
-
-		ctx, cancel := context.WithTimeout(context.Background(), reConfigInterval*reConfigMaxRetries)
-		defer cancel()
-
-		for i := 0; i < reConfigMaxRetries; i++ {
-			if m.reConfig() {
-				slog.Info("■ ■ Conf ■ ■ config reloaded successfully")
-				return
-			}
-
-			select {
-			case <-time.After(reConfigInterval):
-				slog.Warn("■ ■ Conf ■ ■ reload config failed", slog.Int("retry", i+1))
-			case <-ctx.Done():
-				slog.Warn("■ ■ Conf ■ ■ reload config timeout", slog.Int("retries", i+1))
-				return
+		// 通知订阅者
+		for _, subscriber := range m.subscribers {
+			if m.v.IsSet(subscriber.Key) {
+				value := m.v.Get(subscriber.Key)
+				slog.Info(
+					"■ ■ Conf ■ ■ reload config",
+					slog.String("key", subscriber.Key),
+					slog.Any("Value", value),
+				)
+				go subscriber.Callback(value)
 			}
 		}
-		slog.Error("■ ■ Conf ■ ■ reload config failed", slog.Int("retries", reConfigMaxRetries))
 	})
 
 	m.v.WatchConfig()
 }
 
-// loadRemoteConfig 加载远程配置
-// TODO:GG 加载远程配置
-func loadRemoteConfig() {
-	//var runtime_viper = viper.New()
-	//runtime_viper.AddRemoteProvider("etcd", "http://127.0.0.1:4001", "/config/hugo.yml")
-	//runtime_viper.SetConfigType("yaml") // because there is no file extension in a stream of bytes, supported extensions are "json", "toml", "yaml", "yml", "properties", "props", "prop", "env", "dotenv"
-	//
-	//// read from remote config the first time.
-	//err := runtime_viper.ReadRemoteConfig()
-	//
-	//// unmarshal config
-	//runtime_viper.Unmarshal(&runtime_conf)
-	//
-	//// open a goroutine to watch remote changes forever
-	//go func() {
-	//	for {
-	//		time.Sleep(time.Second * 5) // delay after each request
-	//
-	//		// currently, only tested with etcd support
-	//		err := runtime_viper.WatchRemoteConfig()
-	//		if err != nil {
-	//			slog.Errorf("unable to read remote config: %v", err)
-	//			continue
-	//		}
-	//
-	//		// unmarshal new config into our runtime config struct. you can also use channel
-	//		// to implement a signal to notify the system of the changes
-	//		runtime_viper.Unmarshal(&runtime_conf)
-	//	}
-	//}()
-	//err := viper.WatchRemoteConfig()
-	//if err != nil {
-	//	slog.Fatalf("unable to read remote config: %v", err)
-	//}
-	//// 监听Consul配置变化
-	//go func() {
-	//	for {
-	//		select {
-	//		case <-viper.RemoteConfig.WatchChannel():
-	//			slog.Println("remote config changed")
-	//
-	//		}
-	//	}
-	//}()
-}
+//// loadRemoteConfig 加载远程配置
+//func (m *Manager) loadRemoteConfig(kind, addr, key string) error {
+//	err := m.v.AddRemoteProvider(kind, addr, key)
+//	if err != nil {
+//		return err
+//	}
+//
+//	err = m.v.ReadRemoteConfig()
+//	if err != nil {
+//		return err
+//	}
+//
+//	// 启动远程配置监听
+//	go func() {
+//		for {
+//			time.Sleep(30 * time.Second)
+//			err := m.v.WatchRemoteConfig()
+//			if err != nil {
+//				slog.Error("■ ■ Conf ■ ■ watch remote config failed", slog.Any("err", err))
+//				continue
+//			}
+//			if err := m.parseConfig(); err != nil {
+//				slog.Error("■ ■ Conf ■ ■ parse remote config failed", slog.Any("err", err))
+//			}
+//		}
+//	}()
+//}
