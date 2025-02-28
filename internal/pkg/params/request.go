@@ -11,7 +11,6 @@ func RequestBind(c *gin.Context, obj any) *err.CodeErrs {
 	if e != nil {
 		return err.Match(e)
 	}
-	v := &valid.Validator{}
-	cErr := v.Valid(obj, valid.SceneBind)
+	cErr := valid.Check(obj, valid.SceneBind)
 	return cErr
 }

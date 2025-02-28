@@ -109,18 +109,20 @@ func Get() *Validator {
 
 // Check 根据场景执行验证，并返回本地化错误信息
 func Check(obj any, scene Scene) *err.CodeErrs {
+	v := Get()
 	typ := reflect.TypeOf(obj)
+
 	// -- 注册验证 --
-	if _, ok := Get().regTypes.Load(typ); !ok {
-		if e := Get().registerValidations(obj, scene); e != nil {
+	if _, ok := v.regTypes.Load(typ); !ok {
+		if e := v.registerValidations(obj, scene); e != nil {
 			return e
 		}
-		Get().regTypes.Store(typ, true)
+		v.regTypes.Store(typ, true)
 	}
 
 	// -- 执行验证 --
-	if e := Get().validate.Struct(obj); e != nil {
-		return Get().handleValidationError(obj, typ, scene, e)
+	if e := v.validate.Struct(obj); e != nil {
+		return v.handleValidationError(obj, typ, scene, e)
 	}
 	return nil
 }
@@ -242,44 +244,44 @@ func (v *Validator) registerEmbeddedValidations(
 
 	// 遍历所有字段
 	for i := 0; i < typ.NumField(); i++ {
-		field := typ.Field(i)
-		fieldVal := val.Field(i)
-
 		// 检查是否是组合类型的字段
-		if field.Anonymous {
-			fieldType := field.Type
-			var embedObj any
+		field := typ.Field(i)
+		if !field.Anonymous {
+			continue
+		}
 
-			// 处理指针类型的组合字段
-			if fieldType.Kind() == reflect.Ptr {
-				if !fieldVal.IsNil() {
-					embedObj = fieldVal.Interface()
-					fieldType = fieldType.Elem()
-				}
-			} else {
-				// 处理非指针类型的组合字段
-				embedObj = fieldVal.Addr().Interface()
+		fieldVal := val.Field(i)
+		fieldType := field.Type
+		var embedObj any
+
+		// 处理指针类型的组合字段
+		if fieldType.Kind() == reflect.Ptr {
+			if fieldVal.IsNil() {
+				continue
 			}
+			embedObj = fieldVal.Interface()
+			fieldType = fieldType.Elem()
+		} else {
+			// 处理非指针类型的组合字段
+			embedObj = fieldVal.Addr().Interface()
+		}
 
-			// 只处理结构体类型的组合字段
-			if fieldType.Kind() == reflect.Struct && embedObj != nil {
-				//if e := v.registerValidations(embedObj, scene); e != nil {
-				//	return e
-				//}
-				switch ttt {
-				case 1:
-					if fv, okk := embedObj.(IFieldValidator); okk {
-						return v.validFields(fv, scene)
-					}
-				case 2:
-					if _, okk := embedObj.(IExtraValidator); okk {
-						v.validExtra(embedObj, sl, scene)
-					}
-				case 3:
-					if _, okk := embedObj.(IStructValidator); okk {
-						v.validStruct(embedObj, sl, scene)
-					}
-				}
+		// 只处理结构体类型的组合字段
+		if fieldType.Kind() != reflect.Struct || embedObj == nil {
+			continue
+		}
+		switch ttt {
+		case 1:
+			if fv, okk := embedObj.(IFieldValidator); okk {
+				return v.validFields(fv, scene)
+			}
+		case 2:
+			if _, okk := embedObj.(IExtraValidator); okk {
+				v.validExtra(embedObj, sl, scene)
+			}
+		case 3:
+			if _, okk := embedObj.(IStructValidator); okk {
+				v.validStruct(embedObj, sl, scene)
 			}
 		}
 	}
@@ -294,6 +296,7 @@ func (v *Validator) handleValidationError(
 ) *err.CodeErrs {
 	var invalidErr *validator.InvalidValidationError
 	if errors.As(e, &invalidErr) {
+		// -- 验证失败 --
 		return err.Match(e).WrapLocalize("invalid_object_validation", nil, nil)
 	}
 	var validateErrs validator.ValidationErrors
@@ -409,39 +412,42 @@ func (v *Validator) registerEmbeddedLocalizes(
 
 	// 遍历所有字段
 	for i := 0; i < typ.NumField(); i++ {
-		field := typ.Field(i)
-		fieldVal := val.Field(i)
-
 		// 检查是否是组合类型的字段
-		if field.Anonymous {
-			fieldType := field.Type
-			var embedObj any
+		field := typ.Field(i)
+		if !field.Anonymous {
+			continue
+		}
 
-			// 处理指针类型的组合字段
-			if fieldType.Kind() == reflect.Ptr {
-				if !fieldVal.IsNil() {
-					embedObj = fieldVal.Interface()
-					fieldType = fieldType.Elem()
-				}
-			} else {
-				// 处理非指针类型的组合字段
-				embedObj = fieldVal.Addr().Interface()
+		fieldVal := val.Field(i)
+		fieldType := field.Type
+		var embedObj any
+
+		// 处理指针类型的组合字段
+		if fieldType.Kind() == reflect.Ptr {
+			if fieldVal.IsNil() {
+				continue
 			}
+			embedObj = fieldVal.Interface()
+			fieldType = fieldType.Elem()
+		} else {
+			// 处理非指针类型的组合字段
+			embedObj = fieldVal.Addr().Interface()
+		}
 
-			// 只处理实现了 ILocalizeValidator 接口的组合字段
-			if fieldType.Kind() == reflect.Struct && embedObj != nil {
-				if embedLocValidator, ok := embedObj.(ILocalizeValidator); ok {
-					if e := v.validLocalize(
-						scene,
-						reflect.TypeOf(embedObj),
-						embedObj,
-						embedLocValidator,
-						validateErrs,
-						false,
-					); e != nil {
-						return e
-					}
-				}
+		// 只处理实现了 ILocalizeValidator 接口的组合字段
+		if fieldType.Kind() != reflect.Struct || embedObj == nil {
+			continue
+		}
+		if embedLocValidator, ok := embedObj.(ILocalizeValidator); ok {
+			if e := v.validLocalize(
+				scene,
+				reflect.TypeOf(embedObj),
+				embedObj,
+				embedLocValidator,
+				validateErrs,
+				false,
+			); e != nil {
+				return e
 			}
 		}
 	}
