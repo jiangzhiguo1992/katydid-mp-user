@@ -6,6 +6,7 @@ import (
 	"katydid-mp-user/pkg/err"
 	"katydid-mp-user/pkg/i18n"
 	"katydid-mp-user/pkg/log"
+	"katydid-mp-user/pkg/perm"
 	"time"
 )
 
@@ -43,4 +44,7 @@ func init() {
 	err.Init(text.CodeMsgIds, text.MsgPatterns, func(msg string) {
 		log.Error(msg)
 	})
+
+	// perm
+	perm.Init()
 }
