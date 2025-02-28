@@ -4,7 +4,6 @@ import (
 	"errors"
 	"github.com/go-playground/validator/v10"
 	"katydid-mp-user/pkg/err"
-	"katydid-mp-user/utils"
 	"reflect"
 	"sync"
 )
@@ -71,7 +70,7 @@ type (
 
 	// IExtraValidator 定义额外字段验证接口
 	IExtraValidator interface {
-		ValidExtraRules() (utils.KSMap, ExtraValidRules)
+		ValidExtraRules() (map[string]any, ExtraValidRules)
 	}
 
 	// IStructValidator 定义结构验证接口
