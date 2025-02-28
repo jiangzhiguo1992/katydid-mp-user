@@ -106,12 +106,37 @@ func NewDefaultConfig(outLevel int) Config {
 // Init 初始化日志
 func Init(cfg Config) {
 	once.Do(func() {
-		logger = NewLogger(cfg)
+		logger = newLogger(cfg)
 	})
 }
 
-// NewLogger 创建新的日志实例
-func NewLogger(cfg Config) *Logger {
+// Close 优雅退出
+func Close() error {
+	if logger == nil {
+		return nil
+	}
+	logger.mu.Lock()
+	defer logger.mu.Unlock()
+
+	var errs []error
+	for _, buffer := range logger.syncs {
+		if err := buffer.Stop(); err != nil {
+			errs = append(errs, err)
+		}
+	}
+
+	if err := logger.zap.Sync(); err != nil {
+		errs = append(errs, err)
+	}
+
+	if len(errs) > 0 {
+		return fmt.Errorf("■ ■ Log ■ ■ failed to close logger: %v", errs)
+	}
+	return nil
+}
+
+// newLogger 创建新的日志实例
+func newLogger(cfg Config) *Logger {
 	l := &Logger{config: &cfg}
 	l.initialize()
 	return l
@@ -224,31 +249,6 @@ func createCore(encoder zapcore.Encoder, config *Config, lConf levelConfig) (zap
 		zap.LevelEnablerFunc(lConf.enable),
 	)
 	return core, syncer
-}
-
-// Close 优雅退出
-func Close() error {
-	if logger == nil {
-		return nil
-	}
-	logger.mu.Lock()
-	defer logger.mu.Unlock()
-
-	var errs []error
-	for _, buffer := range logger.syncs {
-		if err := buffer.Stop(); err != nil {
-			errs = append(errs, err)
-		}
-	}
-
-	if err := logger.zap.Sync(); err != nil {
-		errs = append(errs, err)
-	}
-
-	if len(errs) > 0 {
-		return fmt.Errorf("■ ■ Log ■ ■ failed to close logger: %v", errs)
-	}
-	return nil
 }
 
 func log(level zapcore.Level, msg string, fields ...zap.Field) {

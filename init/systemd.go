@@ -13,7 +13,7 @@ func init() {
 	// configs
 	config, e := configs.Init(configs.ConfDir)
 	if e != nil {
-		log.Fatal("", log.FError(e))
+		panic(e)
 	}
 	//configs.Subscribe() // TODO:GG 订阅reload
 

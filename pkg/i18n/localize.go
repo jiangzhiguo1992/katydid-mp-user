@@ -11,11 +11,12 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 )
 
 const (
-	defaultDefLang = "en"
-	unknownError   = "localize unknown error"
+	defaultLang  = "en"
+	unknownError = "localize unknown error"
 )
 
 var defaultManager *Manager
@@ -27,13 +28,15 @@ type Config struct {
 }
 
 type Manager struct {
-	config Config
-	langs  []string
-	bundle *i18n.Bundle
+	config     Config
+	langs      []string
+	bundle     *i18n.Bundle
+	localizer  sync.Map // 缓存常用localizer对象
+	localizers sync.Map // 缓存常用localizers对象
 }
 
 func Init(cfg Config) error {
-	m, err := NewManager(cfg)
+	m, err := newManager(cfg)
 	if err != nil {
 		return fmt.Errorf("■ ■ i18n ■ ■ create i18n manager failed: %w", err)
 	}
@@ -41,9 +44,40 @@ func Init(cfg Config) error {
 	return nil
 }
 
-func NewManager(cfg Config) (*Manager, error) {
+// HasLang 检查语言是否支持
+func HasLang(lang string) bool {
+	if defaultManager == nil {
+		return false
+	}
+	for _, e := range defaultManager.langs {
+		if lang == e {
+			return true
+		}
+	}
+	return false
+}
+
+// DefLang 获取默认语言
+func DefLang() string {
+	if defaultManager == nil {
+		return ""
+	}
+	return defaultManager.config.DefaultLang
+}
+
+// GetSupportedLangs 获取所有支持的语言
+func GetSupportedLangs() []string {
+	if defaultManager == nil {
+		return nil
+	}
+	result := make([]string, len(defaultManager.langs))
+	copy(result, defaultManager.langs)
+	return result
+}
+
+func newManager(cfg Config) (*Manager, error) {
 	if cfg.DefaultLang == "" {
-		cfg.DefaultLang = defaultDefLang
+		cfg.DefaultLang = defaultLang
 	}
 
 	defaultTag, err := language.Parse(cfg.DefaultLang)
@@ -63,15 +97,6 @@ func NewManager(cfg Config) (*Manager, error) {
 		return nil, err
 	}
 	return m, nil
-}
-
-func HasLang(lang string) bool {
-	for _, e := range defaultManager.langs {
-		if lang == e {
-			return true
-		}
-	}
-	return false
 }
 
 func (m *Manager) registerUnmarshalFuncs() {
@@ -95,6 +120,7 @@ func (m *Manager) loadMessageFiles() error {
 	}
 	slog.Info("■ ■ i18n ■ ■ loading i18n files", slog.Any("files", files))
 
+	// 加载文件并提取消息ID
 	m.langs = make([]string, 0, len(files))
 	for _, file := range files {
 		if _, err := m.bundle.LoadMessageFile(file); err != nil {
@@ -104,6 +130,7 @@ func (m *Manager) loadMessageFiles() error {
 	}
 	slog.Info("■ ■ i18n ■ ■ loading i18n langs", slog.Any("languages", m.langs))
 
+	// 确保默认语言存在
 	hasDefault := false
 	for _, lang := range m.langs {
 		if lang == m.config.DefaultLang {
@@ -114,6 +141,10 @@ func (m *Manager) loadMessageFiles() error {
 	if !hasDefault {
 		slog.Warn("■ ■ i18n ■ ■ default language %q not found in message files", slog.String("lang", m.config.DefaultLang))
 	}
+
+	// 预缓存默认Localizer
+	m.getLocalizers(m.config.DefaultLang)
+
 	return nil
 }
 
@@ -138,23 +169,48 @@ func extractLangFromFilename(file string) string {
 	return name
 }
 
-func (m *Manager) Localize(lang, msgID string, data map[string]any, nilBackId bool) string {
+// getLocalizers 获取缓存的localizer，如果不存在则创建
+func (m *Manager) getLocalizers(lang string) []*i18n.Localizer {
+	if v, ok := m.localizers.Load(lang); ok {
+		return v.([]*i18n.Localizer)
+	}
+
 	// 构建语言标签列表，实现回退链
 	var tags []string
+
 	if HasLang(lang) {
 		tags = append(tags, lang)
 	}
-	base := strings.Split(lang, "-")[0]
-	if base != lang && HasLang(base) {
+
+	if base := strings.Split(lang, "-")[0]; base != lang && HasLang(base) {
 		tags = append(tags, base)
 	}
+
 	tags = append(tags, m.config.DefaultLang)
+
+	localizers := make([]*i18n.Localizer, len(tags))
+	for i := 0; i < len(tags); i++ {
+		tt := strings.Join(tags[i:], "_")
+		if v, ok := m.localizer.Load(tt); ok {
+			localizers = append(localizers, v.(*i18n.Localizer))
+			continue
+		}
+		localizer := i18n.NewLocalizer(m.bundle, tags[i:]...)
+		m.localizer.Store(tt, localizer)
+		localizers = append(localizers, localizer)
+	}
+	m.localizers.Store(lang, localizers)
+	return localizers
+}
+
+func (m *Manager) localize(lang, msgID string, data map[string]any, nilBackId bool) string {
+	// 构建语言标签列表，实现回退链
+	localizers := m.getLocalizers(lang)
 
 	// 循环开找
 	var msg string
 	var err error
-	for i := 0; i < len(tags); i++ {
-		localizer := i18n.NewLocalizer(m.bundle, tags[i:]...)
+	for _, localizer := range localizers {
 		msg, err = localizer.Localize(&i18n.LocalizeConfig{
 			MessageID:    msgID,
 			TemplateData: data,
@@ -187,17 +243,29 @@ func (m *Manager) Localize(lang, msgID string, data map[string]any, nilBackId bo
 }
 
 func LocalizeMust(lang, msgID string, data map[string]any) string {
-	return defaultManager.Localize(lang, msgID, data, false)
+	if defaultManager == nil {
+		return unknownError
+	}
+	return defaultManager.localize(lang, msgID, data, false)
 }
 
 func LocalizeTry(lang, msgID string, data map[string]any) string {
-	return defaultManager.Localize(lang, msgID, data, true)
+	if defaultManager == nil {
+		return unknownError
+	}
+	return defaultManager.localize(lang, msgID, data, true)
 }
 
 func LocalizeMustDef(msgID string, data map[string]any) string {
-	return defaultManager.Localize(defaultManager.config.DefaultLang, msgID, data, false)
+	if defaultManager == nil {
+		return unknownError
+	}
+	return defaultManager.localize(defaultManager.config.DefaultLang, msgID, data, false)
 }
 
 func LocalizeTryDef(msgID string, data map[string]any) string {
-	return defaultManager.Localize(defaultManager.config.DefaultLang, msgID, data, true)
+	if defaultManager == nil {
+		return unknownError
+	}
+	return defaultManager.localize(defaultManager.config.DefaultLang, msgID, data, true)
 }
