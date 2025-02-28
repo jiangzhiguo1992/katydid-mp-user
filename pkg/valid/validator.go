@@ -24,13 +24,17 @@ const (
 )
 
 var (
-	validate *validator.Validate
-	once     sync.Once
-	regTypes = &sync.Map{} // 验证注册类型
-	regLocs  = &sync.Map{} // 本地化文本缓存
+	v    *Validator
+	once sync.Once
 )
 
 type (
+	Validator struct {
+		validate *validator.Validate
+		regTypes *sync.Map // 验证注册类型
+		regLocs  *sync.Map // 本地化文本缓存
+	}
+
 	Scene     uint16
 	Tag       string
 	FieldName string
@@ -79,17 +83,19 @@ type (
 	ILocalizeValidator interface {
 		ValidLocalizeRules() LocalizeValidRules
 	}
-
-	Validator struct{}
 )
 
-func Get() *validator.Validate {
+func Get() *Validator {
 	once.Do(func() {
 		opts := []validator.Option{
 			validator.WithRequiredStructEnabled(),
 		}
-		validate = validator.New(opts...)
-		// 设置Tag <= 默认json标签
+		v = &Validator{
+			validate: validator.New(opts...),
+			regTypes: &sync.Map{},
+			regLocs:  &sync.Map{},
+		}
+		// 设置Tag <- 默认json标签
 		//validate.RegisterTagNameFunc(func(fld reflect.StructField) string {
 		//	name := fld.Tag.Get("json")
 		//	if name == "-" {
@@ -98,23 +104,23 @@ func Get() *validator.Validate {
 		//	return name
 		//})
 	})
-	return validate
+	return v
 }
 
-// Valid 根据场景执行验证，并返回本地化错误信息
-func (v *Validator) Valid(obj any, scene Scene) *err.CodeErrs {
+// Check 根据场景执行验证，并返回本地化错误信息
+func Check(obj any, scene Scene) *err.CodeErrs {
 	typ := reflect.TypeOf(obj)
 	// -- 注册验证 --
-	if _, ok := regTypes.Load(typ); !ok {
-		if e := v.registerValidations(obj, scene); e != nil {
+	if _, ok := Get().regTypes.Load(typ); !ok {
+		if e := Get().registerValidations(obj, scene); e != nil {
 			return e
 		}
-		regTypes.Store(typ, true)
+		Get().regTypes.Store(typ, true)
 	}
 
 	// -- 执行验证 --
-	if e := Get().Struct(obj); e != nil {
-		return v.handleValidationError(obj, typ, scene, e)
+	if e := Get().validate.Struct(obj); e != nil {
+		return Get().handleValidationError(obj, typ, scene, e)
 	}
 	return nil
 }
@@ -124,7 +130,7 @@ func (v *Validator) registerValidations(obj any, scene Scene) *err.CodeErrs {
 	if errs := v.validFields(obj, scene); errs != nil {
 		return errs
 	}
-	Get().RegisterStructValidation(func(sl validator.StructLevel) {
+	v.validate.RegisterStructValidation(func(sl validator.StructLevel) {
 		cObj := sl.Current().Addr().Interface()
 		// -- 额外验证注册 --
 		v.validExtra(cObj, sl, scene)
@@ -161,7 +167,7 @@ func (v *Validator) validFields(obj any, scene Scene) *err.CodeErrs {
 		}
 	}
 	for tag, rule := range tagRules {
-		if e := Get().RegisterValidation(string(tag), func(fl validator.FieldLevel) bool {
+		if e := v.validate.RegisterValidation(string(tag), func(fl validator.FieldLevel) bool {
 			return rule(fl.Field(), fl.Param())
 		}); e != nil {
 			return err.Match(e)
@@ -221,7 +227,13 @@ func (v *Validator) validStruct(obj any, sl validator.StructLevel, scene Scene) 
 }
 
 // registerEmbeddedValidations 递归注册组合类型的验证规则
-func (v *Validator) registerEmbeddedValidations(obj any, typ reflect.Type, scene Scene, ttt int, sl validator.StructLevel) *err.CodeErrs {
+func (v *Validator) registerEmbeddedValidations(
+	obj any,
+	typ reflect.Type,
+	scene Scene,
+	ttt int,
+	sl validator.StructLevel,
+) *err.CodeErrs {
 	val := reflect.ValueOf(obj)
 	if val.Kind() == reflect.Ptr {
 		val = val.Elem()
@@ -274,31 +286,45 @@ func (v *Validator) registerEmbeddedValidations(obj any, typ reflect.Type, scene
 	return nil
 }
 
-func (v *Validator) handleValidationError(obj any, typ reflect.Type, scene Scene, e error) *err.CodeErrs {
+func (v *Validator) handleValidationError(
+	obj any,
+	typ reflect.Type,
+	scene Scene,
+	e error,
+) *err.CodeErrs {
 	var invalidErr *validator.InvalidValidationError
 	if errors.As(e, &invalidErr) {
-		return err.Match(e)
+		return err.Match(e).WrapLocalize("invalid_object_validation", nil, nil)
 	}
 	var validateErrs validator.ValidationErrors
 	if errors.As(e, &validateErrs) {
 		// -- 本地化错误注册 --
 		if rl, ok := obj.(ILocalizeValidator); ok {
-			return v.validLocalize(scene, typ, obj, rl, validateErrs)
+			return v.validLocalize(scene, typ, obj, rl, validateErrs, true)
 		}
 	}
 	return err.Match(e)
 }
 
-func (v *Validator) validLocalize(scene Scene, typ reflect.Type, obj any, rl ILocalizeValidator, validateErrs validator.ValidationErrors) *err.CodeErrs {
+func (v *Validator) validLocalize(
+	scene Scene,
+	typ reflect.Type,
+	obj any,
+	rl ILocalizeValidator,
+	validateErrs validator.ValidationErrors,
+	first bool,
+) *err.CodeErrs {
 	// 处理组合类型的验证规则
 	cErrs := err.New()
 	if e := v.registerEmbeddedLocalizes(scene, typ, obj, validateErrs); e != nil {
-		_ = cErrs.WrapCodeErrs(e)
+		if !e.IsNil() {
+			_ = cErrs.WrapCodeErrs(e)
+		}
 	}
 
 	tagFieldRules := make(map[Tag]map[FieldName]LocalizeValidRuleParam)
 	tagRules := make(map[Tag]LocalizeValidRuleParam)
-	cacheRules, ok := regLocs.Load(typ)
+	cacheRules, ok := v.regLocs.Load(typ)
 	if !ok {
 		sceneRules := rl.ValidLocalizeRules()
 		if sceneRules == nil {
@@ -324,7 +350,7 @@ func (v *Validator) validLocalize(scene Scene, typ reflect.Type, obj any, rl ILo
 				tagRules[tag] = rule
 			}
 		}
-		regLocs.Store(typ, LocalizeValidRule{tagFieldRules, tagRules})
+		v.regLocs.Store(typ, LocalizeValidRule{tagFieldRules, tagRules})
 	} else {
 		tagFieldRules = cacheRules.(LocalizeValidRule).Rule1
 		tagRules = cacheRules.(LocalizeValidRule).Rule2
@@ -362,14 +388,19 @@ func (v *Validator) validLocalize(scene Scene, typ reflect.Type, obj any, rl ILo
 			}
 		}
 	}
-	if cErrs.IsNil() {
-		//_ = cErrs.WrapLocalize("unknown_validator_err", nil, nil)
+	if cErrs.IsNil() && first {
+		_ = cErrs.WrapLocalize("unknown_validator_err", nil, nil)
 	}
 	return cErrs.Real()
 }
 
 // registerEmbeddedLocalizes 递归注册组合类型的本地化规则
-func (v *Validator) registerEmbeddedLocalizes(scene Scene, typ reflect.Type, obj any, validateErrs validator.ValidationErrors) *err.CodeErrs {
+func (v *Validator) registerEmbeddedLocalizes(
+	scene Scene,
+	typ reflect.Type,
+	obj any,
+	validateErrs validator.ValidationErrors,
+) *err.CodeErrs {
 	val := reflect.ValueOf(obj)
 	if val.Kind() == reflect.Ptr {
 		val = val.Elem()
@@ -400,7 +431,14 @@ func (v *Validator) registerEmbeddedLocalizes(scene Scene, typ reflect.Type, obj
 			// 只处理实现了 ILocalizeValidator 接口的组合字段
 			if fieldType.Kind() == reflect.Struct && embedObj != nil {
 				if embedLocValidator, ok := embedObj.(ILocalizeValidator); ok {
-					if e := v.validLocalize(scene, reflect.TypeOf(embedObj), embedObj, embedLocValidator, validateErrs); e != nil {
+					if e := v.validLocalize(
+						scene,
+						reflect.TypeOf(embedObj),
+						embedObj,
+						embedLocValidator,
+						validateErrs,
+						false,
+					); e != nil {
 						return e
 					}
 				}
