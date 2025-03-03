@@ -192,12 +192,12 @@ func (m *Manager) getLocalizers(lang string) []*i18n.Localizer {
 	for i := 0; i < len(tags); i++ {
 		tt := strings.Join(tags[i:], "_")
 		if v, ok := m.localizer.Load(tt); ok {
-			localizers = append(localizers, v.(*i18n.Localizer))
+			localizers[i] = v.(*i18n.Localizer)
 			continue
 		}
 		localizer := i18n.NewLocalizer(m.bundle, tags[i:]...)
 		m.localizer.Store(tt, localizer)
-		localizers = append(localizers, localizer)
+		localizers[i] = localizer
 	}
 	m.localizers.Store(lang, localizers)
 	return localizers

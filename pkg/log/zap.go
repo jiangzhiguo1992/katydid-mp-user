@@ -142,7 +142,7 @@ func newLogger(cfg Config) *Logger {
 	return l
 }
 
-func (c *Config) OutEnable() bool {
+func (c *Config) outEnable() bool {
 	return c.OutLevel > 0
 }
 
@@ -150,13 +150,13 @@ func (l *Logger) initialize() {
 	// encoder
 	var encoder zapcore.Encoder
 	encoderCfg := createEncoderConfig(l.config)
-	if l.config.OutEnable() {
+	if l.config.outEnable() {
 		encoder = zapcore.NewJSONEncoder(encoderCfg)
 	} else {
 		encoder = zapcore.NewConsoleEncoder(encoderCfg)
 	}
 
-	if l.config.OutEnable() {
+	if l.config.outEnable() {
 		// cores
 		var cores []zapcore.Core
 		for level := 1; level <= l.config.OutLevel; level++ {
@@ -204,7 +204,7 @@ func (l *Logger) initialize() {
 func createEncoderConfig(config *Config) zapcore.EncoderConfig {
 	encodeCfg := zap.NewProductionEncoderConfig()
 	encodeCfg.EncodeTime = zapcore.ISO8601TimeEncoder
-	if config.OutEnable() {
+	if config.outEnable() {
 		encodeCfg.LevelKey = ""
 	} else {
 		encodeCfg.EncodeDuration = zapcore.StringDurationEncoder
@@ -266,7 +266,7 @@ func log(level zapcore.Level, msg string, fields ...zap.Field) {
 		return
 	}
 
-	if !logger.config.OutEnable() {
+	if !logger.config.outEnable() {
 		if color, ok := levelColors[level]; ok {
 			msg = fmt.Sprintf("%s%s%s", color.fg, msg, colorReset)
 		}
