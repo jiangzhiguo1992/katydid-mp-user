@@ -235,15 +235,19 @@ func (m *Manager) watchConfigs() {
 			}
 			// 通知订阅者
 			for _, subscriber := range m.subscribers {
-				if sub.IsSet(subscriber.Key) {
-					value := sub.Get(subscriber.Key)
-					slog.Info(
-						"■ ■ Conf ■ ■ config change success",
-						slog.String("key", subscriber.Key),
-						slog.Any("Value", value),
-					)
-					go subscriber.Callback(value)
+				if !sub.IsSet(subscriber.Key) {
+					continue
 				}
+				if sub.Get(subscriber.Key) != m.v.Get(subscriber.Key) {
+					continue
+				}
+				value := sub.Get(subscriber.Key)
+				slog.Info(
+					"■ ■ Conf ■ ■ config change success",
+					slog.String("key", subscriber.Key),
+					slog.Any("Value", value),
+				)
+				go subscriber.Callback(value)
 			}
 		})
 		sub.WatchConfig()

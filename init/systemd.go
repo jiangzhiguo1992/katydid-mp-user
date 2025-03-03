@@ -16,7 +16,9 @@ func init() {
 	if e != nil {
 		panic(e)
 	}
-	//configs.Subscribe() // TODO:GG 订阅reload
+	//configs.Subscribe("account.enable", func(v interface{}) {
+	//	slog.Info("reload account.enable", slog.Any("v", v))
+	//}) // TODO:GG 订阅reload
 
 	// logger
 	log.Init(log.Config{
@@ -46,5 +48,7 @@ func init() {
 	})
 
 	// perm
-	perm.Init()
+	perm.Init(&perm.Config{
+		LogEnable: true,
+	})
 }
