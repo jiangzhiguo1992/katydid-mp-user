@@ -210,7 +210,7 @@ func (m *Manager) watchConfig() {
 	m.v.WatchConfig()
 }
 
-// loadRemoteConfig 加载远程配置
+// loadRemoteConfig 加载远程配置 TODO:GG test
 func (m *Manager) loadRemoteConfig() error {
 	if !m.config.RemoteConf.Enabled {
 		return nil

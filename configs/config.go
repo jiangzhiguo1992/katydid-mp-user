@@ -21,9 +21,9 @@ type (
 		Env     string `toml:"env" mapstructure:"env"`
 		EnvName string `toml:"env_name" mapstructure:"env_name"`
 
-		LogConf `toml:"log" mapstructure:"log"`
-
 		RemoteConf `toml:"remote_conf" mapstructure:"remote_conf"`
+
+		LogConf `toml:"log" mapstructure:"log"`
 
 		DefLang string `toml:"def_lang" mapstructure:"def_lang"`
 
@@ -138,7 +138,7 @@ func (m *Config) IsProd() bool {
 }
 
 func (m *Config) merge() {
-	m.Account.ModuleConf = m.ModuleConf
-	m.Client.ModuleConf = m.ModuleConf
-	m.User.ModuleConf = m.ModuleConf
+	m.Account.ModuleConf = m.AppConf.ModuleConf
+	m.Client.ModuleConf = m.AppConf.ModuleConf
+	m.User.ModuleConf = m.AppConf.ModuleConf
 }
