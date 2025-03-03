@@ -46,10 +46,6 @@ func Init(codes map[int][]string, patterns map[string]string, onError func(strin
 func Match(err error) *CodeErrs {
 	if err == nil {
 		return nil
-	} else if matcher == nil {
-		return New(err).Real()
-	} else if len(err.Error()) <= 0 {
-		return New(err).Real()
 	}
 
 	// 如果已经是自定义错误，直接返回
@@ -58,8 +54,13 @@ func Match(err error) *CodeErrs {
 		return e
 	}
 
+	errMsg := err.Error()
+	if errMsg == "" || matcher == nil {
+		return New(err).Real()
+	}
+
 	// 先从patterns里找locId
-	locId, ok1 := matcher.findLocId(err.Error())
+	locId, ok1 := matcher.findLocId(errMsg)
 
 	// 再从codeLocIds里找code
 	code, ok2 := matcher.findCode(locId)

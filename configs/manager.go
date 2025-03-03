@@ -44,6 +44,7 @@ type ChangeSubscriber struct {
 func Get() *Config {
 	manager.mu.RLock()
 	defer manager.mu.RUnlock()
+
 	// 返回只读副本而非直接引用
 	config := *manager.config
 	return &config
@@ -67,15 +68,18 @@ func Init(confDir string) (*Config, error) {
 
 // Subscribe 注册配置监听
 func Subscribe(key string, callback func(interface{})) func() {
-	manager.mu.Lock()
-	defer manager.mu.Unlock()
+	if manager == nil {
+		return func() {}
+	}
 
+	manager.mu.Lock()
 	id := uuid.New().String()
 	manager.subscribers = append(manager.subscribers, ChangeSubscriber{
 		ID:       id,
 		Key:      key,
 		Callback: callback,
 	})
+	manager.mu.Unlock()
 
 	// 返回取消订阅函数
 	return func() {
@@ -85,7 +89,8 @@ func Subscribe(key string, callback func(interface{})) func() {
 		for i, sub := range manager.subscribers {
 			if sub.ID == id {
 				// 删除订阅
-				manager.subscribers = append(manager.subscribers[:i], manager.subscribers[i+1:]...)
+				manager.subscribers[i] = manager.subscribers[len(manager.subscribers)-1]
+				manager.subscribers = manager.subscribers[:len(manager.subscribers)-1]
 				break
 			}
 		}
@@ -114,11 +119,13 @@ func (m *Manager) load(confDir string) error {
 
 	// 加载环境配置 (后)
 	envDir := m.v.GetString(envKey)
-	if err := m.loadConfigs(confDir, envDir); err != nil {
-		return err
-	}
-	if err := m.parseConfigs(); err != nil {
-		return err
+	if envDir != "" {
+		if err := m.loadConfigs(confDir, envDir); err != nil {
+			return err
+		}
+		if err := m.parseConfigs(); err != nil {
+			return err
+		}
 	}
 
 	// 设置配置监听
@@ -167,13 +174,20 @@ func (m *Manager) loadConfig(confDir string, fileName string) error {
 	// 为每个目录创建新的Viper实例
 	subViper := viper.New()
 
-	// 支持多种配置格式
-	subViper.SetConfigType("toml")
-	if strings.HasSuffix(fileName, ".yaml") || strings.HasSuffix(fileName, ".yml") {
-		subViper.SetConfigType("yaml")
-	} else if strings.HasSuffix(fileName, ".json") {
-		subViper.SetConfigType("json")
+	// 根据文件扩展名设置配置类型
+	ext := filepath.Ext(fileName)
+	configType := "toml" // 默认类型
+	switch ext {
+	case ".yaml", ".yml":
+		configType = "yaml"
+	case ".json":
+		configType = "json"
+	case ".toml":
+		configType = "toml"
+	default:
+		return nil // 跳过不支持的文件类型
 	}
+	subViper.SetConfigType(configType)
 
 	// 设置配置文件路径
 	subViper.AddConfigPath(confDir)
@@ -278,7 +292,7 @@ func (m *Manager) loadRemoteConfig() error {
 		return err
 	}
 
-	// 启动远程配置监听
+	// 启动远程配置监听 TODO:GG 需要改，没有结合subscribers
 	refreshInterval := time.Duration(m.config.RemoteConf.RefreshInterval) * time.Second
 	if refreshInterval < 10*time.Second {
 		refreshInterval = 30 * time.Second // 默认最小刷新间隔

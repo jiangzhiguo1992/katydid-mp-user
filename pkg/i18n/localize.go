@@ -182,11 +182,15 @@ func (m *Manager) getLocalizers(lang string) []*i18n.Localizer {
 		tags = append(tags, lang)
 	}
 
-	if base := strings.Split(lang, "-")[0]; base != lang && HasLang(base) {
+	// 添加基本语言标签（如 "en" 从 "en-US"）
+	if base := strings.Split(lang, "-")[0]; (base != lang) && HasLang(base) {
 		tags = append(tags, base)
 	}
 
-	tags = append(tags, m.config.DefaultLang)
+	// 添加默认语言
+	if (len(tags) == 0) || (tags[len(tags)-1] != m.config.DefaultLang) {
+		tags = append(tags, m.config.DefaultLang)
+	}
 
 	localizers := make([]*i18n.Localizer, len(tags))
 	for i := 0; i < len(tags); i++ {
