@@ -1,7 +1,6 @@
 package configs
 
 import (
-	"bytes"
 	"fmt"
 	"github.com/fsnotify/fsnotify"
 	"github.com/google/uuid"
@@ -16,6 +15,7 @@ import (
 )
 
 const (
+	appDir = "app" // 初始加载目录
 	envKey = "env" // 环境key
 )
 
@@ -27,6 +27,7 @@ var (
 // Manager 配置管理器
 type Manager struct {
 	v           *viper.Viper
+	subs        []*viper.Viper
 	config      *Config
 	subscribers []ChangeSubscriber
 	mu          sync.RWMutex
@@ -52,7 +53,8 @@ func Get() *Config {
 func Init(confDir string) (*Config, error) {
 	once.Do(func() {
 		manager = &Manager{
-			v:           viper.New(),
+			v:           viper.GetViper(),
+			subs:        make([]*viper.Viper, 0),
 			config:      new(Config),
 			subscribers: make([]ChangeSubscriber, 0),
 		}
@@ -102,37 +104,30 @@ func (m *Manager) load(confDir string) error {
 	// 使用 . 替换环境变量中的 _
 	m.v.SetEnvKeyReplacer(strings.NewReplacer(".", "_"))
 
-	// 支持多种配置格式
-	m.v.SetConfigType("toml") // 默认格式
-	// 如果需要自动识别
-	if strings.HasSuffix(confDir, ".yaml") || strings.HasSuffix(confDir, ".yml") {
-		m.v.SetConfigType("yaml")
-	} else if strings.HasSuffix(confDir, ".json") {
-		m.v.SetConfigType("json")
+	// 加载初始配置 (先)
+	if err := m.loadConfigs(confDir, appDir); err != nil {
+		return err
+	}
+	if err := m.parseConfigs(); err != nil {
+		return err
 	}
 
-	// 加载内置配置 (不会触发变化监听)
-	if err := m.loadEmbedConfigs(); err != nil {
-		return fmt.Errorf("■ ■ Conf ■ ■ load embed configs failed: %w", err)
+	// 加载环境配置 (后)
+	envDir := m.v.GetString(envKey)
+	if err := m.loadConfigs(confDir, envDir); err != nil {
+		return err
 	}
-
-	// 加载环境配置 (会触发变化监听)
-	if err := m.loadEnvConfigs(confDir); err != nil {
-		return fmt.Errorf("■ ■ Conf ■ ■ load env configs failed: %w", err)
-	}
-
-	// 解析配置
-	if err := m.parseConfig(); err != nil {
-		return fmt.Errorf("■ ■ Conf ■ ■ parse config failed: %w", err)
+	if err := m.parseConfigs(); err != nil {
+		return err
 	}
 
 	// 设置配置监听
-	m.watchConfig()
+	m.watchConfigs()
 
 	// 远程配置加载
 	if m.config.RemoteConf.Enabled {
 		if err := m.loadRemoteConfig(); err != nil {
-			return fmt.Errorf("■ ■ Conf ■ ■ load remote config failed: %w", err)
+			return err
 		}
 	}
 
@@ -143,45 +138,73 @@ func (m *Manager) load(confDir string) error {
 	return nil
 }
 
-// loadEmbedConfigs 加载内置配置文件 (不会触发变化监听)
-func (m *Manager) loadEmbedConfigs() error {
-	for _, cfg := range ConfAppFiles {
-		if err := m.v.MergeConfig(bytes.NewReader(cfg)); err != nil {
-			return fmt.Errorf("■ ■ Conf ■ ■ merge embed config failed: %w", err)
-		}
-	}
-	return nil
-}
+// loadConfigs 加载环境配置文件
+func (m *Manager) loadConfigs(confDir string, subs ...string) error {
+	dir := filepath.Join(append([]string{confDir}, subs...)...)
 
-// loadEnvConfigs 加载环境配置文件 (会触发变化监听)
-func (m *Manager) loadEnvConfigs(confDir string) error {
-	// 添加配置路径
-	envName := m.v.GetString(envKey)
-	envDir := filepath.Join(confDir, envName)
-	m.v.AddConfigPath(envDir)
-
-	files, err := os.ReadDir(envDir)
+	// 读取目录下的所有file
+	files, err := os.ReadDir(dir)
 	if err != nil {
-		return fmt.Errorf("■ ■ Conf ■ ■ read env dir failed: %w", err)
+		return fmt.Errorf("■ ■ Conf ■ ■ read configs %s failed: %w", dir, err)
 	}
 
+	// 加载每个文件
 	for _, file := range files {
-		if !file.IsDir() {
-			// 提取不带扩展名的文件名
-			filename := strings.TrimSuffix(file.Name(), filepath.Ext(file.Name()))
-			m.v.SetConfigName(filename)
-
-			// 读取配置文件
-			if err := m.v.MergeInConfig(); err != nil {
-				return fmt.Errorf("■ ■ Conf ■ ■ merge env config %s failed: %w", file.Name(), err)
+		if file.IsDir() {
+			return m.loadConfigs(filepath.Join(dir, file.Name()))
+		} else {
+			err := m.loadConfig(dir, file.Name())
+			if err != nil {
+				return err
 			}
 		}
 	}
 	return nil
 }
 
+// loadConfigs 加载配置文件
+func (m *Manager) loadConfig(confDir string, fileName string) error {
+	// 为每个目录创建新的Viper实例
+	subViper := viper.New()
+
+	// 支持多种配置格式
+	subViper.SetConfigType("toml")
+	if strings.HasSuffix(fileName, ".yaml") || strings.HasSuffix(fileName, ".yml") {
+		subViper.SetConfigType("yaml")
+	} else if strings.HasSuffix(fileName, ".json") {
+		subViper.SetConfigType("json")
+	}
+
+	// 设置配置文件路径
+	subViper.AddConfigPath(confDir)
+
+	// 提取不带扩展名的文件名
+	realFileName := strings.TrimSuffix(fileName, filepath.Ext(fileName))
+	subViper.SetConfigName(realFileName)
+
+	// 读取配置文件
+	if err := subViper.ReadInConfig(); err != nil {
+		return fmt.Errorf("■ ■ Conf ■ ■ read config %s/%s failed: %w", confDir, fileName, err)
+	}
+	slog.Info("■ ■ Conf ■ ■ read config success", slog.String("path", filepath.Join(confDir, fileName)))
+
+	// 添加到列表
+	m.subs = append(m.subs, subViper)
+	return nil
+}
+
 // parseConfig 解析配置到结构体
-func (m *Manager) parseConfig() error {
+func (m *Manager) parseConfigs() error {
+	// 将子配置合并到主配置
+	for _, sub := range m.subs {
+		if sub == nil {
+			continue
+		}
+		for _, key := range sub.AllKeys() {
+			m.v.Set(key, sub.Get(key))
+		}
+	}
+
 	// 首次解析
 	if err := m.v.Unmarshal(m.config); err != nil {
 		return fmt.Errorf("■ ■ Conf ■ ■ unmarshal config failed: %w", err)
@@ -197,23 +220,34 @@ func (m *Manager) parseConfig() error {
 	return nil
 }
 
-// watchConfig 监听配置变化
-func (m *Manager) watchConfig() {
-	m.v.OnConfigChange(func(e fsnotify.Event) {
-		// 通知订阅者
-		for _, subscriber := range m.subscribers {
-			if m.v.IsSet(subscriber.Key) {
-				value := m.v.Get(subscriber.Key)
-				slog.Info(
-					"■ ■ Conf ■ ■ reload config",
-					slog.String("key", subscriber.Key),
-					slog.Any("Value", value),
-				)
-				go subscriber.Callback(value)
-			}
+// watchConfigs 监听配置变化
+func (m *Manager) watchConfigs() {
+	for _, sub := range m.subs {
+		if sub == nil {
+			continue
 		}
-	})
-	m.v.WatchConfig()
+		sub.OnConfigChange(func(e fsnotify.Event) {
+			// 重新加载配置
+			err := m.parseConfigs()
+			if err != nil {
+				slog.Error("■ ■ Conf ■ ■ config change failed", slog.Any("err", err))
+				return
+			}
+			// 通知订阅者
+			for _, subscriber := range m.subscribers {
+				if sub.IsSet(subscriber.Key) {
+					value := sub.Get(subscriber.Key)
+					slog.Info(
+						"■ ■ Conf ■ ■ config change success",
+						slog.String("key", subscriber.Key),
+						slog.Any("Value", value),
+					)
+					go subscriber.Callback(value)
+				}
+			}
+		})
+		sub.WatchConfig()
+	}
 }
 
 // loadRemoteConfig 加载远程配置 TODO:GG test
@@ -256,7 +290,7 @@ func (m *Manager) loadRemoteConfig() error {
 			}
 
 			m.mu.Lock()
-			if err := m.parseConfig(); err != nil {
+			if err := m.parseConfigs(); err != nil {
 				slog.Error("■ ■ Conf ■ ■ parse remote config failed", slog.Any("err", err))
 			}
 			m.mu.Unlock()

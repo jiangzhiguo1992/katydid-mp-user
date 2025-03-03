@@ -1,6 +1,6 @@
 package configs
 
-import _ "embed"
+//import _ "embed"
 
 const (
 	// ConfDir configs根目录
@@ -11,17 +11,14 @@ const (
 )
 
 var (
-	// ConfAppFiles 初始化加载的文件
-	ConfAppFiles = [][]byte{fileAppInit, fileAppPub, fileAppPri}
-	//go:embed app/init.toml
-	fileAppInit []byte
-	//go:embed app/public.toml
-	fileAppPub []byte
-	//go:embed app/private.toml
-	fileAppPri []byte
-
-	// ConfigIgnoreDir 忽略的配置目录 TODO:GG 需要配置
-	ConfigIgnoreDir = []string{"perm"}
+	//// ConfAppFiles 初始化加载的文件
+	//ConfAppFiles = [][]byte{fileAppInit, fileAppPub, fileAppPri}
+	////go:embed app/init.toml
+	//fileAppInit []byte
+	////go:embed app/public.toml
+	//fileAppPub []byte
+	////go:embed app/private.toml
+	//fileAppPri []byte
 
 	// LangDirs 本地化文件目录
 	LangDirs = []string{"./assets/i18n", "./assets/i18n/locales"}
