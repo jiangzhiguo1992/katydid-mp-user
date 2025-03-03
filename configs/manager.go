@@ -111,12 +111,12 @@ func (m *Manager) load(confDir string) error {
 		m.v.SetConfigType("json")
 	}
 
-	// 加载内置配置
+	// 加载内置配置 (不会触发变化监听)
 	if err := m.loadEmbedConfigs(); err != nil {
 		return fmt.Errorf("■ ■ Conf ■ ■ load embed configs failed: %w", err)
 	}
 
-	// 加载环境配置
+	// 加载环境配置 (会触发变化监听)
 	if err := m.loadEnvConfigs(confDir); err != nil {
 		return fmt.Errorf("■ ■ Conf ■ ■ load env configs failed: %w", err)
 	}
@@ -135,13 +135,17 @@ func (m *Manager) load(confDir string) error {
 			return fmt.Errorf("■ ■ Conf ■ ■ load remote config failed: %w", err)
 		}
 	}
+
+	// debug模式下打印配置
+	if m.config.IsDebug() {
+		m.v.Debug()
+	}
 	return nil
 }
 
-// loadEmbedConfigs 加载内置配置文件
+// loadEmbedConfigs 加载内置配置文件 (不会触发变化监听)
 func (m *Manager) loadEmbedConfigs() error {
-	configs := [][]byte{fileAppInit, fileAppPub, fileAppPri}
-	for _, cfg := range configs {
+	for _, cfg := range ConfAppFiles {
 		if err := m.v.MergeConfig(bytes.NewReader(cfg)); err != nil {
 			return fmt.Errorf("■ ■ Conf ■ ■ merge embed config failed: %w", err)
 		}
@@ -149,9 +153,13 @@ func (m *Manager) loadEmbedConfigs() error {
 	return nil
 }
 
-// loadEnvConfigs 加载环境配置文件
+// loadEnvConfigs 加载环境配置文件 (会触发变化监听)
 func (m *Manager) loadEnvConfigs(confDir string) error {
-	envDir := filepath.Join(confDir, m.v.GetString(envKey))
+	// 添加配置路径
+	envName := m.v.GetString(envKey)
+	envDir := filepath.Join(confDir, envName)
+	m.v.AddConfigPath(envDir)
+
 	files, err := os.ReadDir(envDir)
 	if err != nil {
 		return fmt.Errorf("■ ■ Conf ■ ■ read env dir failed: %w", err)
@@ -159,13 +167,13 @@ func (m *Manager) loadEnvConfigs(confDir string) error {
 
 	for _, file := range files {
 		if !file.IsDir() {
-			filePath := filepath.Join(envDir, file.Name())
-			content, err := os.ReadFile(filePath)
-			if err != nil {
-				return fmt.Errorf("■ ■ Conf ■ ■ read file %s failed: %w", filePath, err)
-			}
-			if err := m.v.MergeConfig(bytes.NewReader(content)); err != nil {
-				return fmt.Errorf("■ ■ Conf ■ ■ merge env config %s failed: %w", filePath, err)
+			// 提取不带扩展名的文件名
+			filename := strings.TrimSuffix(file.Name(), filepath.Ext(file.Name()))
+			m.v.SetConfigName(filename)
+
+			// 读取配置文件
+			if err := m.v.MergeInConfig(); err != nil {
+				return fmt.Errorf("■ ■ Conf ■ ■ merge env config %s failed: %w", file.Name(), err)
 			}
 		}
 	}
@@ -186,7 +194,6 @@ func (m *Manager) parseConfig() error {
 	if err := m.v.Unmarshal(m.config); err != nil {
 		return fmt.Errorf("■ ■ Conf ■ ■ unmarshal config with defaults failed: %w", err)
 	}
-
 	return nil
 }
 
@@ -206,7 +213,6 @@ func (m *Manager) watchConfig() {
 			}
 		}
 	})
-
 	m.v.WatchConfig()
 }
 
@@ -215,6 +221,8 @@ func (m *Manager) loadRemoteConfig() error {
 	if !m.config.RemoteConf.Enabled {
 		return nil
 	}
+
+	// TODO:GG viper.SupportedRemoteProviders 支持的类型
 
 	err := m.v.AddRemoteProvider(
 		m.config.RemoteConf.Provider,

@@ -1,20 +1,6 @@
 package configs
 
-import (
-	_ "embed"
-	"time"
-)
-
-var (
-	//go:embed app/init.toml
-	fileAppInit []byte
-
-	//go:embed app/public.toml
-	fileAppPub []byte
-
-	//go:embed app/private.toml
-	fileAppPri []byte
-)
+import "time"
 
 type (
 	Config struct {
