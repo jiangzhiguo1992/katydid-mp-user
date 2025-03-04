@@ -1,7 +1,6 @@
 package model
 
 import (
-	model2 "katydid-mp-user/internal/client/model"
 	"katydid-mp-user/internal/pkg/model"
 	"katydid-mp-user/pkg/valid"
 	"katydid-mp-user/utils"
@@ -21,12 +20,14 @@ type Organization struct {
 	Kind     uint8    `json:"kind" validate:"required,kind-check"`     // 组织类型
 	Become   uint8    `json:"become" validate:"required,become-check"` // 加入方式
 	Name     string   `json:"name" validate:"required,name-format"`    // 组织名称
-	Display  string   `json:"display" validate:"display-format"`       // 组织显示名称
+	Display  string   `json:"display" validate:"name-format"`          // 组织显示名称
 	Tags     []string `json:"tags"`                                    // 组织标签们
 
-	Children []*Organization       `json:"children" gorm:"-:all"` // 子组织列表
-	Apps     []*model2.Application `json:"apps" gorm:"-:all"`     // 项目列表
-	// TODO:GG Permission + Account + User
+	Children []*Organization `json:"children" gorm:"-:all"` // 子组织列表
+	Perms    []*Permission   `json:"perms" gorm:"-:all"`    // 权限列表
+	AccIds   []uint64        `json:"accIds" gorm:"-:all"`   // 账号列表
+	UserIds  []uint64        `json:"userIds" gorm:"-:all"`  // 成员列表
+	AppIds   []uint64        `json:"appIds" gorm:"-:all"`   // 项目列表
 }
 
 func NewOrganizationEmpty() *Organization {
@@ -36,7 +37,10 @@ func NewOrganizationEmpty() *Organization {
 		ParentIds: make([]uint64, 0),
 		Tags:      make([]string, 0),
 		Children:  make([]*Organization, 0),
-		Apps:      make([]*model2.Application, 0),
+		Perms:     make([]*Permission, 0),
+		AccIds:    make([]uint64, 0),
+		UserIds:   make([]uint64, 0),
+		AppIds:    make([]uint64, 0),
 	}
 }
 
@@ -49,7 +53,10 @@ func NewOrganizationDefault(
 		OwnAccIds: ownAccIds, ParentIds: parentIds,
 		Enable: enable, IsPublic: isPublic, Kind: kind, Become: become, Name: name, Display: display, Tags: tags,
 		Children: make([]*Organization, 0),
-		Apps:     make([]*model2.Application, 0),
+		Perms:    make([]*Permission, 0),
+		AccIds:   make([]uint64, 0),
+		UserIds:  make([]uint64, 0),
+		AppIds:   make([]uint64, 0),
 	}
 }
 
@@ -58,16 +65,24 @@ func (o *Organization) ValidFieldRules() valid.FieldValidRules {
 		valid.SceneAll: valid.FieldValidRule{
 			// 组织名称 (1-50)
 			"name-format": func(value reflect.Value, param string) bool {
-				name := value.String()
-				if len(name) < 1 || len(name) > 50 {
+				data := value.String()
+				if len(data) < 1 || len(data) > 50 {
 					return false
 				}
-				for _, r := range name {
+				for _, r := range data {
 					if !unicode.IsLetter(r) && !unicode.IsNumber(r) && r != '_' && r != '-' {
 						return false
 					}
 				}
 				return true
+			},
+			"kind-check": func(value reflect.Value, param string) bool {
+				data := uint8(value.Uint())
+				return data == OrgKindPhysical || data == OrgKindVirtual
+			},
+			"become-check": func(value reflect.Value, param string) bool {
+				data := uint8(value.Uint())
+				return data == OrgBecomePublic || data == OrgBecomeApply || data == OrgBecomeInvite
 			},
 		},
 	}
@@ -80,36 +95,36 @@ func (o *Organization) ValidExtraRules() (utils.KSMap, valid.ExtraValidRules) {
 			orgExtraKeyWebsiteUrl: valid.ExtraValidRuleInfo{
 				Field: orgExtraKeyWebsiteUrl,
 				ValidFn: func(value any) bool {
-					v, ok := value.(string)
+					data, ok := value.(string)
 					if !ok {
 						return false
 					}
-					return len(v) <= 1000
+					return len(data) <= 1000
 				},
 			},
 			// 简介 (<1000)
 			orgExtraKeyDesc: valid.ExtraValidRuleInfo{
 				Field: orgExtraKeyDesc,
 				ValidFn: func(value any) bool {
-					v, ok := value.(string)
+					data, ok := value.(string)
 					if !ok {
 						return false
 					}
-					return len(v) <= 1000
+					return len(data) <= 1000
 				},
 			},
 			// 地址 (<100)*(<1000)
 			orgExtraKeyAddresses: valid.ExtraValidRuleInfo{
 				Field: orgExtraKeyAddresses,
 				ValidFn: func(value any) bool {
-					vs, ok := value.([]string)
+					data, ok := value.([]string)
 					if !ok {
 						return false
 					}
-					if len(vs) > 100 {
+					if len(data) > 100 {
 						return false
 					}
-					for _, v := range vs {
+					for _, v := range data {
 						if len(v) > 1000 {
 							return false
 						}
@@ -121,14 +136,14 @@ func (o *Organization) ValidExtraRules() (utils.KSMap, valid.ExtraValidRules) {
 			orgExtraKeyContacts: valid.ExtraValidRuleInfo{
 				Field: orgExtraKeyContacts,
 				ValidFn: func(value any) bool {
-					vs, ok := value.([]string)
+					data, ok := value.([]string)
 					if !ok {
 						return false
 					}
-					if len(vs) > 100 {
+					if len(data) > 100 {
 						return false
 					}
-					for _, v := range vs {
+					for _, v := range data {
 						if len(v) > 1000 {
 							return false
 						}
@@ -140,16 +155,35 @@ func (o *Organization) ValidExtraRules() (utils.KSMap, valid.ExtraValidRules) {
 	}
 }
 
+func (o *Organization) ValidStructRules(scene valid.Scene, fn valid.FuncReportError) {
+	switch scene {
+	case valid.SceneAll:
+		for _, tag := range o.Tags {
+			if len(tag) > 100 {
+				fn(o, "Tags", valid.TagFormat, "")
+			}
+		}
+	}
+}
+
 func (o *Organization) ValidLocalizeRules() valid.LocalizeValidRules {
 	return valid.LocalizeValidRules{
 		valid.SceneAll: valid.LocalizeValidRule{
 			Rule1: map[valid.Tag]map[valid.FieldName]valid.LocalizeValidRuleParam{
 				valid.TagRequired: {
-					"Name": {"format_s_input_required", false, []any{"org_name"}},
-					//"ParentId": {"format_s_input_required", false, []any{"org_parent"}},
+					"OwnAccIds": {"format_s_input_required", false, []any{"own_accounts"}},
+					"Name":      {"format_s_input_required", false, []any{"org_name"}},
+				},
+				valid.TagFormat: {
+					"Tags": {"format_tags_err", false, nil},
+				},
+				"name-format": {
+					"Name":    {"format_org_name_err", false, nil},
+					"Display": {"format_org_display_err", false, nil},
 				},
 			}, Rule2: map[valid.Tag]valid.LocalizeValidRuleParam{
-				"name-format":         {"format_org_name_err", false, nil},
+				"kind-check":          {"format_org_kind_err", false, nil},
+				"become-check":        {"format_org_become_err", false, nil},
 				orgExtraKeyWebsiteUrl: {"format_website_err", false, nil},
 				orgExtraKeyDesc:       {"format_desc_err", false, nil},
 				orgExtraKeyAddresses:  {"format_addresses_err", false, nil},
@@ -167,7 +201,7 @@ const (
 	OrgKindVirtual  uint8 = 1 // 虚拟组织 (能同时存在多个)
 
 	OrgBecomePublic uint8 = 0 // 公开
-	OrgBecomeApply  uint8 = 1 // 申请
+	OrgBecomeApply  uint8 = 1 // 申请 (只有public有效?)
 	OrgBecomeInvite uint8 = 2 // 邀请
 )
 
@@ -179,18 +213,6 @@ func (o *Organization) IsTopParent() bool {
 
 func (o *Organization) IsBotChild() bool {
 	return (o.Children == nil) || (len(o.Children) <= 0)
-}
-
-func (o *Organization) GetAllApps() map[uint64][]*model2.Application {
-	apps := map[uint64][]*model2.Application{}
-	apps[o.Id] = o.Apps
-	for _, child := range o.Children {
-		childApps := child.GetAllApps()
-		for k, v := range childApps {
-			apps[k] = v
-		}
-	}
-	return apps
 }
 
 // extra

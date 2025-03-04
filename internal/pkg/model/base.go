@@ -62,16 +62,15 @@ func (b *Base) ValidFieldRules() valid.FieldValidRules {
 func (b *Base) ValidExtraRules() (utils.KSMap, valid.ExtraValidRules) {
 	return b.Extra, valid.ExtraValidRules{
 		valid.SceneAll: map[valid.Tag]valid.ExtraValidRuleInfo{
-			// 管理员备注
+			// 管理员备注 (0-10000)
 			extraKeyAdminNote: {
 				Field: extraKeyAdminNote,
-				Param: "0-10000",
 				ValidFn: func(value any) bool {
-					str, ok := value.(string)
+					data, ok := value.(string)
 					if !ok {
 						return false
 					}
-					return len(str) <= 100000
+					return len(data) <= 100000
 				},
 			},
 		},
