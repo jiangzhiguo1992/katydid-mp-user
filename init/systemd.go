@@ -16,7 +16,7 @@ func init() {
 	if e != nil {
 		panic(e)
 	}
-	//configs.Subscribe("account.enable", func(v interface{}) {
+	//configs.Subscribe("account.enable", func(v any) {
 	//	slog.Info("reload account.enable", slog.Any("v", v))
 	//}) // TODO:GG 订阅reload
 

@@ -77,7 +77,7 @@ func (b *Base) ValidExtraRules() (utils.KSMap, valid.ExtraValidRules) {
 			// 管理员备注 (0-10000)
 			extraKeyAdminNote: {
 				Field: extraKeyAdminNote,
-				ValidFn: func(value interface{}) bool {
+				ValidFn: func(value any) bool {
 					str, ok := value.(string)
 					if !ok {
 						return false

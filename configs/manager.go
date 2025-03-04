@@ -37,7 +37,7 @@ type Manager struct {
 type ChangeSubscriber struct {
 	ID       string
 	Key      string
-	Callback func(interface{})
+	Callback func(value any)
 }
 
 // Get 获取配置管理器单例
@@ -67,7 +67,7 @@ func Init(confDir string) (*Config, error) {
 }
 
 // Subscribe 注册配置监听
-func Subscribe(key string, callback func(interface{})) func() {
+func Subscribe(key string, callback func(value any)) func() {
 	if manager == nil {
 		return func() {}
 	}

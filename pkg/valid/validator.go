@@ -49,11 +49,11 @@ type (
 	ExtraValidRuleInfo struct {
 		Field   string
 		Param   string
-		ValidFn func(value interface{}) bool
+		ValidFn func(value any) bool
 	}
 
 	// FuncReportError validator.StructLevel.FuncReportError
-	FuncReportError = func(field interface{}, fieldName FieldName, tag Tag, param string)
+	FuncReportError = func(field any, fieldName FieldName, tag Tag, param string)
 
 	// LocalizeValidRules 定义本地化的规则映射
 	LocalizeValidRules = map[Scene]LocalizeValidRule
@@ -61,7 +61,7 @@ type (
 		Rule1 map[Tag]map[FieldName]LocalizeValidRuleParam
 		Rule2 map[Tag]LocalizeValidRuleParam
 	}
-	LocalizeValidRuleParam = [3]interface{} // {msg, param, []any}
+	LocalizeValidRuleParam = [3]any // {msg, param, []any}
 
 	// IFieldValidator 定义字段验证接口
 	IFieldValidator interface {
@@ -222,7 +222,7 @@ func (v *Validator) validStruct(obj any, sl validator.StructLevel, scene Scene) 
 		return
 	}
 
-	sv.ValidStructRules(scene, func(field interface{}, fieldName FieldName, tag Tag, param string) {
+	sv.ValidStructRules(scene, func(field any, fieldName FieldName, tag Tag, param string) {
 		sl.ReportError(field, string(fieldName), string(fieldName), string(tag), param)
 	})
 }

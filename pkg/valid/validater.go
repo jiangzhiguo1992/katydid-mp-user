@@ -25,7 +25,7 @@ package valid
 //	groupValidators = map[string]ValidatorGroupFunc{} // 分组验证器注册
 //)
 //
-//type ValidatorFieldFunc func(value interface{}) (string, bool)
+//type ValidatorFieldFunc func(value any) (string, bool)
 //type ValidatorGroupFunc func(map[string]interface{}) (string, bool)
 //
 //type ValidateFunc func(reflect.Value) []error
