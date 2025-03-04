@@ -20,6 +20,7 @@ const (
 
 	TagRequired Tag = "required"
 	TagFormat   Tag = "format"
+	TagCheck    Tag = "check"
 )
 
 var (
@@ -215,6 +216,7 @@ func (v *Validator) validExtra(obj any, sl validator.StructLevel, scene Scene) {
 
 func (v *Validator) validStruct(obj any, sl validator.StructLevel, scene Scene) {
 	// 处理嵌入字段的验证规则
+	_ = v.registerEmbeddedValidations(obj, reflect.TypeOf(obj), SceneAll, 3, sl)
 	_ = v.registerEmbeddedValidations(obj, reflect.TypeOf(obj), scene, 3, sl)
 
 	sv, ok := obj.(IStructValidator)
@@ -222,6 +224,9 @@ func (v *Validator) validStruct(obj any, sl validator.StructLevel, scene Scene) 
 		return
 	}
 
+	sv.ValidStructRules(SceneAll, func(field any, fieldName FieldName, tag Tag, param string) {
+		sl.ReportError(field, string(fieldName), string(fieldName), string(tag), param)
+	})
 	sv.ValidStructRules(scene, func(field any, fieldName FieldName, tag Tag, param string) {
 		sl.ReportError(field, string(fieldName), string(fieldName), string(tag), param)
 	})

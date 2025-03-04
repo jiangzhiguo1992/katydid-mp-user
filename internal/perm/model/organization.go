@@ -12,16 +12,16 @@ import (
 type Organization struct {
 	*model.Base
 
-	OwnAccIds []uint64 `json:"ownAccIds" validate:"required"` // 所属账号们
-	ParentIds []uint64 `json:"parentIds"`                     // 父级组织 默认0
+	OwnAccIds []uint64 `json:"ownAccIds" validate:"required,own-check"` // 所属账号们
+	ParentIds []uint64 `json:"parentIds" validate:"parent-check"`       // 父级组织 默认0
 
-	Enable   bool     `json:"enable"`                                  // 是否可用(拉黑等)
-	IsPublic bool     `json:"isPublic"`                                // 是否公开
-	Kind     uint8    `json:"kind" validate:"required,kind-check"`     // 组织类型
-	Become   uint8    `json:"become" validate:"required,become-check"` // 加入方式
-	Name     string   `json:"name" validate:"required,name-format"`    // 组织名称
-	Display  string   `json:"display" validate:"name-format"`          // 组织显示名称
-	Tags     []string `json:"tags"`                                    // 组织标签们
+	Enable   bool     `json:"enable"`                               // 是否可用(拉黑等)
+	IsPublic bool     `json:"isPublic"`                             // 是否公开
+	Kind     uint8    `json:"kind" validate:"kind-check"`           // 组织类型
+	Become   uint8    `json:"become" validate:"become-check"`       // 加入方式
+	Name     string   `json:"name" validate:"required,name-format"` // 组织名称
+	Display  string   `json:"display" validate:"display-format"`    // 组织显示名称
+	Tags     []string `json:"tags" validate:"tags-format"`          // 组织标签们
 
 	Children []*Organization `json:"children" gorm:"-:all"` // 子组织列表
 	Perms    []*Permission   `json:"perms" gorm:"-:all"`    // 权限列表
@@ -32,15 +32,15 @@ type Organization struct {
 
 func NewOrganizationEmpty() *Organization {
 	return &Organization{
-		Base:      model.NewBaseEmpty(),
-		OwnAccIds: make([]uint64, 0),
-		ParentIds: make([]uint64, 0),
-		Tags:      make([]string, 0),
-		Children:  make([]*Organization, 0),
-		Perms:     make([]*Permission, 0),
-		AccIds:    make([]uint64, 0),
-		UserIds:   make([]uint64, 0),
-		AppIds:    make([]uint64, 0),
+		Base: model.NewBaseEmpty(),
+		//OwnAccIds: make([]uint64, 0),
+		//ParentIds: make([]uint64, 0),
+		//Tags:      make([]string, 0),
+		//Children:  make([]*Organization, 0),
+		//Perms:     make([]*Permission, 0),
+		//AccIds:    make([]uint64, 0),
+		//UserIds:   make([]uint64, 0),
+		//AppIds:    make([]uint64, 0),
 	}
 }
 
@@ -63,6 +63,26 @@ func NewOrganizationDefault(
 func (o *Organization) ValidFieldRules() valid.FieldValidRules {
 	return valid.FieldValidRules{
 		valid.SceneAll: valid.FieldValidRule{
+			// 所属账号们
+			"own-check": func(value reflect.Value, param string) bool {
+				data := value.Interface().([]uint64)
+				return (len(data) > 0) && (len(data) < 1000)
+			},
+			// 父级组织
+			"parent-check": func(value reflect.Value, param string) bool {
+				data := value.Interface().([]uint64)
+				return (len(data) >= 0) && (len(data) < 100)
+			},
+			// 组织类型
+			"kind-check": func(value reflect.Value, param string) bool {
+				data := uint8(value.Uint())
+				return data == OrgKindPhysical || data == OrgKindVirtual
+			},
+			// 加入方式
+			"become-check": func(value reflect.Value, param string) bool {
+				data := uint8(value.Uint())
+				return data == OrgBecomePublic || data == OrgBecomeApply || data == OrgBecomeInvite
+			},
 			// 组织名称 (1-50)
 			"name-format": func(value reflect.Value, param string) bool {
 				data := value.String()
@@ -76,13 +96,31 @@ func (o *Organization) ValidFieldRules() valid.FieldValidRules {
 				}
 				return true
 			},
-			"kind-check": func(value reflect.Value, param string) bool {
-				data := uint8(value.Uint())
-				return data == OrgKindPhysical || data == OrgKindVirtual
+			// 组织显示名称 (0-50)
+			"display-format": func(value reflect.Value, param string) bool {
+				data := value.String()
+				if len(data) > 50 {
+					return false
+				}
+				for _, r := range data {
+					if !unicode.IsLetter(r) && !unicode.IsNumber(r) && r != '_' && r != '-' {
+						return false
+					}
+				}
+				return true
 			},
-			"become-check": func(value reflect.Value, param string) bool {
-				data := uint8(value.Uint())
-				return data == OrgBecomePublic || data == OrgBecomeApply || data == OrgBecomeInvite
+			// 组织标签们 (0-10)*(1-20)
+			"tags-format": func(value reflect.Value, param string) bool {
+				data := value.Interface().([]string)
+				if len(data) > 10 {
+					return false
+				}
+				for _, v := range data {
+					if len(v) < 1 || len(v) > 20 {
+						return false
+					}
+				}
+				return true
 			},
 		},
 	}
@@ -155,17 +193,6 @@ func (o *Organization) ValidExtraRules() (utils.KSMap, valid.ExtraValidRules) {
 	}
 }
 
-func (o *Organization) ValidStructRules(scene valid.Scene, fn valid.FuncReportError) {
-	switch scene {
-	case valid.SceneAll:
-		for _, tag := range o.Tags {
-			if len(tag) > 100 {
-				fn(o, "Tags", valid.TagFormat, "")
-			}
-		}
-	}
-}
-
 func (o *Organization) ValidLocalizeRules() valid.LocalizeValidRules {
 	return valid.LocalizeValidRules{
 		valid.SceneAll: valid.LocalizeValidRule{
@@ -174,16 +201,14 @@ func (o *Organization) ValidLocalizeRules() valid.LocalizeValidRules {
 					"OwnAccIds": {"format_s_input_required", false, []any{"own_accounts"}},
 					"Name":      {"format_s_input_required", false, []any{"org_name"}},
 				},
-				valid.TagFormat: {
-					"Tags": {"format_tags_err", false, nil},
-				},
-				"name-format": {
-					"Name":    {"format_org_name_err", false, nil},
-					"Display": {"format_org_display_err", false, nil},
-				},
 			}, Rule2: map[valid.Tag]valid.LocalizeValidRuleParam{
+				"own-check":           {"format_org_own_accs_err", false, nil},
+				"parent-check":        {"format_org_parents_err", false, nil},
+				"name-format":         {"format_org_name_err", false, nil},
+				"display-format":      {"format_org_display_err", false, nil},
 				"kind-check":          {"format_org_kind_err", false, nil},
 				"become-check":        {"format_org_become_err", false, nil},
+				"tags-format":         {"format_org_tags_err", false, nil},
 				orgExtraKeyWebsiteUrl: {"format_website_err", false, nil},
 				orgExtraKeyDesc:       {"format_desc_err", false, nil},
 				orgExtraKeyAddresses:  {"format_addresses_err", false, nil},
