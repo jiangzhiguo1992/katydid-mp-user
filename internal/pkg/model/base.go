@@ -6,18 +6,6 @@ import (
 	"time"
 )
 
-const (
-	// 删除相关常量
-	deleteByUserOffset  = 10000  // 用户删除偏移量
-	deleteByUserSelf    = 1      // 用户自己删除
-	deleteByAdminSys    = -1     // 系统管理员删除
-	deleteByAdminOffset = -10000 // 系统管理员删除偏移量
-
-	// Extra 相关常量
-	extraKeyAdminNote       = "adminNote" // 管理员备注
-	extraValAdminNoteMaxLen = 100000      // 最大长度
-)
-
 type (
 	Base struct {
 		//gorm.Model
@@ -74,15 +62,16 @@ func (b *Base) ValidFieldRules() valid.FieldValidRules {
 func (b *Base) ValidExtraRules() (utils.KSMap, valid.ExtraValidRules) {
 	return b.Extra, valid.ExtraValidRules{
 		valid.SceneAll: map[valid.Tag]valid.ExtraValidRuleInfo{
-			// 管理员备注 (0-10000)
+			// 管理员备注
 			extraKeyAdminNote: {
 				Field: extraKeyAdminNote,
+				Param: "0-10000",
 				ValidFn: func(value any) bool {
 					str, ok := value.(string)
 					if !ok {
 						return false
 					}
-					return len(str) <= extraValAdminNoteMaxLen
+					return len(str) <= 100000
 				},
 			},
 		},
@@ -118,6 +107,13 @@ func (b *Base) ValidLocalizeRules() valid.LocalizeValidRules {
 		},
 	}
 }
+
+const (
+	deleteByUserOffset  = 10000  // 用户删除偏移量
+	deleteByUserSelf    = 1      // 用户自己删除
+	deleteByAdminSys    = -1     // 系统管理员删除
+	deleteByAdminOffset = -10000 // 系统管理员删除偏移量
+)
 
 func (b *Base) CreatedTime() time.Time {
 	return time.UnixMilli(b.CreateAt)
@@ -172,4 +168,17 @@ func (b *Base) GetDelBy(id uint64) int64 {
 	default:
 		return int64(id)
 	}
+}
+
+const (
+	extraKeyAdminNote = "adminNote" // 管理员备注
+)
+
+func (b *Base) GetAdminNote() string {
+	data, _ := b.Extra.GetString(extraKeyAdminNote)
+	return data
+}
+
+func (b *Base) SetAdminNote(adminNote *string) {
+	b.Extra.SetString(extraKeyAdminNote, adminNote)
 }

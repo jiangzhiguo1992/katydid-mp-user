@@ -61,7 +61,7 @@ type (
 		Rule1 map[Tag]map[FieldName]LocalizeValidRuleParam
 		Rule2 map[Tag]LocalizeValidRuleParam
 	}
-	LocalizeValidRuleParam = [3]any // {msg, param, []any}
+	LocalizeValidRuleParam = [3]any // {msg, param, template([]any)}
 
 	// IFieldValidator 定义字段验证接口
 	IFieldValidator interface {
@@ -305,7 +305,7 @@ func (v *Validator) handleValidationError(
 			return v.validLocalize(scene, typ, obj, rl, validateErrs, true)
 		}
 	}
-	return err.Match(e)
+	return err.Match(e).Real()
 }
 
 func (v *Validator) validLocalize(
