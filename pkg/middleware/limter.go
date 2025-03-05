@@ -380,8 +380,8 @@ func PathKeyFunc(c *gin.Context) string {
 }
 
 // UserKeyFunc 按用户ID限流的键生成函数(需要认证中间件)
-func UserKeyFunc(c *gin.Context, userKey string) string {
-	userID, exists := c.Get(userKey)
+func UserKeyFunc(c *gin.Context) string {
+	userID, exists := c.Get(AuthKeyUserID)
 	if !exists {
 		return c.ClientIP() // 回退到IP
 	}

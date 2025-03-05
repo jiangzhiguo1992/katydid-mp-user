@@ -2,9 +2,8 @@ module katydid-mp-user
 
 go 1.23.4
 
-// prometheus
+// prometheus + grafana
 // tidb
-// grafana
 
 // go get github.com/gin-contrib/cors
 // go get github.com/gin-contrib/sessions
