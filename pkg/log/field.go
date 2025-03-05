@@ -1,6 +1,7 @@
 package log
 
 import (
+	"encoding/json"
 	"fmt"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
@@ -14,11 +15,21 @@ type Field struct {
 }
 
 func FString(key string, val string) Field {
-	return Field{Key: key, Value: val}
+	var jsonObj interface{}
+	err := json.Unmarshal([]byte(val), &jsonObj)
+	if err != nil {
+		// JSON解析失败，作为普通字符串处理
+		return Field{Key: key, Value: val}
+	}
+	// JSON解析成功，作为结构化对象处理
+	return Field{Key: key, Value: jsonObj}
 }
 
 func FStringp(key string, val *string) Field {
-	return Field{Key: key, Value: val}
+	if val == nil {
+		return Field{Key: key, Value: val}
+	}
+	return FString(key, *val)
 }
 
 func FStrings(key string, val []string) Field {

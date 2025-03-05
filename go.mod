@@ -14,8 +14,9 @@ go 1.23.4
 //github.com/swaggo/swag v1.16.4
 //gorm.io/driver/postgres v1.5.11
 
-// kong +  traefik
+// kong +  traefik + Caddy
 // gron
+// Fluentd
 
 require (
 	github.com/BurntSushi/toml v1.4.0
