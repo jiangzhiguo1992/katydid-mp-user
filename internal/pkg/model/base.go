@@ -35,14 +35,14 @@ func NewBaseEmpty() *Base {
 	}
 }
 
-func NewBaseDefault() *Base {
+func NewBase(extra utils.KSMap) *Base {
 	return &Base{
 		//Id: nil, // auto
 		//CreateAt: time.Now().UnixMilli(), // auto
 		//UpdateAt: time.Now().UnixMilli(), // auto
 		DeleteBy: 0,
 		DeleteAt: nil,
-		Extra:    make(utils.KSMap),
+		Extra:    extra,
 	}
 }
 
