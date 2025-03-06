@@ -1,8 +1,10 @@
 package model
 
 import (
+	"fmt"
 	"katydid-mp-user/internal/pkg/model"
 	"katydid-mp-user/utils"
+	"time"
 )
 
 // Account 账号结构
@@ -88,6 +90,103 @@ func (a *Account) Ban() {
 	a.Status = AccountStatusBanned
 }
 
+// CountAuthMethods 计算已有认证方式数量
+func (a *Account) CountAuthMethods() int {
+	count := 0
+	if a.AuthPassword != nil {
+		count++
+	}
+	if a.AuthPhone != nil {
+		count++
+	}
+	if a.AuthEmail != nil {
+		count++
+	}
+	count += len(a.AuthBiometrics)
+	count += len(a.AuthThirdParties)
+	return count
+}
+
+// InvalidateToken 使token失效
+func (a *Account) InvalidateToken(ownType TokenOwn, ownID uint64) {
+	switch ownType {
+	case TokenOwnOrg:
+		delete(a.OrgTokens, ownID)
+		delete(a.OrgExpireAts, ownID)
+	case TokenOwnApp:
+		delete(a.AppTokens, ownID)
+		delete(a.AppExpireAts, ownID)
+	}
+}
+
+// GenerateToken 为账号生成token
+func (a *Account) GenerateToken(
+	ownType TokenOwn, ownID uint64, jwtSecret string,
+	expireSec, refExpireHou int64, issuer string,
+) (*Token, error) {
+	// 创建新的Token
+	token := NewToken(a.Id, ownType, ownID, expireSec, refExpireHou, issuer)
+	// 生成JWT令牌
+	if err := token.GenerateAccessJWTToken(jwtSecret); err != nil {
+		return nil, err
+	}
+	// 生成刷新令牌
+	if err := token.GenerateRefreshJWTToken(jwtSecret); err != nil {
+		return nil, err
+	}
+	// 存储token
+	if ownType == TokenOwnOrg {
+		a.OrgTokens[ownID] = token.AccessToken
+		a.OrgExpireAts[ownID] = time.Now().Add(time.Duration(token.ExpireSec) * time.Second).Unix()
+		// 如果是首次激活，记录激活时间
+		if _, exists := a.OrgActiveAts[ownID]; !exists {
+			a.OrgActiveAts[ownID] = time.Now().Unix()
+		}
+	} else if ownType == TokenOwnApp {
+		a.AppTokens[ownID] = token.AccessToken
+		a.AppExpireAts[ownID] = time.Now().Add(time.Duration(token.ExpireSec) * time.Second).Unix()
+		// 如果是首次激活，记录激活时间
+		if _, exists := a.AppActiveAts[ownID]; !exists {
+			a.AppActiveAts[ownID] = time.Now().Unix()
+		}
+	}
+	return token, nil
+}
+
+// ValidateToken 验证token
+func (a *Account) ValidateToken(
+	tokenStr string, ownType TokenOwn, ownID uint64,
+	jwtSecret string, checkExpire bool,
+) (*TokenClaims, error) {
+	// 验证token是否存在于账户中
+	switch ownType {
+	case TokenOwnOrg:
+		storedToken, ok := a.OrgTokens[ownID]
+		if !ok || (storedToken != tokenStr) {
+			return nil, fmt.Errorf("token不存在或不匹配")
+		}
+		// 检查过期时间
+		expireAt, ok := a.OrgExpireAts[ownID]
+		if ok && (expireAt > 0) && (time.Now().Unix() > expireAt) {
+			return nil, fmt.Errorf("token已过期")
+		}
+	case TokenOwnApp:
+		storedToken, ok := a.AppTokens[ownID]
+		if !ok || (storedToken != tokenStr) {
+			return nil, fmt.Errorf("token不存在或不匹配")
+		}
+		// 检查过期时间
+		expireAt, ok := a.AppExpireAts[ownID]
+		if ok && (expireAt > 0) && (time.Now().Unix() > expireAt) {
+			return nil, fmt.Errorf("token已过期")
+		}
+	default:
+		return nil, fmt.Errorf("未知的客户端类型: %s", ownType)
+	}
+	// 解析和验证JWT
+	return ParseJWT(tokenStr, jwtSecret, checkExpire)
+}
+
 // AddRole 添加角色
 func (a *Account) AddRole(role string) {
 	roles, ok := a.GetRoles()
@@ -116,13 +215,6 @@ func (a *Account) HasRole(role string) bool {
 		}
 	}
 	return false
-}
-
-// RandomToken 生成随机token的真实实现
-func RandomToken() string {
-	// 此处应实现真正的随机token生成逻辑
-	// 例如生成UUID、安全随机字符串等
-	return "真实随机Token"
 }
 
 const (
