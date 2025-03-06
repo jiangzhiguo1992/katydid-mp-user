@@ -3,7 +3,7 @@ package api
 import (
 	"fmt"
 	"github.com/gin-gonic/gin"
-	"katydid-mp-user/api/api"
+	"katydid-mp-user/api/app"
 	"katydid-mp-user/configs"
 	"katydid-mp-user/pkg/log"
 	"katydid-mp-user/pkg/middleware"
@@ -72,7 +72,7 @@ func Run() *gin.Engine {
 
 	// api路由
 	router := engine.Group("api")
-	api.RouterRegister(router, authManager)
+	app.RouterRegister(router, authManager)
 
 	//registerRoutesToCasbin(engine)
 	//// 使用Casbin鉴权中间件
@@ -85,8 +85,9 @@ func Run() *gin.Engine {
 		c.JSON(200, gin.H{"message": "允许访问/data2"})
 	})
 
+	host := "" // TODO:GG api.katydid.com
 	port := configs.Get().Server.ApiHttpsPort
-	err := engine.Run(fmt.Sprintf(":%s", port))
+	err := engine.Run(fmt.Sprintf("%s:%s", host, port))
 	if err != nil {
 		log.Fatal("gin run panic", log.FError(err))
 	}

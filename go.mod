@@ -2,21 +2,6 @@ module katydid-mp-user
 
 go 1.23.4
 
-// prometheus + grafana
-// tidb
-
-// go get github.com/gin-contrib/cors
-// go get github.com/gin-contrib/sessions
-
-//github.com/swaggo/files v1.0.1
-//github.com/swaggo/gin-swagger v1.6.0
-//github.com/swaggo/swag v1.16.4
-//gorm.io/driver/postgres v1.5.11
-
-// kong +  traefik + Caddy
-// gron
-// Fluentd
-
 require (
 	github.com/BurntSushi/toml v1.4.0
 	github.com/casbin/casbin/v2 v2.103.0
