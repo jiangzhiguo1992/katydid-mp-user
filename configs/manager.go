@@ -15,8 +15,9 @@ import (
 )
 
 const (
-	appDir = "app" // 初始加载目录
-	envKey = "env" // 环境key
+	appDir   = "app"  // 初始加载目录
+	initFile = "init" // 初始化文件名
+	envKey   = "env"  // 环境key
 )
 
 var (
@@ -153,6 +154,25 @@ func (m *Manager) loadConfigs(confDir string, subs ...string) error {
 	files, err := os.ReadDir(dir)
 	if err != nil {
 		return fmt.Errorf("■ ■ Conf ■ ■ read configs %s failed: %w", dir, err)
+	}
+	// files排序，init第一个
+	if len(files) > 1 {
+		sortedFiles := make([]os.DirEntry, 0, len(files))
+		initFiles := make([]os.DirEntry, 0)
+		otherFiles := make([]os.DirEntry, 0)
+
+		for _, f := range files {
+			name := strings.TrimSuffix(f.Name(), filepath.Ext(f.Name()))
+			if name == initFile {
+				initFiles = append(initFiles, f)
+			} else {
+				otherFiles = append(otherFiles, f)
+			}
+		}
+
+		sortedFiles = append(sortedFiles, initFiles...)
+		sortedFiles = append(sortedFiles, otherFiles...)
+		files = sortedFiles
 	}
 
 	// 加载每个文件

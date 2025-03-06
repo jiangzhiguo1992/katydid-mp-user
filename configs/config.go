@@ -6,12 +6,11 @@ type (
 	Config struct {
 		Env     string `toml:"env" mapstructure:"env"`
 		EnvName string `toml:"env_name" mapstructure:"env_name"`
+		DefLang string `toml:"def_lang" mapstructure:"def_lang"` // TODO:GG 需要跟随app吗?
 
 		RemoteConf `toml:"remote_conf" mapstructure:"remote_conf"`
 
 		LogConf `toml:"log" mapstructure:"log"`
-
-		DefLang string `toml:"def_lang" mapstructure:"def_lang"`
 
 		AppConf `mapstructure:",squash"`
 
