@@ -9,7 +9,7 @@ import (
 type (
 	Base struct {
 		//gorm.Model
-		Id       uint64 `json:"id" gorm:"primarykey"`                 // 主键
+		ID       uint64 `json:"id" gorm:"primarykey"`                 // 主键
 		CreateAt int64  `json:"createAt" gorm:"autoCreateTime:milli"` // 创建时间
 		UpdateAt int64  `json:"updateAt" gorm:"autoUpdateTime:milli"` // 更新时间
 		DeleteAt *int64 `json:"deleteAt"`                             // 删除时间 // TODO:GG 所有的查询都带上index `gorm:"index"`
@@ -26,7 +26,7 @@ type (
 
 func NewBaseEmpty() *Base {
 	return &Base{
-		//Id: nil, // auto
+		//ID: nil, // auto
 		//CreateAt: time.Now().UnixMilli(), // auto
 		//UpdateAt: time.Now().UnixMilli(), // auto
 		DeleteBy: 0,
@@ -37,7 +37,7 @@ func NewBaseEmpty() *Base {
 
 func NewBase(extra utils.KSMap) *Base {
 	return &Base{
-		//Id: nil, // auto
+		//ID: nil, // auto
 		//CreateAt: time.Now().UnixMilli(), // auto
 		//UpdateAt: time.Now().UnixMilli(), // auto
 		DeleteBy: 0,

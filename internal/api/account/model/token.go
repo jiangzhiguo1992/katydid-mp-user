@@ -13,6 +13,7 @@ type TokenType string
 const (
 	TokenTypeBasic  TokenType = "Basic"  // Basic令牌类型
 	TokenTypeBearer TokenType = "Bearer" // Bearer令牌类型
+	TokenTypeJWT    TokenType = "JWT"    // JWT令牌类型
 )
 
 // TokenOwn 令牌拥有者类型
@@ -39,14 +40,16 @@ type Token struct {
 // TokenClaims JWT的payload结构
 type TokenClaims struct {
 	AccountID uint64   `json:"accountId,omitempty"` // 账号ID
+	UserID    *uint64  `json:"userId,omitempty"`    // 用户ID
 	OwnType   TokenOwn `json:"ownType,omitempty"`   // 令牌拥有者类型
 	OwnID     uint64   `json:"ownId,omitempty"`     // 令牌拥有者ID
+	// TODO:GG roles
 	jwt.RegisteredClaims
 }
 
 // NewToken 创建一个新的Token实例
 func NewToken(
-	accountID uint64, ownType TokenOwn, ownID uint64,
+	accountID uint64, userID *uint64, ownType TokenOwn, ownID uint64,
 	expireSec, refExpireHou int64, issuer string,
 ) *Token {
 	token := &Token{
@@ -57,12 +60,12 @@ func NewToken(
 		ExpireSec:    expireSec,
 		RefExpireHou: refExpireHou,
 	}
-	token.Claims = NewTokenClaims(accountID, ownType, ownID, expireSec, issuer)
+	token.Claims = NewTokenClaims(accountID, userID, ownType, ownID, expireSec, issuer)
 	return token
 }
 
 func NewTokenClaims(
-	accountID uint64, ownType TokenOwn, ownID uint64,
+	accountID uint64, userID *uint64, ownType TokenOwn, ownID uint64,
 	expireSec int64, issuer string,
 ) *TokenClaims {
 	now := time.Now()
@@ -73,6 +76,7 @@ func NewTokenClaims(
 	}
 	return &TokenClaims{
 		AccountID: accountID,
+		UserID:    userID,
 		OwnType:   ownType,
 		OwnID:     ownID,
 		RegisteredClaims: jwt.RegisteredClaims{
@@ -87,7 +91,7 @@ func NewTokenClaims(
 
 // GenerateAccessJWTToken 生成访问令牌
 func (t *Token) GenerateAccessJWTToken(secret string) error {
-	accessClaims := NewTokenClaims(t.Claims.AccountID, t.Claims.OwnType, t.Claims.OwnID, t.ExpireSec, t.Claims.Issuer)
+	accessClaims := NewTokenClaims(t.Claims.AccountID, t.Claims.UserID, t.Claims.OwnType, t.Claims.OwnID, t.ExpireSec, t.Claims.Issuer)
 	var err error
 	t.AccessToken, err = accessClaims.GenerateJWTToken(secret)
 	return err
@@ -97,7 +101,7 @@ func (t *Token) GenerateAccessJWTToken(secret string) error {
 func (t *Token) GenerateRefreshJWTToken(secret string) error {
 	// 刷新令牌通常比访问令牌有更长的有效期
 	expireSec := t.RefExpireHou * 3600
-	refreshClaims := NewTokenClaims(t.Claims.AccountID, t.Claims.OwnType, t.Claims.OwnID, expireSec, t.Claims.Issuer)
+	refreshClaims := NewTokenClaims(t.Claims.AccountID, t.Claims.UserID, t.Claims.OwnType, t.Claims.OwnID, expireSec, t.Claims.Issuer)
 	var err error
 	t.RefreshToken, err = refreshClaims.GenerateJWTToken(secret)
 	return err
