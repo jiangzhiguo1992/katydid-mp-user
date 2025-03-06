@@ -1,7 +1,7 @@
 package model
 
 import (
-	"fmt"
+	"errors"
 	"katydid-mp-user/internal/pkg/model"
 	"katydid-mp-user/utils"
 	"time"
@@ -38,6 +38,7 @@ func NewAccountEmpty() *Account {
 		ExpireAts:        make(map[TokenOwn]map[uint64]int64),
 		AuthBiometrics:   make([]*Biometric, 0),
 		AuthThirdParties: make([]*ThirdPartyLink, 0),
+		LoginHistory:     make([]*LoginInfo, 0),
 	}
 }
 
@@ -55,6 +56,7 @@ func NewAccount(userID *uint64, nickname string) *Account {
 		AuthEmail:        nil,
 		AuthBiometrics:   make([]*Biometric, 0),
 		AuthThirdParties: make([]*ThirdPartyLink, 0),
+		LoginHistory:     make([]*LoginInfo, 0),
 	}
 }
 
@@ -75,6 +77,27 @@ func (a *Account) CanLogin() bool {
 // CanAccess 可否访问
 func (a *Account) CanAccess() bool {
 	return a.Status > AccountStatusBanned
+}
+
+// GetAvailableAuthMethods 获取可用的认证方式列表
+func (a *Account) GetAvailableAuthMethods() []AuthKind {
+	methods := make([]AuthKind, 0)
+	if a.AuthPassword != nil {
+		methods = append(methods, AuthKindPwd)
+	}
+	if a.AuthPhone != nil {
+		methods = append(methods, AuthKindPhone)
+	}
+	if a.AuthEmail != nil {
+		methods = append(methods, AuthKindEmail)
+	}
+	if len(a.AuthBiometrics) > 0 {
+		methods = append(methods, AuthKindBio)
+	}
+	if len(a.AuthThirdParties) > 0 {
+		methods = append(methods, AuthKindThird)
+	}
+	return methods
 }
 
 // CountAuthMethods 计算已有认证方式数量
@@ -99,6 +122,38 @@ func (a *Account) InvalidateToken(ownType TokenOwn, ownID uint64) {
 	if owns, ok := a.Tokens[ownType]; ok {
 		delete(owns, ownID)
 	}
+	if owns, ok := a.ExpireAts[ownType]; ok {
+		delete(owns, ownID)
+	}
+}
+
+// InvalidateAllTokens 使所有token失效
+func (a *Account) InvalidateAllTokens() {
+	a.Tokens = make(map[TokenOwn]map[uint64]string)
+	a.ExpireAts = make(map[TokenOwn]map[uint64]int64)
+}
+
+// GetToken 获取token
+func (a *Account) GetToken(ownType TokenOwn, ownID uint64) (string, bool) {
+	if owns, ok := a.Tokens[ownType]; ok {
+		if token, ok := owns[ownID]; ok {
+			return token, true
+		}
+	}
+	return "", false
+}
+
+// IsTokenExpired 检查token是否已过期
+func (a *Account) IsTokenExpired(ownType TokenOwn, ownID uint64) bool {
+	if expireAts, ok := a.ExpireAts[ownType]; ok {
+		if expireAt, ok := expireAts[ownID]; ok {
+			if expireAt < 0 { // -1表示永不过期
+				return false
+			}
+			return time.Now().Unix() > expireAt
+		}
+	}
+	return true // 如果找不到过期时间，视为已过期
 }
 
 // GenerateTokens 为账号生成token
@@ -106,6 +161,10 @@ func (a *Account) GenerateTokens(
 	ownType TokenOwn, ownID uint64, jwtSecret string,
 	expireSec, refExpireHou int64, issuer string,
 ) (*Token, error) {
+	// 检查账号状态
+	if !a.CanLogin() {
+		return nil, errors.New("account cannot login")
+	}
 	// 旧的token
 	oldToken, _ := a.GetToken(ownType, ownID)
 	// 创建新的Token
@@ -133,34 +192,30 @@ func (a *Account) GenerateTokens(
 	return token, nil
 }
 
-// GetToken 获取token
-func (a *Account) GetToken(ownType TokenOwn, ownID uint64) (string, bool) {
-	if owns, ok := a.Tokens[ownType]; ok {
-		if token, ok := owns[ownID]; ok {
-			return token, true
-		}
-	}
-	return "", false
-}
-
 // ValidateToken 验证token
 func (a *Account) ValidateToken(
 	tokenStr string, ownType TokenOwn, ownID uint64,
 	jwtSecret string, checkExpire bool,
 ) (*TokenClaims, error) {
-	// 验证token是否存在于账户中
-	if ows, ok := a.Tokens[ownType]; !ok || (ows == nil) {
-		return nil, fmt.Errorf("token不存在")
-	} else if to, ok := a.Tokens[ownType][ownID]; !ok || (to == "") {
-		return nil, fmt.Errorf("token为空")
+	// 检查账号状态
+	if !a.CanAccess() {
+		return nil, errors.New("account cannot access")
 	}
+
+	// 验证token是否存在于账户中
+	storedToken, exists := a.GetToken(ownType, ownID)
+	if !exists {
+		return nil, errors.New("token not found")
+	}
+
+	// 检查提供的token与存储的token是否匹配
+	if storedToken != tokenStr {
+		return nil, errors.New("invalid token")
+	}
+
 	// 检查过期时间
-	if checkExpire {
-		if wons, ok := a.ExpireAts[ownType]; !ok || (wons == nil) {
-			return nil, fmt.Errorf("token过期不存在")
-		} else if expireAt, ok := a.ExpireAts[ownType][ownID]; !ok || ((expireAt > 0) && (time.Now().Unix() > expireAt)) {
-			return nil, fmt.Errorf("token已过期")
-		}
+	if checkExpire && a.IsTokenExpired(ownType, ownID) {
+		return nil, errors.New("token expired")
 	}
 	// 解析和验证JWT
 	return ParseJWT(tokenStr, jwtSecret, checkExpire)
