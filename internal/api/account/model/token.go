@@ -1,6 +1,8 @@
 package model
 
 import (
+	"crypto/rand"
+	"encoding/base64"
 	"fmt"
 	"time"
 
@@ -39,6 +41,7 @@ type Token struct {
 
 // TokenClaims JWT的payload结构
 type TokenClaims struct {
+	TokenID   string   `json:"jti,omitempty"`       // JWT唯一标识符
 	AccountID uint64   `json:"accountId,omitempty"` // 账号ID
 	UserID    *uint64  `json:"userId,omitempty"`    // 用户ID
 	OwnType   TokenOwn `json:"ownType,omitempty"`   // 令牌拥有者类型
@@ -68,13 +71,16 @@ func NewTokenClaims(
 	accountID uint64, userID *uint64, ownType TokenOwn, ownID uint64,
 	expireSec int64, issuer string,
 ) *TokenClaims {
-	now := time.Now()
+	// 生成唯一令牌ID
+	tokenID, _ := generateSecureRandomString(16)
 	// 计算过期时间
+	now := time.Now()
 	var expiresAt *jwt.NumericDate
 	if expireSec > 0 {
 		expiresAt = jwt.NewNumericDate(now.Add(time.Duration(expireSec) * time.Second))
 	}
 	return &TokenClaims{
+		TokenID:   tokenID,
 		AccountID: accountID,
 		UserID:    userID,
 		OwnType:   ownType,
@@ -85,30 +91,60 @@ func NewTokenClaims(
 			ExpiresAt: expiresAt,
 			NotBefore: jwt.NewNumericDate(now),
 			IssuedAt:  jwt.NewNumericDate(now),
+			ID:        tokenID,
 		},
 	}
 }
 
-// GenerateAccessJWTToken 生成访问令牌
-func (t *Token) GenerateAccessJWTToken(secret string) error {
-	accessClaims := NewTokenClaims(t.Claims.AccountID, t.Claims.UserID, t.Claims.OwnType, t.Claims.OwnID, t.ExpireSec, t.Claims.Issuer)
+// GenerateJWTTokens 生成所有访问令牌
+func (t *Token) GenerateJWTTokens(secret string, oldToken *string) error {
+	var tokenID *string
+	if oldToken != nil && *oldToken != "" {
+		// 解析刷新令牌但不检查过期
+		claims, err := ParseJWT(*oldToken, secret, false)
+		if err != nil {
+			return err
+		}
+		tokenID = &claims.RegisteredClaims.ID
+	}
+	err := t.generateAccessJWTToken(secret, tokenID)
+	if err != nil {
+		return err
+	}
+	return t.generateRefreshJWTToken(secret, tokenID)
+}
+
+// generateAccessJWTToken 生成访问令牌
+func (t *Token) generateAccessJWTToken(secret string, tokenID *string) error {
+	claims := NewTokenClaims(t.Claims.AccountID, t.Claims.UserID, t.Claims.OwnType, t.Claims.OwnID, t.ExpireSec, t.Claims.Issuer)
+	if tokenID != nil && *tokenID != "" {
+		claims.TokenID = *tokenID             // 使用相同的TokenID
+		claims.RegisteredClaims.ID = *tokenID // 使用相同的TokenID
+	}
 	var err error
-	t.AccessToken, err = accessClaims.GenerateJWTToken(secret)
+	t.AccessToken, err = claims.generateJWTToken(secret)
 	return err
 }
 
-// GenerateRefreshJWTToken 生成刷新令牌
-func (t *Token) GenerateRefreshJWTToken(secret string) error {
+// generateRefreshJWTToken 生成刷新令牌
+func (t *Token) generateRefreshJWTToken(secret string, tokenID *string) error {
 	// 刷新令牌通常比访问令牌有更长的有效期
 	expireSec := t.RefExpireHou * 3600
-	refreshClaims := NewTokenClaims(t.Claims.AccountID, t.Claims.UserID, t.Claims.OwnType, t.Claims.OwnID, expireSec, t.Claims.Issuer)
+	claims := NewTokenClaims(t.Claims.AccountID, t.Claims.UserID, t.Claims.OwnType, t.Claims.OwnID, expireSec, t.Claims.Issuer)
+	if tokenID != nil && *tokenID != "" {
+		claims.TokenID = *tokenID             // 使用相同的TokenID
+		claims.RegisteredClaims.ID = *tokenID // 使用相同的TokenID
+	} else {
+		claims.TokenID = t.Claims.TokenID             // 使用相同的TokenID
+		claims.RegisteredClaims.ID = t.Claims.TokenID // 使用相同的TokenID
+	}
 	var err error
-	t.RefreshToken, err = refreshClaims.GenerateJWTToken(secret)
+	t.RefreshToken, err = claims.generateJWTToken(secret)
 	return err
 }
 
 // GenerateJWTToken 使用提供的密钥生成JWT令牌
-func (tc *TokenClaims) GenerateJWTToken(secret string) (string, error) {
+func (tc *TokenClaims) generateJWTToken(secret string) (string, error) {
 	// 创建token
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, tc)
 	// 签名token
@@ -131,6 +167,15 @@ func (t *Token) IsRefreshExpired() bool {
 	return time.Now().After(t.Claims.ExpiresAt.Time.Add(time.Duration(t.RefExpireHou) * time.Hour))
 }
 
+// generateSecureRandomString 生成安全的随机字符串
+func generateSecureRandomString(length int) (string, error) {
+	bytes := make([]byte, length)
+	if _, err := rand.Read(bytes); err != nil {
+		return "", err
+	}
+	return base64.URLEncoding.EncodeToString(bytes)[:length], nil
+}
+
 // ParseJWT 解析JWT令牌
 func ParseJWT(tokenStr string, secret string, checkExpire bool) (*TokenClaims, error) {
 	token, err := jwt.ParseWithClaims(tokenStr, &TokenClaims{}, func(token *jwt.Token) (interface{}, error) {
@@ -145,7 +190,7 @@ func ParseJWT(tokenStr string, secret string, checkExpire bool) (*TokenClaims, e
 	}
 	if claims, ok := token.Claims.(*TokenClaims); ok && token.Valid {
 		// 检查是否过期
-		if checkExpire {
+		if checkExpire && (claims.ExpiresAt != nil) {
 			if time.Now().After(claims.ExpiresAt.Time) {
 				return nil, fmt.Errorf("token已过期")
 			}

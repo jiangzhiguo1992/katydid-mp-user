@@ -101,19 +101,17 @@ func (a *Account) InvalidateToken(ownType TokenOwn, ownID uint64) {
 	}
 }
 
-// GenerateToken 为账号生成token
-func (a *Account) GenerateToken(
+// GenerateTokens 为账号生成token
+func (a *Account) GenerateTokens(
 	ownType TokenOwn, ownID uint64, jwtSecret string,
 	expireSec, refExpireHou int64, issuer string,
 ) (*Token, error) {
+	// 旧的token
+	oldToken, _ := a.GetToken(ownType, ownID)
 	// 创建新的Token
 	token := NewToken(a.ID, a.UserID, ownType, ownID, expireSec, refExpireHou, issuer)
 	// 生成JWT令牌
-	if err := token.GenerateAccessJWTToken(jwtSecret); err != nil {
-		return nil, err
-	}
-	// 生成刷新令牌
-	if err := token.GenerateRefreshJWTToken(jwtSecret); err != nil {
+	if err := token.GenerateJWTTokens(jwtSecret, &oldToken); err != nil {
 		return nil, err
 	}
 	if a.Tokens[ownType] == nil {
@@ -133,6 +131,16 @@ func (a *Account) GenerateToken(
 		a.ActiveAts[ownType][ownID] = time.Now().Unix()
 	}
 	return token, nil
+}
+
+// GetToken 获取token
+func (a *Account) GetToken(ownType TokenOwn, ownID uint64) (string, bool) {
+	if owns, ok := a.Tokens[ownType]; ok {
+		if token, ok := owns[ownID]; ok {
+			return token, true
+		}
+	}
+	return "", false
 }
 
 // ValidateToken 验证token
