@@ -5,40 +5,74 @@ import (
 	"fmt"
 	"github.com/gin-gonic/gin"
 	"github.com/gin-gonic/gin/binding"
+	"gorm.io/gorm"
 	"katydid-mp-user/pkg/err"
 	"katydid-mp-user/pkg/i18n"
 	"katydid-mp-user/pkg/valid"
 	"net/http"
 	"strconv"
 	"strings"
+	"sync"
 )
 
 // Base 处理器基类
 type Base struct {
-	gCtx  *gin.Context
-	Lang  string // 语言
-	AccID uint64 // 账号ID
+	gCtx *gin.Context
+	Conf
+	*DB
+	*Auth
+	*App
+}
 
-	OrgId *uint64  // 组织ID
-	Role  *string  // 用户角色
-	Perms []string // 用户权��列表
+// Conf 配置
+type Conf struct {
+	Lang string // 语言
+}
 
+// DB 数据库
+type DB struct {
+	InCache *sync.Map // 内存缓存 TODO:GG 找个库?
+	DBCache *gorm.DB  // 数据库缓存
+	DBRepo  *gorm.DB  // 数据库仓储
+	DBTx    *gorm.Tx  // 数据库事务
+}
+
+// Auth 身份验证
+type Auth struct {
+	OrgID  *uint64 // 组织ID
+	RoleID *string // 用户角色
+	AccID  *uint64 // 账号ID
 	UserID *uint64 // 用户ID
-	AppId  *uint64 // 应用Id
+}
+
+// App 应用
+type App struct {
+	AppID *uint64 // 应用Id
+	CltID *uint64 // 客户端Id
+	VerID *uint64 // 版本Id
 }
 
 // NewBase 创建新的基础处理器
-func NewBase(c *gin.Context) *Base {
-	// TODO:GG  从上下文中提取用户信息
-	//userID := c.GetUint64("userID")
-	//role := c.GetString("role")
-	//perms := c.GetStringSlice("permissions")
-	//appType := c.GetString("appType")
-
+func NewBase(db *DB) *Base {
 	return &Base{
-		gCtx: c,
-		Lang: c.GetHeader("Use-Language"),
+		gCtx: nil,
+		Conf: Conf{
+			Lang: i18n.DefLang(),
+		},
+		DB:   db,
+		Auth: nil,
+		App:  nil,
 	}
+}
+
+// SetGCtx 设置原始gin上下文
+func (b *Base) SetGCtx(gCtx *gin.Context) {
+	b.gCtx = gCtx
+	if b.gCtx == nil {
+		b.Lang = i18n.DefLang()
+		return
+	}
+	b.Lang = b.gCtx.GetHeader("Use-Language")
 }
 
 // GCtx 获取原始gin上下文
@@ -220,7 +254,7 @@ func (b *Base) responseData(status, code int, msg string, data any) {
 	accept := b.gCtx.GetHeader("Accept")
 	if accept == "" || strings.Contains(accept, "*/*") || strings.Contains(accept, "application/*") {
 		accept = binding.MIMEJSON
-	} else if strings.Contains(accept, "text/*") {
+	} else if strings.Contains(accept, "msg/*") {
 		accept = binding.MIMEXML
 	}
 
