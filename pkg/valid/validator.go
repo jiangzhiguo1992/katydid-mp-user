@@ -67,7 +67,7 @@ type (
 	MsgErr struct {
 		Err    error
 		Msg    string
-		Params any
+		Params []any
 	}
 
 	// IFieldValidator 定义字段验证接口

@@ -6,7 +6,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/gin-gonic/gin/binding"
 	"gorm.io/gorm"
-	"katydid-mp-user/pkg/err"
+	"katydid-mp-user/pkg/errs"
 	"katydid-mp-user/pkg/i18n"
 	"katydid-mp-user/pkg/valid"
 	"net/http"
@@ -85,18 +85,33 @@ func (b *Base) GCtx() *gin.Context {
  ********************************************************************************/
 
 // RequestBind 绑定并验证请求数据
-func (b *Base) RequestBind(obj any, must bool) *err.CodeErrs {
+func (b *Base) RequestBind(obj any, must bool) *errs.CodeErrs {
 	// bind会自动推断type
 	if must {
 		if e := b.gCtx.Bind(obj); e != nil {
-			return err.Match(e).WrapLocalize("invalid_request_format", nil, nil).Real()
+			return errs.Match(e).WrapLocalize("invalid_request_format", nil, nil).Real()
 		}
 	} else {
 		if e := b.gCtx.ShouldBind(obj); e != nil {
-			return err.Match(e).WrapLocalize("invalid_request_format", nil, nil).Real()
+			return errs.Match(e).WrapLocalize("invalid_request_format", nil, nil).Real()
 		}
 	}
-	return valid.Check(obj, valid.SceneBind)
+	// 验证
+	msgErrs := valid.Check(obj, valid.SceneBind)
+	if msgErrs == nil || len(msgErrs) == 0 {
+		return nil
+	}
+	// 处理验证错误
+	codeErrs := errs.New()
+	for _, me := range msgErrs {
+		if me.Err != nil {
+			_ = codeErrs.WrapErrs(me.Err)
+		}
+		if len(me.Msg) > 0 {
+			_ = codeErrs.WrapLocalize(me.Msg, me.Params, nil)
+		}
+	}
+	return codeErrs.Real()
 }
 
 // RequestParam 获取路径参数
@@ -215,12 +230,12 @@ func (b *Base) Response(status, code int, msg string, data any) {
 }
 
 func (b *Base) responseErr(status, code int, data error) {
-	var cErr *err.CodeErrs
-	var v *err.CodeErrs
+	var cErr *errs.CodeErrs
+	var v *errs.CodeErrs
 	if errors.As(data, &v) {
 		cErr = v
 	} else {
-		cErr = err.Match(data).Real()
+		cErr = errs.Match(data).Real()
 	}
 	if code == 0 {
 		code = cErr.Code()

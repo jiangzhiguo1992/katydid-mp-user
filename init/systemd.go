@@ -3,7 +3,7 @@ package init
 import (
 	"katydid-mp-user/configs"
 	"katydid-mp-user/internal/pkg/msg"
-	"katydid-mp-user/pkg/err"
+	"katydid-mp-user/pkg/errs"
 	"katydid-mp-user/pkg/i18n"
 	"katydid-mp-user/pkg/log"
 	"katydid-mp-user/pkg/perm"
@@ -43,7 +43,7 @@ func init() {
 	}
 
 	// error
-	err.Init(msg.ErrCodePatterns, msg.ErrMsgPatterns, func(msg string) {
+	errs.Init(msg.ErrCodePatterns, msg.ErrMsgPatterns, func(msg string) {
 		log.Error(msg)
 	})
 

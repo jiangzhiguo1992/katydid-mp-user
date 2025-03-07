@@ -2,10 +2,10 @@ package service
 
 import (
 	"katydid-mp-user/internal/api/account/model"
-	"katydid-mp-user/pkg/err"
+	"katydid-mp-user/pkg/errs"
 )
 
-func AddAccount(userId uint64) (*model.Account, *err.CodeErrs) {
+func AddAccount(userId uint64) (*model.Account, *errs.CodeErrs) {
 
 	// TODO:GG 检查client的limit
 
