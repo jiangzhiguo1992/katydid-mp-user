@@ -22,8 +22,9 @@ const (
 type TokenOwn string
 
 const (
-	TokenOwnOrg TokenOwn = "org" // 组织类型
-	TokenOwnApp TokenOwn = "app" // 应用类型
+	TokenOwnOrg    TokenOwn = "org"    // 组织类型
+	TokenOwnApp    TokenOwn = "app"    // 应用类型
+	TokenOwnClient TokenOwn = "client" // 客户端类型
 )
 
 // Token JWT令牌模型

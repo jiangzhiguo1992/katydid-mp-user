@@ -7,9 +7,12 @@ import (
 )
 
 type (
+	Status int
+
 	Base struct {
 		//gorm.Model
 		ID       uint64 `json:"id" gorm:"primarykey"`                 // 主键
+		Status   Status `json:"status" gorm:"default:0"`              // 状态
 		CreateAt int64  `json:"createAt" gorm:"autoCreateTime:milli"` // 创建时间
 		UpdateAt int64  `json:"updateAt" gorm:"autoUpdateTime:milli"` // 更新时间
 		DeleteAt *int64 `json:"deleteAt"`                             // 删除时间 // TODO:GG 所有的查询都带上index `gorm:"index"`
@@ -27,6 +30,7 @@ type (
 func NewBaseEmpty() *Base {
 	return &Base{
 		//ID: nil, // auto
+		//Status: StatusInit, // auto
 		//CreateAt: time.Now().UnixMilli(), // auto
 		//UpdateAt: time.Now().UnixMilli(), // auto
 		DeleteBy: 0,
@@ -38,6 +42,7 @@ func NewBaseEmpty() *Base {
 func NewBase(extra utils.KSMap) *Base {
 	return &Base{
 		//ID: nil, // auto
+		//Status: StatusInit, // auto
 		//CreateAt: time.Now().UnixMilli(), // auto
 		//UpdateAt: time.Now().UnixMilli(), // auto
 		DeleteBy: 0,
@@ -106,6 +111,12 @@ func (b *Base) ValidLocalizeRules() valid.LocalizeValidRules {
 		},
 	}
 }
+
+const (
+	StatusBlack Status = -1 // 黑名单
+	StatusInit  Status = 0  // 初始
+	StatusWhite Status = 1  // 白名单
+)
 
 const (
 	deleteByUserOffset  = 10000  // 用户删除偏移量
