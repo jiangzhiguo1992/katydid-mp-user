@@ -9,17 +9,11 @@ import (
 	"github.com/golang-jwt/jwt/v5"
 )
 
-// TokenType 令牌类型
-type TokenType string
-
 const (
-	TokenTypeBasic  TokenType = "Basic"  // Basic令牌类型
-	TokenTypeBearer TokenType = "Bearer" // Bearer令牌类型
-	TokenTypeJWT    TokenType = "JWT"    // JWT令牌类型
+	TokenKindBasic  TokenKind = "Basic"  // Basic令牌类型
+	TokenKindBearer TokenKind = "Bearer" // Bearer令牌类型
+	TokenKindJWT    TokenKind = "JWT"    // JWT令牌类型
 )
-
-// TokenOwn 令牌拥有者类型
-type TokenOwn string
 
 const (
 	TokenOwnOrg    TokenOwn = "org"    // 组织类型
@@ -27,49 +21,57 @@ const (
 	TokenOwnClient TokenOwn = "client" // 客户端类型
 )
 
-// Token JWT令牌模型
-type Token struct {
-	Code         string    `json:"code,omitempty"`         // 授权码(OAuth2流程使用)
-	TokenType    TokenType `json:"tokenType"`              // 令牌类型
-	IssuedAt     int64     `json:"issuedAt"`               // 签发时间
-	AccessToken  string    `json:"accessToken"`            // 访问令牌
-	RefreshToken string    `json:"refreshToken,omitempty"` // 刷新令牌
-	ExpireSec    int64     `json:"expireSec"`              // 过期时间(秒)
-	RefExpireHou int64     `json:"refExpireHou"`           // 刷新过期时间(时)
+type (
+	// TokenKind 令牌类型
+	TokenKind string
 
-	Claims *TokenClaims `json:"-"` // 令牌声明(不序列化)
-}
+	// Token JWT令牌模型
+	Token struct {
+		Code         string    `json:"code,omitempty"`         // 授权码(OAuth2流程使用)
+		Kind         TokenKind `json:"kind"`                   // 令牌类型
+		IssuedAt     int64     `json:"issuedAt"`               // 签发时间
+		AccessToken  string    `json:"accessToken"`            // 访问令牌
+		RefreshToken string    `json:"refreshToken,omitempty"` // 刷新令牌
+		ExpireSec    int64     `json:"expireSec"`              // 过期时间(秒)
+		RefExpireHou int64     `json:"refExpireHou"`           // 刷新过期时间(时)
 
-// TokenClaims JWT的payload结构
-type TokenClaims struct {
-	TokenID   string   `json:"jti,omitempty"`       // JWT唯一标识符
-	AccountID uint64   `json:"accountId,omitempty"` // 账号ID
-	UserID    *uint64  `json:"userId,omitempty"`    // 用户ID
-	OwnType   TokenOwn `json:"ownType,omitempty"`   // 令牌拥有者类型
-	OwnID     uint64   `json:"ownId,omitempty"`     // 令牌拥有者ID
-	// TODO:GG roles
-	jwt.RegisteredClaims
-}
+		Claims *TokenClaims `json:"-"` // 令牌声明(不序列化)
+	}
+
+	// TokenOwn 令牌拥有者类型
+	TokenOwn string
+
+	// TokenClaims JWT的payload结构
+	TokenClaims struct {
+		TokenID   string   `json:"jti,omitempty"`       // JWT唯一标识符
+		AccountID uint64   `json:"accountId,omitempty"` // 账号ID
+		UserID    *uint64  `json:"userId,omitempty"`    // 用户ID
+		OwnKind   TokenOwn `json:"ownKind,omitempty"`   // 令牌拥有者类型
+		OwnID     uint64   `json:"ownId,omitempty"`     // 令牌拥有者ID
+		// TODO:GG roles
+		jwt.RegisteredClaims
+	}
+)
 
 // NewToken 创建一个新的Token实例
 func NewToken(
-	accountID uint64, userID *uint64, ownType TokenOwn, ownID uint64,
+	accountID uint64, userID *uint64, ownKind TokenOwn, ownID uint64,
 	expireSec, refExpireHou int64, issuer string,
 ) *Token {
 	token := &Token{
-		TokenType:    TokenTypeBearer,
+		Kind:         TokenKindBearer,
 		IssuedAt:     time.Now().Unix(),
 		AccessToken:  "", // 将由GenerateJWT方法填充
 		RefreshToken: "", // 将由GenerateRefreshToken方法填充
 		ExpireSec:    expireSec,
 		RefExpireHou: refExpireHou,
 	}
-	token.Claims = NewTokenClaims(accountID, userID, ownType, ownID, expireSec, issuer)
+	token.Claims = NewTokenClaims(accountID, userID, ownKind, ownID, expireSec, issuer)
 	return token
 }
 
 func NewTokenClaims(
-	accountID uint64, userID *uint64, ownType TokenOwn, ownID uint64,
+	accountID uint64, userID *uint64, ownKind TokenOwn, ownID uint64,
 	expireSec int64, issuer string,
 ) *TokenClaims {
 	// 生成唯一令牌ID
@@ -84,7 +86,7 @@ func NewTokenClaims(
 		TokenID:   tokenID,
 		AccountID: accountID,
 		UserID:    userID,
-		OwnType:   ownType,
+		OwnKind:   ownKind,
 		OwnID:     ownID,
 		RegisteredClaims: jwt.RegisteredClaims{
 			Issuer:    issuer,
@@ -117,7 +119,7 @@ func (t *Token) GenerateJWTTokens(secret string, oldToken *string) error {
 
 // generateAccessJWTToken 生成访问令牌
 func (t *Token) generateAccessJWTToken(secret string, tokenID *string) error {
-	claims := NewTokenClaims(t.Claims.AccountID, t.Claims.UserID, t.Claims.OwnType, t.Claims.OwnID, t.ExpireSec, t.Claims.Issuer)
+	claims := NewTokenClaims(t.Claims.AccountID, t.Claims.UserID, t.Claims.OwnKind, t.Claims.OwnID, t.ExpireSec, t.Claims.Issuer)
 	if tokenID != nil && *tokenID != "" {
 		claims.TokenID = *tokenID             // 使用相同的TokenID
 		claims.RegisteredClaims.ID = *tokenID // 使用相同的TokenID
@@ -131,7 +133,7 @@ func (t *Token) generateAccessJWTToken(secret string, tokenID *string) error {
 func (t *Token) generateRefreshJWTToken(secret string, tokenID *string) error {
 	// 刷新令牌通常比访问令牌有更长的有效期
 	expireSec := t.RefExpireHou * 3600
-	claims := NewTokenClaims(t.Claims.AccountID, t.Claims.UserID, t.Claims.OwnType, t.Claims.OwnID, expireSec, t.Claims.Issuer)
+	claims := NewTokenClaims(t.Claims.AccountID, t.Claims.UserID, t.Claims.OwnKind, t.Claims.OwnID, expireSec, t.Claims.Issuer)
 	if tokenID != nil && *tokenID != "" {
 		claims.TokenID = *tokenID             // 使用相同的TokenID
 		claims.RegisteredClaims.ID = *tokenID // 使用相同的TokenID
