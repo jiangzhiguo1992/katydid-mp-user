@@ -22,9 +22,6 @@ const (
 )
 
 type (
-	// TokenKind 令牌类型
-	TokenKind string
-
 	// Token JWT令牌模型
 	Token struct {
 		Code         string    `json:"code,omitempty"`         // 授权码(OAuth2流程使用)
@@ -38,8 +35,8 @@ type (
 		Claims *TokenClaims `json:"-"` // 令牌声明(不序列化)
 	}
 
-	// TokenOwn 令牌拥有者类型
-	TokenOwn string
+	// TokenKind 令牌类型
+	TokenKind string
 
 	// TokenClaims JWT的payload结构
 	TokenClaims struct {
@@ -51,6 +48,8 @@ type (
 		// TODO:GG roles
 		jwt.RegisteredClaims
 	}
+	// TokenOwn 令牌拥有者类型
+	TokenOwn string
 )
 
 // NewToken 创建一个新的Token实例

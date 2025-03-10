@@ -7,8 +7,7 @@ import (
 )
 
 type (
-	Status int
-
+	// Base 基础结构体
 	Base struct {
 		//gorm.Model
 		ID       uint64 `json:"id" gorm:"primarykey"`                 // 主键
@@ -25,6 +24,9 @@ type (
 
 		Extra utils.KSMap `json:"extra" gorm:"serializer:json"` // 额外信息 (!索引/!必需)
 	}
+
+	// Status 状态 (组合体可自定义)
+	Status int
 )
 
 func NewBaseEmpty() *Base {
@@ -75,7 +77,7 @@ func (b *Base) ValidExtraRules() (utils.KSMap, valid.ExtraValidRules) {
 					if !ok {
 						return false
 					}
-					return len(data) <= 100000
+					return len(data) <= 10000
 				},
 			},
 		},
