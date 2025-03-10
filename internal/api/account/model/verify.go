@@ -38,14 +38,12 @@ func NewVerify(
 	authId uint64, ownKind VerifyOwn, ownId uint64,
 	authKind AuthKind, apply VerifyApply,
 ) *Verify {
-	verify := &Verify{
+	return &Verify{
 		Base:   model.NewBaseEmpty(),
 		AuthId: authId, OwnKind: ownKind, OwnID: ownId,
 		AuthKind: authKind, Apply: apply,
 		PendingAt: nil, ExpiresAt: nil, VerifiedAt: nil, Attempts: 0,
 	}
-	verify.Status = VerifyStatusInit
-	return verify
 }
 
 const (
