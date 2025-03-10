@@ -2,11 +2,12 @@ package model
 
 import (
 	"katydid-mp-user/internal/pkg/model"
+	"time"
 )
 
 type (
-	// VerifyInfo 验证内容
-	VerifyInfo struct {
+	// Verify 验证内容
+	Verify struct {
 		*model.Base
 
 		AccountId uint64    `json:"accountId"` // 账户Id
@@ -17,32 +18,34 @@ type (
 		Apply    VerifyApply `json:"applyKind"` // 申请类型 (注册/登录/修改密码/...)
 
 		PendingAt  *int64 `json:"pendingAt"`  // 等待时间
-		VerifiedAt *int64 `json:"verifiedAt"` // 验证时间
 		ExpiresAt  *int64 `json:"expiresAt"`  // 过期时间
+		VerifiedAt *int64 `json:"verifiedAt"` // 验证时间
 		Attempts   int    `json:"attempts"`   // 验证次数
 	}
 
-	// VerifyOwn 认证拥有者
+	// VerifyOwn 验证平台
 	VerifyOwn int8
 
 	// VerifyApply 申请类型
 	VerifyApply int16
 )
 
-func NewVerifyInfoEmpty() *VerifyInfo {
-	return &VerifyInfo{Base: model.NewBaseEmpty()}
+func NewVerifyEmpty() *Verify {
+	return &Verify{Base: model.NewBaseEmpty()}
 }
 
-func NewVerifyInfoDef(
+func NewVerify(
 	accountId uint64, ownKind VerifyOwn, ownId uint64,
 	authKind AuthKind, apply VerifyApply,
-) *VerifyInfo {
-	return &VerifyInfo{
+) *Verify {
+	verify := &Verify{
 		Base:      model.NewBaseEmpty(),
 		AccountId: accountId, OwnKind: ownKind, OwnID: ownId,
 		AuthKind: authKind, Apply: apply,
-		PendingAt: nil, VerifiedAt: nil, ExpiresAt: nil, Attempts: 0,
+		PendingAt: nil, ExpiresAt: nil, VerifiedAt: nil, Attempts: 0,
 	}
+	verify.Status = VerifyStatusInit
+	return verify
 }
 
 const (
@@ -70,13 +73,77 @@ const (
 )
 
 const (
-	verifyExtraKeyBody = "body" // 验证内容
+	verifyExtraKeyBody        = "body"        // 验证内容
+	verifyExtraKeyMaxAttempts = "maxAttempts" // 最大尝试次数
+	verifyExtraKeyTrySends    = "trySends"    // 尝试发送次数
 )
 
-func (v *VerifyInfo) SetBody(body *string) {
+func (v *Verify) SetBody(body *string) {
 	v.Extra.SetString(verifyExtraKeyBody, body)
 }
 
-func (v *VerifyInfo) GetBody() (string, bool) {
+func (v *Verify) GetBody() (string, bool) {
 	return v.Extra.GetString(verifyExtraKeyBody)
+}
+
+// SetMaxAttempts 设置最大尝试次数
+func (v *Verify) SetMaxAttempts(attempts *int) {
+	v.Extra.SetInt(verifyExtraKeyMaxAttempts, attempts)
+}
+
+// GetMaxAttempts 获取最大尝试次数，默认为5
+func (v *Verify) GetMaxAttempts() int {
+	attempts, ok := v.Extra.GetInt(verifyExtraKeyMaxAttempts)
+	if !ok || attempts <= 0 {
+		return 5 // 默认最大尝试次数
+	}
+	return attempts
+}
+
+// SetTrySends 设置尝试发送次数
+func (v *Verify) SetTrySends(sends *int) {
+	v.Extra.SetInt(verifyExtraKeyTrySends, sends)
+}
+
+// GetTrySends 获取尝试发送次数
+func (v *Verify) GetTrySends() int {
+	sends, ok := v.Extra.GetInt(verifyExtraKeyTrySends)
+	if !ok || sends <= 0 {
+		return 1 // 默认尝试发送次数
+	}
+	return sends
+}
+
+// IsExpired 检查验证是否已过期
+func (v *Verify) IsExpired() bool {
+	now := time.Now().Unix()
+	return (v.ExpiresAt != nil) && (*v.ExpiresAt <= now)
+}
+
+// IsPending 检查是否处于等待验证状态
+func (v *Verify) IsPending() bool {
+	return v.Status == VerifyStatusPending && !v.IsExpired()
+}
+
+// IsVerified 检查是否已验证成功
+func (v *Verify) IsVerified() bool {
+	return v.Status == VerifyStatusSuccess && v.VerifiedAt != nil
+}
+
+// CanResend 检查是否可以重新发送验证码
+func (v *Verify) CanResend(cooldownS int64) bool {
+	if v.PendingAt == nil {
+		return true
+	}
+	now := time.Now().Unix()
+	return (now - *v.PendingAt) >= cooldownS
+}
+
+// RemainingAttempts 获取剩余尝试次数
+func (v *Verify) RemainingAttempts() int {
+	maxAttempts := v.GetMaxAttempts()
+	if v.Attempts >= maxAttempts {
+		return 0
+	}
+	return maxAttempts - v.Attempts
 }
