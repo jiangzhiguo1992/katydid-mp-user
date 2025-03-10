@@ -235,7 +235,7 @@ func ZapLoggerWithConfig(config LoggerConfig) gin.HandlerFunc {
 		}
 
 		// 收集请求参数
-		var params map[string]interface{}
+		var params map[string]any
 		if config.LogParams {
 			params = collectRequestParams(c)
 		}
@@ -337,8 +337,8 @@ func ZapLoggerWithConfig(config LoggerConfig) gin.HandlerFunc {
 }
 
 // collectRequestParams 收集请求参数
-func collectRequestParams(c *gin.Context) map[string]interface{} {
-	params := make(map[string]interface{})
+func collectRequestParams(c *gin.Context) map[string]any {
+	params := make(map[string]any)
 
 	// URL查询参数
 	for k, v := range c.Request.URL.Query() {

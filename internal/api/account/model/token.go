@@ -181,7 +181,7 @@ func generateSecureRandomString(length int) (string, error) {
 
 // ParseJWT 解析JWT令牌
 func ParseJWT(tokenStr string, secret string, checkExpire bool) (*TokenClaims, error) {
-	token, err := jwt.ParseWithClaims(tokenStr, &TokenClaims{}, func(token *jwt.Token) (interface{}, error) {
+	token, err := jwt.ParseWithClaims(tokenStr, &TokenClaims{}, func(token *jwt.Token) (any, error) {
 		// 确保token的签名方法是我们期望的
 		if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
 			return nil, fmt.Errorf("意外的签名方法: %v", token.Header["alg"])

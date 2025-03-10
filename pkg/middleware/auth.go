@@ -142,7 +142,7 @@ func (am *AuthManager) validateAndParseToken(tokenString string) (*TokenClaims, 
 	}
 
 	// 解析Token
-	token, err := jwt.ParseWithClaims(tokenString, &TokenClaims{}, func(token *jwt.Token) (interface{}, error) {
+	token, err := jwt.ParseWithClaims(tokenString, &TokenClaims{}, func(token *jwt.Token) (any, error) {
 		// 确保token的签名方法是我们期望的
 		if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
 			return nil, fmt.Errorf("意外的签名方法: %v", token.Header["alg"])

@@ -15,7 +15,7 @@ type Field struct {
 }
 
 func FString(key string, val string) Field {
-	var jsonObj interface{}
+	var jsonObj any
 	err := json.Unmarshal([]byte(val), &jsonObj)
 	if err != nil {
 		// JSON解析失败，作为普通字符串处理

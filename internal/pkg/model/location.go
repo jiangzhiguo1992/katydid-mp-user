@@ -191,12 +191,12 @@ func (l *Location) String() string {
 }
 
 // ToMap 转换为Map表示
-func (l *Location) ToMap() map[string]interface{} {
+func (l *Location) ToMap() map[string]any {
 	if l == nil {
 		return nil
 	}
 
-	result := make(map[string]interface{})
+	result := make(map[string]any)
 	data, err := json.Marshal(l)
 	if err != nil {
 		return result
@@ -207,7 +207,7 @@ func (l *Location) ToMap() map[string]interface{} {
 }
 
 // UpdateFromMap 从Map更新位置信息
-func (l *Location) UpdateFromMap(data map[string]interface{}) {
+func (l *Location) UpdateFromMap(data map[string]any) {
 	if l == nil || len(data) == 0 {
 		return
 	}

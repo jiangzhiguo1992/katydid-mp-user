@@ -10,7 +10,8 @@ type (
 	// Base 基础结构体
 	Base struct {
 		//gorm.Model
-		ID       uint64 `json:"id" gorm:"primarykey"`                 // 主键
+		ID uint64 `json:"id" gorm:"primarykey"` // 主键
+
 		Status   Status `json:"status" gorm:"default:0"`              // 状态
 		CreateAt int64  `json:"createAt" gorm:"autoCreateTime:milli"` // 创建时间
 		UpdateAt int64  `json:"updateAt" gorm:"autoUpdateTime:milli"` // 更新时间

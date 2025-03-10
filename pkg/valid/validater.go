@@ -26,10 +26,10 @@ package valid
 //)
 //
 //type ValidatorFieldFunc func(value any) (string, bool)
-//type ValidatorGroupFunc func(map[string]interface{}) (string, bool)
+//type ValidatorGroupFunc func(map[string]any) (string, bool)
 //
 //type ValidateFunc func(reflect.Value) []error
-//type TypeChecker func(interface{}) reflect.Value
+//type TypeChecker func(any) reflect.Value
 //
 //// FieldValidator 使用字段索引代替字段名，优化字段查找
 //type FieldValidator struct {
@@ -78,7 +78,7 @@ package valid
 //}
 //
 //func compileTypeChecker(t reflect.Type) TypeChecker {
-//	return func(v interface{}) reflect.Value {
+//	return func(v any) reflect.Value {
 //		val := reflect.ValueOf(v)
 //		if val.Kind() == reflect.Pointer {
 //			val = val.Elem()
@@ -251,7 +251,7 @@ package valid
 //				var errs []error
 //				// 如果有自定义的组验证器，就使用它
 //				if groupValidator, exists := groupValidators[groupName]; exists {
-//					fieldValues := make(map[string]interface{}, len(fields))
+//					fieldValues := make(map[string]any, len(fields))
 //					for i, fieldName := range fields {
 //						fieldValues[fieldName] = values[i].Interface()
 //					}
@@ -290,7 +290,7 @@ package valid
 //	return tv
 //}
 //
-//func ValidateStruct(v interface{}) []error {
+//func ValidateStruct(v any) []error {
 //	val := reflect.ValueOf(v)
 //	if val.Kind() == reflect.Pointer {
 //		val = val.Elem()
@@ -309,7 +309,7 @@ package valid
 //	nilTips map[string]string,
 //	fieldValids map[string]ValidatorFieldFunc,
 //	groupValids map[string]ValidatorGroupFunc,
-//	structs []interface{},
+//	structs []any,
 //) {
 //	fieldTag = "valid"
 //	maxCacheSize = -1

@@ -10,9 +10,9 @@ type (
 	Verify struct {
 		*model.Base
 
-		AccountId uint64    `json:"accountId"` // 账户Id
-		OwnKind   VerifyOwn `json:"ownType"`   // 验证平台 (组织/应用)
-		OwnID     uint64    `json:"ownId"`     // 认证拥有者Id (组织/应用)
+		AuthId  uint64    `json:"authId"`  // 认证Id
+		OwnKind VerifyOwn `json:"ownType"` // 验证平台 (组织/应用)
+		OwnID   uint64    `json:"ownId"`   // 认证拥有者Id (组织/应用)
 
 		AuthKind AuthKind    `json:"kind"`      // 认证类型 (手机号/邮箱/...)
 		Apply    VerifyApply `json:"applyKind"` // 申请类型 (注册/登录/修改密码/...)
@@ -35,12 +35,12 @@ func NewVerifyEmpty() *Verify {
 }
 
 func NewVerify(
-	accountId uint64, ownKind VerifyOwn, ownId uint64,
+	authId uint64, ownKind VerifyOwn, ownId uint64,
 	authKind AuthKind, apply VerifyApply,
 ) *Verify {
 	verify := &Verify{
-		Base:      model.NewBaseEmpty(),
-		AccountId: accountId, OwnKind: ownKind, OwnID: ownId,
+		Base:   model.NewBaseEmpty(),
+		AuthId: authId, OwnKind: ownKind, OwnID: ownId,
 		AuthKind: authKind, Apply: apply,
 		PendingAt: nil, ExpiresAt: nil, VerifiedAt: nil, Attempts: 0,
 	}
