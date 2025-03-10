@@ -21,6 +21,7 @@ type (
 		// foreign_id
 		// index
 		// required
+		// stats
 
 		Extra utils.KSMap `json:"extra" gorm:"serializer:json"` // 额外信息 (!索引/!必需)
 	}

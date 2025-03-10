@@ -4,24 +4,59 @@ import (
 	"katydid-mp-user/internal/pkg/model"
 )
 
+type (
+	// VerifyInfo 验证内容
+	VerifyInfo struct {
+		*model.Base
+
+		AccountId uint64    `json:"accountId"` // 账户Id
+		OwnKind   VerifyOwn `json:"ownType"`   // 验证平台 (组织/应用)
+		OwnID     uint64    `json:"ownId"`     // 认证拥有者Id (组织/应用)
+
+		AuthKind AuthKind    `json:"kind"`      // 认证类型 (手机号/邮箱/...)
+		Apply    VerifyApply `json:"applyKind"` // 申请类型 (注册/登录/修改密码/...)
+
+		PendingAt  *int64 `json:"pendingAt"`  // 等待时间
+		VerifiedAt *int64 `json:"verifiedAt"` // 验证时间
+		ExpiresAt  *int64 `json:"expiresAt"`  // 过期时间
+		Attempts   int    `json:"attempts"`   // 验证次数
+	}
+
+	// VerifyOwn 认证拥有者
+	VerifyOwn int8
+
+	// VerifyApply 申请类型
+	VerifyApply int16
+)
+
+func NewVerifyInfoEmpty() *VerifyInfo {
+	return &VerifyInfo{Base: model.NewBaseEmpty()}
+}
+
+func NewVerifyInfoDef(
+	accountId uint64, ownKind VerifyOwn, ownId uint64,
+	authKind AuthKind, apply VerifyApply,
+) *VerifyInfo {
+	return &VerifyInfo{
+		Base:      model.NewBaseEmpty(),
+		AccountId: accountId, OwnKind: ownKind, OwnID: ownId,
+		AuthKind: authKind, Apply: apply,
+		PendingAt: nil, VerifiedAt: nil, ExpiresAt: nil, Attempts: 0,
+	}
+}
+
 const (
 	VerifyStatusInit    model.Status = 0 // 初始状态
 	VerifyStatusPending model.Status = 1 // 等待验证
-	VerifyStatusSuccess model.Status = 2 // 验证成功
-	VerifyStatusReject  model.Status = 3 // 验证失败
+	VerifyStatusReject  model.Status = 2 // 验证失败
+	VerifyStatusSuccess model.Status = 3 // 验证成功
 )
-
-type VerifyKind uint16
 
 const (
-	VerifyKindPwd   VerifyKind = 1 // 密码
-	VerifyKindPhone VerifyKind = 2 // 短信
-	VerifyKindEmail VerifyKind = 3 // 邮箱
-	VerifyKindBio   VerifyKind = 4 // 生物特征
-	VerifyKindThird VerifyKind = 5 // 第三方平台
+	VerifyOwnOrg    VerifyOwn = 1 // 组织类型
+	VerifyOwnApp    VerifyOwn = 2 // 应用类型
+	VerifyOwnClient VerifyOwn = 3 // 应用类型
 )
-
-type VerifyApply int16
 
 const (
 	VerifyApplyUnregister  VerifyApply = -1 // 注销
@@ -34,84 +69,14 @@ const (
 	VerifyApplyChangeThird VerifyApply = 7  // 修改第三方平台
 )
 
-// VerifyOwn 认证拥有者
-type VerifyOwn int8
-
 const (
-	VerifyOwnOrg    VerifyOwn = 1 // 组织类型
-	VerifyOwnApp    VerifyOwn = 2 // 应用类型
-	VerifyOwnClient VerifyOwn = 3 // 应用类型
+	verifyExtraKeyBody = "body" // 验证内容
 )
 
-// VerifyInfo 验证内容
-type VerifyInfo struct {
-	*model.Base
-	AccountId uint64    `json:"accountId"` // 账户Id
-	OwnKind   VerifyOwn `json:"ownType"`   // 认证方式 (手机号/邮箱/...)
-	OwnID     uint64    `json:"ownId"`     // 认证拥有者Id (组织/应用)
-
-	AuthKind  AuthKind    `json:"kind"`      // 平台 (手机号/邮箱/...)
-	ApplyKind VerifyApply `json:"applyKind"` // 申请类型 (注册/登录/修改密码/...)
-
-	State      int8  `json:"state"`      // 验证状态
-	PendingAt  int64 `json:"pendingAt"`  // 等待时间
-	VerifiedAt int64 `json:"verifiedAt"` // 验证时间
-	ExpiresAt  int64 `json:"expiresAt"`  // 过期时间
-	Attempts   int8  `json:"attempts"`   // 验证次数
-
-	// TODO:GG ip, device, location
+func (v *VerifyInfo) SetBody(body *string) {
+	v.Extra.SetString(verifyExtraKeyBody, body)
 }
 
-func NewVerifyInfoEmpty() *VerifyInfo {
-	return &VerifyInfo{Base: model.NewBaseEmpty()}
-}
-
-func NewVerifyInfoDef(clientId, accountId uint64, kind int16) *VerifyInfo {
-	return &VerifyInfo{
-		Base:       model.NewBaseEmpty(),
-		ClientId:   clientId,
-		AccountId:  accountId,
-		Kind:       kind,
-		State:      VerityStateInit,
-		PendingAt:  -1,
-		VerifiedAt: -1,
-		ExpiresAt:  -1,
-		Attempts:   0,
-	}
-}
-
-// WithBody 设置验证内容 (注意language)
-func (v *VerifyInfo) WithBody(data *string) map[string]any {
-	datas := v.Extra
-	if (data != nil) && (len(*data) > 0) {
-		datas["body"] = *data
-	} else {
-		delete(datas, "body")
-	}
-	return datas
-}
-
-func (v *VerifyInfo) GetBody() string {
-	if v.Extra["body"] == nil {
-		return ""
-	}
-	return v.Extra["body"].(string)
-}
-
-// WithCode 设置验证码
-func (v *VerifyInfo) WithCode(data *string) map[string]any {
-	datas := v.Extra
-	if (data != nil) && (len(*data) > 0) {
-		datas["code"] = *data
-	} else {
-		delete(datas, "code")
-	}
-	return datas
-}
-
-func (v *VerifyInfo) GetCode() string {
-	if v.Extra["code"] == nil {
-		return ""
-	}
-	return v.Extra["code"].(string)
+func (v *VerifyInfo) GetBody() (string, bool) {
+	return v.Extra.GetString(verifyExtraKeyBody)
 }
