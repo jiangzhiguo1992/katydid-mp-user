@@ -10,7 +10,7 @@ type (
 	// Base 基础结构体
 	Base struct {
 		//gorm.Model
-		ID uint64 `json:"id" gorm:"primarykey"` // 主键
+		ID uint64 `json:"id" gorm:"primarykey"` // 主键 TODO:GG 雪花限时太多了，应该只考虑分布式
 
 		Status   Status `json:"status" gorm:"default:0"`              // 状态
 		CreateAt int64  `json:"createAt" gorm:"autoCreateTime:milli"` // 创建时间

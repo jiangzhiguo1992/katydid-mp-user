@@ -46,7 +46,7 @@ type (
 		OwnKind   TokenOwn `json:"ownKind,omitempty"`   // 令牌拥有者类型
 		OwnID     uint64   `json:"ownId,omitempty"`     // 令牌拥有者ID
 		// TODO:GG roles
-		jwt.RegisteredClaims
+		jwt.RegisteredClaims `json:"-"` // 注册声明(不序列化)
 	}
 
 	// TokenOwn 令牌拥有者类型
