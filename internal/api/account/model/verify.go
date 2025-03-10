@@ -53,15 +53,11 @@ const (
 	VerifyStatusPending model.Status = 1 // 等待验证
 	VerifyStatusReject  model.Status = 2 // 验证失败
 	VerifyStatusSuccess model.Status = 3 // 验证成功
-)
 
-const (
 	VerifyOwnOrg    VerifyOwn = 1 // 组织类型
 	VerifyOwnApp    VerifyOwn = 2 // 应用类型
 	VerifyOwnClient VerifyOwn = 3 // 应用类型
-)
 
-const (
 	VerifyApplyUnregister  VerifyApply = -1 // 注销
 	VerifyApplyRegister    VerifyApply = 1  // 注册
 	VerifyApplyLogin       VerifyApply = 2  // 登录
@@ -71,6 +67,40 @@ const (
 	VerifyApplyChangeBio   VerifyApply = 6  // 修改生物特征
 	VerifyApplyChangeThird VerifyApply = 7  // 修改第三方平台
 )
+
+// IsExpired 检查验证是否已过期
+func (v *Verify) IsExpired() bool {
+	now := time.Now().Unix()
+	return (v.ExpiresAt != nil) && (*v.ExpiresAt <= now)
+}
+
+// IsPending 检查是否处于等待验证状态
+func (v *Verify) IsPending() bool {
+	return v.Status == VerifyStatusPending && !v.IsExpired()
+}
+
+// IsVerified 检查是否已验证成功
+func (v *Verify) IsVerified() bool {
+	return v.Status == VerifyStatusSuccess && v.VerifiedAt != nil
+}
+
+// CanResend 检查是否可以重新发送验证码
+func (v *Verify) CanResend(cooldownS int64) bool {
+	if v.PendingAt == nil {
+		return true
+	}
+	now := time.Now().Unix()
+	return (now - *v.PendingAt) >= cooldownS
+}
+
+// RemainingAttempts 获取剩余尝试次数
+func (v *Verify) RemainingAttempts() int {
+	maxAttempts := v.GetMaxAttempts()
+	if v.Attempts >= maxAttempts {
+		return 0
+	}
+	return maxAttempts - v.Attempts
+}
 
 const (
 	verifyExtraKeyBody        = "body"        // 验证内容
@@ -112,38 +142,4 @@ func (v *Verify) GetTrySends() int {
 		return 1 // 默认尝试发送次数
 	}
 	return sends
-}
-
-// IsExpired 检查验证是否已过期
-func (v *Verify) IsExpired() bool {
-	now := time.Now().Unix()
-	return (v.ExpiresAt != nil) && (*v.ExpiresAt <= now)
-}
-
-// IsPending 检查是否处于等待验证状态
-func (v *Verify) IsPending() bool {
-	return v.Status == VerifyStatusPending && !v.IsExpired()
-}
-
-// IsVerified 检查是否已验证成功
-func (v *Verify) IsVerified() bool {
-	return v.Status == VerifyStatusSuccess && v.VerifiedAt != nil
-}
-
-// CanResend 检查是否可以重新发送验证码
-func (v *Verify) CanResend(cooldownS int64) bool {
-	if v.PendingAt == nil {
-		return true
-	}
-	now := time.Now().Unix()
-	return (now - *v.PendingAt) >= cooldownS
-}
-
-// RemainingAttempts 获取剩余尝试次数
-func (v *Verify) RemainingAttempts() int {
-	maxAttempts := v.GetMaxAttempts()
-	if v.Attempts >= maxAttempts {
-		return 0
-	}
-	return maxAttempts - v.Attempts
 }

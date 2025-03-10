@@ -48,6 +48,7 @@ type (
 		// TODO:GG roles
 		jwt.RegisteredClaims
 	}
+
 	// TokenOwn 令牌拥有者类型
 	TokenOwn string
 )

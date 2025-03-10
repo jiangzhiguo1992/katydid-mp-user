@@ -2,25 +2,6 @@ package model
 
 import (
 	"katydid-mp-user/internal/pkg/model"
-	"katydid-mp-user/utils"
-	"time"
-)
-
-type AuthKind int16
-
-const (
-	AuthKindUserPwd    AuthKind = 1 // 密码
-	AuthKindPhoneCode  AuthKind = 2 // 短信
-	AuthKindEmailCode  AuthKind = 3 // 邮箱
-	AuthKindBiometric  AuthKind = 4 // 生物特征
-	AuthKindThirdParty AuthKind = 5 // 第三方平台
-
-	//AuthBioKindFace   int16 = 1 // 人脸
-	//AuthBioKindFinger int16 = 2 // 指纹
-	//AuthBioKindVoice  int16 = 3 // 声纹
-	//
-	//AuthThirdKindWechat int16 = 1 // 微信
-	//AuthThirdKindQQ     int16 = 2 // QQ
 )
 
 //var _ IAuth = (*UsernamePwd)(nil)
@@ -31,17 +12,14 @@ const (
 
 type (
 	IAuth interface {
-		// GetID 获取认证记录的ID
-		GetID() uint64
-
-		// GetAccountID 获取关联的账号ID
-		GetAccountID() uint64
-
 		// IsEnabled 检查认证方式是否启用
 		IsEnabled() bool
 
 		// IsActive 检查认证方式是否已激活过
 		IsActive() bool
+
+		// GetAccountID 获取关联的账号ID
+		GetAccountID() uint64
 
 		// GetKind 获取认证类型
 		GetKind() AuthKind
@@ -49,18 +27,16 @@ type (
 		// Verify 验证认证信息
 		Verify(credential interface{}) (bool, error)
 	}
+
 	// Auth 可验证账号基础
 	Auth struct {
 		*model.Base
 		AccountID uint64 `json:"accountId"` // 账户Id
 
 		Kind AuthKind `json:"kind"` // 认证类型
-
-		// TODO:GG verifys 关联
-		//AuthOnAts  map[int][]int64 `json:"authOnAts"`  // [kind][]验证发送时间
-		//AuthBodies map[int]*any    `json:"authBodies"` // [kind]验证内容
-		//AuthOkAts  map[int][]int64 `json:"authOkAts"`  // [kind][]验证成功时间
 	}
+
+	AuthKind int16
 
 	// AuthPassword 用户名+密码
 	AuthPassword struct {
@@ -105,67 +81,81 @@ type (
 	}
 )
 
-func NewAuthDef(accountId uint64) *Auth {
-	return &Auth{
-		Base:      model.NewBaseEmpty(),
-		AccountId: accountId,
-		Enable:    true,
-		IsActive:  false,
-	}
-}
+//func NewAuth(accountId uint64) *Auth {
+//	return &Auth{
+//		Base:      model.NewBaseEmpty(),
+//		AccountId: accountId,
+//		Enable:    true,
+//		IsActive:  false,
+//	}
+//}
+//
+//func NewUsernamePwdDef(accountId uint64, username, pwd string) *UsernamePwd {
+//	return &UsernamePwd{
+//		Auth:     NewAuthDef(accountId),
+//		Username: username,
+//		Password: pwd,
+//	}
+//}
+//
+//func NewPhoneNumberDef(accountId uint64, areaCode string, number string) *PhoneNumber {
+//	return &PhoneNumber{
+//		Auth:     NewAuthDef(accountId),
+//		AreaCode: areaCode,
+//		Number:   number,
+//		//Operator: operator,
+//	}
+//}
 
-func NewUsernamePwdDef(accountId uint64, username, pwd string) *UsernamePwd {
-	return &UsernamePwd{
-		Auth:     NewAuthDef(accountId),
-		Username: username,
-		Password: pwd,
-	}
-}
+const (
+	AuthStatusBlock  model.Status = -1 // 封禁状态
+	AuthStatusInit   model.Status = 0  // 初始状态
+	AuthStatusActive model.Status = 1  // 激活状态
 
-func NewPhoneNumberDef(accountId uint64, areaCode string, number string) *PhoneNumber {
-	return &PhoneNumber{
-		Auth:     NewAuthDef(accountId),
-		AreaCode: areaCode,
-		Number:   number,
-		//Operator: operator,
-	}
-}
+	AuthKindUserPwd    AuthKind = 1 // 密码
+	AuthKindPhoneCode  AuthKind = 2 // 短信
+	AuthKindEmailCode  AuthKind = 3 // 邮箱
+	AuthKindBiometric  AuthKind = 4 // 生物特征
+	AuthKindThirdParty AuthKind = 5 // 第三方平台
+
+	//AuthBioKindFace   int16 = 1 // 人脸
+	//AuthBioKindFinger int16 = 2 // 指纹
+	//AuthBioKindVoice  int16 = 3 // 声纹
+	//
+	//AuthThirdKindWechat int16 = 1 // 微信
+	//AuthThirdKindQQ     int16 = 2 // QQ
+
+)
 
 func (a *Auth) IsEnabled() bool {
-	return a.Status >= model.StatusInit
+	return a.Status >= AuthStatusInit
 }
 
 func (a *Auth) IsActive() bool {
-	return a.Status >= model.StatusActive
+	return a.Status >= AuthStatusActive
+}
+
+func (a *Auth) GetAccountID() uint64 {
+	return a.AccountID
+}
+
+func (a *Auth) GetKind() AuthKind {
+	return a.Kind
+}
+
+func (a *Auth) Verify(credential interface{}) (bool, error) {
+	// TODO:GG
+	return false, nil
 }
 
 const (
-	authExtraKeyPhoneCode = "phoneCode" // 手机验证码
+	authExtraKeyBlockedUntil = "blockedUntil" // 阻止验证直到某个时间点(过于频繁的send)
 )
 
-func (a *Auth) AddPhoneCode(timestamp int64, code *string) {
-	datas, ok := a.Extra.Get(authExtraKeyPhoneCode)
-	if !ok || datas == nil {
-		datas = make(map[int64]utils.KSMap)
-	} else if _, ok := datas.(map[int64]utils.KSMap); !ok {
-		datas = make(map[int64]utils.KSMap)
-	}
-	codes := datas.(map[int64]utils.KSMap)
-	codes[timestamp] = make(utils.KSMap)
-	codes[timestamp].SetString("code", code)
-	a.Extra.Set(authExtraKeyPhoneCode, codes)
+func (a *Auth) SetBlockedUntil(blockUtilUnix *int64) {
+	a.Extra.SetInt64(authExtraKeyBlockedUntil, blockUtilUnix)
 }
 
-func (a *Auth) SetPhoneCodes(codes *map[int64]utils.KSMap) {
-	a.Extra.SetPtr(authExtraKeyPhoneCode, codes)
-}
-
-func (a *Auth) GetPhoneCodes() (map[int64]utils.KSMap, bool) {
-	datas, ok := a.Extra.Get(authExtraKeyPhoneCode)
-	if ok && datas != nil {
-		if _, ok := datas.(map[int64]utils.KSMap); ok {
-			return datas.(map[int64]utils.KSMap), true
-		}
-	}
-	return nil, ok
+func (a *Auth) GetBlockedUntil() (int64, bool) {
+	return a.Extra.GetInt64(authExtraKeyBlockedUntil)
 }
