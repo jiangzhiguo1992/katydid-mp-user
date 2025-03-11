@@ -37,6 +37,7 @@ type (
 		Username string `json:"Username"` // 用户名
 
 		Password string `json:"omitempty" gorm:"column:password_hash"` // 密码 (md5)
+		// TODO:GG 二级密码
 	}
 
 	// AuthPhone 手机号+短信

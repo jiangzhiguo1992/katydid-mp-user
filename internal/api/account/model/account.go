@@ -19,9 +19,6 @@ type Account struct {
 	ActiveAts map[TokenOwn]map[uint64]int64  `json:"activeAts"` // [ownID] -> 激活组织时间集合 (最早的就是注册的平台)
 	ExpireAts map[TokenOwn]map[uint64]int64  `json:"expireAts"` // [ownID] -> token过期时间列表 -1为永久
 
-	// 认证方式引用
-	// TODO:GG 是否可认证和必须认证的方式，由org/client决定
-	// TODO:GG 存id？还是存带extra里？
 	Auths map[AuthKind][]*IAuth `json:"auths"` // 认证方式列表
 
 	//LoginHistory  []*Entry `json:"loginHistory"`  // 登录历史(login)
