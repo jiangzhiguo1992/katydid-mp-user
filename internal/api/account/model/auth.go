@@ -3,6 +3,7 @@ package model
 import (
 	"errors"
 	"katydid-mp-user/internal/pkg/model"
+	"katydid-mp-user/utils"
 	"time"
 )
 
@@ -83,26 +84,57 @@ type (
 	AuthTPKind int16
 )
 
+func NewAuthEmpty() *Auth {
+	return &Auth{
+		Base: model.NewBaseEmpty(),
+	}
+}
+
 // NewAuth 创建指定类型的认证实例
-func NewAuth(kind AuthKind, accountID uint64) IAuth {
-	auth := &Auth{
-		Base:      model.NewBaseEmpty(),
+func NewAuth(accountID uint64, kind AuthKind) *Auth {
+	return &Auth{
+		Base:      model.NewBase(make(utils.KSMap)),
 		AccountID: accountID,
 		Kind:      kind,
 	}
-	switch kind {
-	case AuthKindPassword:
-		return &AuthPassword{Auth: auth}
-	case AuthKindPhone:
-		return &AuthPhone{Auth: auth}
-	case AuthKindEmail:
-		return &AuthEmail{Auth: auth}
-	case AuthKindBiometric:
-		return &AuthBiometric{Auth: auth}
-	case AuthKindThirdParty:
-		return &AuthThirdParty{Auth: auth}
-	default:
-		return nil
+}
+
+func NewAuthPassword(accountID uint64, username, password string) *AuthPassword {
+	return &AuthPassword{
+		Auth:     NewAuth(accountID, AuthKindPassword),
+		Username: username,
+		Password: password,
+	}
+}
+
+func NewAuthPhone(accountID uint64, areaCode, number string) *AuthPhone {
+	return &AuthPhone{
+		Auth:     NewAuth(accountID, AuthKindPhone),
+		AreaCode: areaCode,
+		Number:   number,
+	}
+}
+
+func NewAuthEmail(accountID uint64, username, domain string) *AuthEmail {
+	return &AuthEmail{
+		Auth:     NewAuth(accountID, AuthKindEmail),
+		Username: username,
+		Domain:   domain,
+	}
+}
+
+func NewAuthBiometric(accountID uint64, kind AuthBioKind) *AuthBiometric {
+	return &AuthBiometric{
+		Auth: NewAuth(accountID, AuthKindBiometric),
+		Kind: kind,
+	}
+}
+
+func NewAuthThirdParty(accountID uint64, provider AuthTPKind, openId string) *AuthThirdParty {
+	return &AuthThirdParty{
+		Auth:     NewAuth(accountID, AuthKindThirdParty),
+		Provider: provider,
+		OpenId:   openId,
 	}
 }
 

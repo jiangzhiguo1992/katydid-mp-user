@@ -82,7 +82,7 @@ func (v *Verify) IsVerified() bool {
 }
 
 func (v *Verify) CanValid() bool {
-	if v.Status <= VerifyStatusPending || v.Status >= VerifyStatusSuccess {
+	if v.Status < VerifyStatusPending || v.Status >= VerifyStatusSuccess {
 		return false
 	} else if v.IsExpired() {
 		return false

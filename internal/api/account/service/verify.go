@@ -51,6 +51,7 @@ type (
 				AuthKind model.AuthKind
 				AuthID   *uint64
 				Apply    model.VerifyApply
+				Body     string
 			}
 		}
 		//db    *db.Account
@@ -128,6 +129,29 @@ func (v *Verify) Valid() (bool, *errs.CodeErrs) {
 	case model.AuthKindPhone:
 	case model.AuthKindEmail:
 
+		body, ok := verify.GetBody()
+		if !ok {
+			return false, errs.Match2("验证：没有验证码！")
+		}
+		verify.Attempts++
+		if body != param.Body {
+			log.Debug("认证失败",
+				log.FString("needCode", body),
+				log.FString("requestCode", param.Body),
+			)
+			verify.Status = model.VerifyStatusReject
+			log.Debug("DB_更新", log.FAny("verify", verify))
+		} else if verify.Status == model.VerifyStatusSuccess {
+			log.Warn("重复认证失败",
+				log.FString("needCode", body),
+				log.FString("requestCode", param.Body),
+			)
+		} else {
+			verify.Status = model.VerifyStatusSuccess
+			now := time.Now().Unix()
+			verify.VerifiedAt = &now
+			log.Debug("DB_更新", log.FAny("verify", verify))
+		}
 	case model.AuthKindBiometric:
 		// TODO:GG 生物特征
 	case model.AuthKindThirdParty:
@@ -135,55 +159,5 @@ func (v *Verify) Valid() (bool, *errs.CodeErrs) {
 	default:
 		return false, errs.Match2("验证：不支持的类型！")
 	}
-
-	data := auth.Extra
-	if v.Kind == model.AuthKindPhone || v.Kind == model.AuthKindEmail {
-		if v.State == model.VerityStateInit {
-			return false, error2.MatchByMessage("验证：还没开始呢！")
-		} else if v.State == model.VerityStateReject {
-			if v.Attempts >= VerifyMaxAttempts {
-				return false, error2.MatchByMessage("验证：超过最大次数了！")
-			}
-		}
-		if time.Now().UnixMilli() > v.ExpiresAt {
-			log.Debug("认证超时",
-				log.Int64("pending", v.PendingAt),
-				log.Int64("now", time.Now().UnixMilli()),
-				log.Int64("超出s", (time.Now().UnixMilli()-v.PendingAt)/1000),
-			)
-			return false, error2.MatchByMessage("验证：已经过期了！")
-		}
-		needCode := v.GetCode()
-		if dataCode, ok := data["code"]; !ok {
-			return false, error2.MatchByMessage("验证：没有验证码！")
-		} else if (dataCode == nil) || len(dataCode.(string)) <= 0 {
-			return false, error2.MatchByMessage("验证：验证码为空！")
-		} else if needCode != dataCode.(string) {
-			log.Debug("认证失败",
-				log.String("needCode", needCode),
-				log.String("requestCode", dataCode.(string)),
-			)
-			v.State = model.VerityStateReject
-			v.VerifiedAt = time.Now().UnixMilli()
-			v.Attempts++
-			// TODO:GG DB
-			return false, error2.MatchByMessage("验证：验证码错误！")
-		}
-		log.Debug("认证成功",
-			log.String("needCode", needCode),
-			log.String("requestCode", data["code"].(string)),
-		)
-		if v.State != model.VerityStateSuccess {
-			v.State = model.VerityStateSuccess
-			v.VerifiedAt = time.Now().UnixMilli()
-			// TODO:GG DB
-		} else {
-			log.Warn("重复认证成功",
-				log.String("needCode", needCode),
-				log.String("requestCode", data["code"].(string)),
-			)
-		}
-		return true, nil
-	}
-	return false, errs.Match(nil) // "验证：不支持的类型！"
+	return false, nil
 }
