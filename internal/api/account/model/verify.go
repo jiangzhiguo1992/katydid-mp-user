@@ -2,6 +2,7 @@ package model
 
 import (
 	"katydid-mp-user/internal/pkg/model"
+	"katydid-mp-user/utils"
 	"time"
 )
 
@@ -9,16 +10,15 @@ type (
 	// Verify 验证内容
 	Verify struct {
 		*model.Base
-
-		AuthId  uint64    `json:"authId"`  // 认证Id
 		OwnKind VerifyOwn `json:"ownType"` // 验证平台 (组织/应用)
-		OwnID   uint64    `json:"ownId"`   // 认证拥有者Id (组织/应用)
+		OwnID   *uint64   `json:"ownId"`   // 认证拥有者Id (组织/应用)
+		Number  string    `json:"number"`  // 标识，用户名/手机号/邮箱/生物特征/第三方平台
 
 		AuthKind AuthKind    `json:"kind"`      // 认证类型 (手机号/邮箱/...)
+		AuthId   *uint64     `json:"authId"`    // 认证Id
 		Apply    VerifyApply `json:"applyKind"` // 申请类型 (注册/登录/修改密码/...)
 
-		PendingAt  *int64 `json:"pendingAt"`  // 等待时间
-		ExpiresAt  *int64 `json:"expiresAt"`  // 过期时间
+		PendingAt  *int64 `json:"pendingAt"`  // 等待时间(发送成功时间)
 		VerifiedAt *int64 `json:"verifiedAt"` // 验证时间
 		Attempts   int    `json:"attempts"`   // 验证次数
 	}
@@ -35,14 +35,14 @@ func NewVerifyEmpty() *Verify {
 }
 
 func NewVerify(
-	authId uint64, ownKind VerifyOwn, ownId uint64,
-	authKind AuthKind, apply VerifyApply,
+	ownKind VerifyOwn, ownID *uint64, number string,
+	authKind AuthKind, authID *uint64, apply VerifyApply,
 ) *Verify {
 	return &Verify{
-		Base:   model.NewBaseEmpty(),
-		AuthId: authId, OwnKind: ownKind, OwnID: ownId,
-		AuthKind: authKind, Apply: apply,
-		PendingAt: nil, ExpiresAt: nil, VerifiedAt: nil, Attempts: 0,
+		Base:    model.NewBase(make(utils.KSMap)),
+		OwnKind: ownKind, OwnID: ownID, Number: number,
+		AuthKind: authKind, AuthId: authID, Apply: apply,
+		PendingAt: nil, VerifiedAt: nil, Attempts: 0,
 	}
 }
 
@@ -68,18 +68,28 @@ const (
 
 // IsExpired 检查验证是否已过期
 func (v *Verify) IsExpired() bool {
+	if v.PendingAt == nil {
+		return false
+	}
+	expireSec := v.GetExpireSec()
 	now := time.Now().Unix()
-	return (v.ExpiresAt != nil) && (*v.ExpiresAt <= now)
-}
-
-// IsPending 检查是否处于等待验证状态
-func (v *Verify) IsPending() bool {
-	return v.Status == VerifyStatusPending && !v.IsExpired()
+	return (now - *v.PendingAt) >= expireSec
 }
 
 // IsVerified 检查是否已验证成功
 func (v *Verify) IsVerified() bool {
 	return v.Status == VerifyStatusSuccess && v.VerifiedAt != nil
+}
+
+func (v *Verify) CanValid() bool {
+	if v.Status <= VerifyStatusPending || v.Status >= VerifyStatusSuccess {
+		return false
+	} else if v.IsExpired() {
+		return false
+	} else if v.Attempts >= v.GetMaxAttempts() {
+		return false
+	}
+	return true
 }
 
 // CanResend 检查是否可以重新发送验证码
@@ -102,8 +112,9 @@ func (v *Verify) RemainingAttempts() int {
 
 const (
 	verifyExtraKeyBody        = "body"        // 验证内容
+	verifyExtraKeyExpireSec   = "expireSec"   // 过期时间S
+	verifyExtraKeyMaxSends    = "maxSends"    // 最大发送次数
 	verifyExtraKeyMaxAttempts = "maxAttempts" // 最大尝试次数
-	verifyExtraKeyTrySends    = "trySends"    // 尝试发送次数
 )
 
 func (v *Verify) SetBody(body *string) {
@@ -112,6 +123,32 @@ func (v *Verify) SetBody(body *string) {
 
 func (v *Verify) GetBody() (string, bool) {
 	return v.Extra.GetString(verifyExtraKeyBody)
+}
+
+func (v *Verify) GetExpireSec() int64 {
+	expireSec, ok := v.Extra.GetInt64(verifyExtraKeyExpireSec)
+	if !ok || expireSec <= 0 {
+		return 60 * 5 // 默认过期时间为5分
+	}
+	return expireSec
+}
+
+func (v *Verify) SetExpireSec(expireSec *int64) {
+	v.Extra.SetInt64(verifyExtraKeyExpireSec, expireSec)
+}
+
+// SetMaxSends 设置最大发送次数
+func (v *Verify) SetMaxSends(sends *int) {
+	v.Extra.SetInt(verifyExtraKeyMaxSends, sends)
+}
+
+// GetMaxSends 获取最大发送次数
+func (v *Verify) GetMaxSends() int {
+	sends, ok := v.Extra.GetInt(verifyExtraKeyMaxSends)
+	if !ok || sends <= 0 {
+		return 3 // 默认最大发送次数
+	}
+	return sends
 }
 
 // SetMaxAttempts 设置最大尝试次数
@@ -123,21 +160,7 @@ func (v *Verify) SetMaxAttempts(attempts *int) {
 func (v *Verify) GetMaxAttempts() int {
 	attempts, ok := v.Extra.GetInt(verifyExtraKeyMaxAttempts)
 	if !ok || attempts <= 0 {
-		return 5 // 默认最大尝试次数
+		return 10 // 默认最大尝试次数
 	}
 	return attempts
-}
-
-// SetTrySends 设置尝试发送次数
-func (v *Verify) SetTrySends(sends *int) {
-	v.Extra.SetInt(verifyExtraKeyTrySends, sends)
-}
-
-// GetTrySends 获取尝试发送次数
-func (v *Verify) GetTrySends() int {
-	sends, ok := v.Extra.GetInt(verifyExtraKeyTrySends)
-	if !ok || sends <= 0 {
-		return 1 // 默认尝试发送次数
-	}
-	return sends
 }
