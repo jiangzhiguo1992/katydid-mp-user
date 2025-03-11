@@ -15,19 +15,29 @@ import (
 	"sync"
 )
 
-// Base 处理器基类
-type Base struct {
-	gCtx *gin.Context
-	Conf
-	*DB
-	*Auth
-	*App
-}
+type (
+	// IHandler 处理器接口
+	IHandler interface {
+		Post()
+		Del()
+		Put()
+		Get()
+	}
 
-// Conf 配置
-type Conf struct {
-	Lang string // 语言
-}
+	// Base 处理器基类
+	Base struct {
+		gCtx *gin.Context
+		Conf
+		*DB
+		*Auth
+		*App
+	}
+
+	// Conf 配置
+	Conf struct {
+		Lang string // 语言
+	}
+)
 
 // DB 数据库
 type DB struct {
@@ -35,6 +45,8 @@ type DB struct {
 	DBCache *gorm.DB  // 数据库缓存
 	DBRepo  *gorm.DB  // 数据库仓储
 	DBTx    *gorm.Tx  // 数据库事务
+
+	DBPool *gorm.ConnPool // 数据库连接池
 }
 
 // Auth 身份验证
@@ -62,6 +74,13 @@ func NewBase(db *DB) *Base {
 		DB:   db,
 		Auth: nil,
 		App:  nil,
+	}
+}
+
+func (b *Base) Handler(callback func()) gin.HandlerFunc {
+	return func(context *gin.Context) {
+		b.SetGCtx(context)
+		callback()
 	}
 }
 
@@ -136,6 +155,7 @@ func (b *Base) RequestQuery(key string, defVal string) (string, bool) {
 func (b *Base) RequestPagination() (page, size int) {
 	pageStr, _ := b.RequestQuery("page", "1")
 	sizeStr, _ := b.RequestQuery("pageSize", "20")
+	// TODO:GG 应该还有一个防止重复加载的
 
 	page, _ = strconv.Atoi(pageStr)
 	size, _ = strconv.Atoi(sizeStr)
@@ -290,6 +310,8 @@ func (b *Base) responseData(status, code int, msg string, data any) {
 		b.gCtx.String(status, msg)
 	}
 }
+
+// TODO:GG accept-encoding
 
 //// HasPermission 检查是否有指定权限
 //func (b *Base) HasPermission(perm string) bool {
