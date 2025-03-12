@@ -90,12 +90,12 @@ func (b *Base) ValidStructRules(scene valid.Scene, fn valid.FuncReportError) {
 	switch scene {
 	case valid.SceneQuery:
 		if b.CreateAt < b.UpdateAt {
-			fn(b, "CreateAt", valid.TagFormat, "")
+			fn(b.CreateAt, "CreateAt", valid.TagFormat, "")
 		}
 		if (b.DeleteAt == nil) && (b.DeleteBy != 0) {
-			fn(b, "DeleteAt", valid.TagFormat, "")
+			fn(b.DeleteAt, "DeleteAt", valid.TagFormat, "")
 		} else if (b.DeleteAt != nil) && (b.DeleteBy == 0) {
-			fn(b, "DeleteBy", valid.TagFormat, "")
+			fn(b.DeleteBy, "DeleteBy", valid.TagFormat, "")
 		}
 	}
 }
@@ -188,9 +188,8 @@ const (
 	extraKeyAdminNote = "adminNote" // 管理员备注
 )
 
-func (b *Base) GetAdminNote() string {
-	val, _ := b.Extra.GetString(extraKeyAdminNote)
-	return val
+func (b *Base) GetAdminNote() (string, bool) {
+	return b.Extra.GetString(extraKeyAdminNote)
 }
 
 func (b *Base) SetAdminNote(adminNote *string) {

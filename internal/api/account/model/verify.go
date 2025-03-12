@@ -2,7 +2,9 @@ package model
 
 import (
 	"katydid-mp-user/internal/pkg/model"
-	"katydid-mp-user/utils"
+	"katydid-mp-user/pkg/data"
+	"katydid-mp-user/pkg/valid"
+	"reflect"
 	"time"
 )
 
@@ -10,21 +12,18 @@ type (
 	// Verify 验证内容
 	Verify struct {
 		*model.Base
-		OwnKind VerifyOwn `json:"ownType"` // 验证平台 (组织/应用)
-		OwnID   *uint64   `json:"ownId"`   // 认证拥有者Id (组织/应用)
-		Number  string    `json:"number"`  // 标识，用户名/手机号/邮箱/生物特征/第三方平台
+		OwnKind  TokenOwn    `json:"ownType" validate:"required,own-check"`     // 验证平台 (组织/应用)
+		AuthKind AuthKind    `json:"authKind" validate:"required,auth-check"`   // 认证类型 (手机号/邮箱/...)
+		Apply    VerifyApply `json:"applyKind" validate:"required,apply-check"` // 申请类型 (注册/登录/修改密码/...)
+		Target   string      `json:"target" validate:"required"`                // 标识，用户名/手机号/邮箱/生物特征/第三方平台
 
-		AuthKind AuthKind    `json:"kind"`      // 认证类型 (手机号/邮箱/...)
-		AuthId   *uint64     `json:"authId"`    // 认证Id
-		Apply    VerifyApply `json:"applyKind"` // 申请类型 (注册/登录/修改密码/...)
+		OwnID  *uint64 `json:"ownId"`  // 认证拥有者Id (组织/应用)
+		AuthId *uint64 `json:"authId"` // 认证Id
 
 		PendingAt  *int64 `json:"pendingAt"`  // 等待时间(发送成功时间)
 		VerifiedAt *int64 `json:"verifiedAt"` // 验证时间
 		Attempts   int    `json:"attempts"`   // 验证次数
 	}
-
-	// VerifyOwn 验证平台
-	VerifyOwn int8
 
 	// VerifyApply 申请类型
 	VerifyApply int16
@@ -35,26 +34,129 @@ func NewVerifyEmpty() *Verify {
 }
 
 func NewVerify(
-	ownKind VerifyOwn, ownID *uint64, number string,
-	authKind AuthKind, authID *uint64, apply VerifyApply,
+	ownKind TokenOwn, authKind AuthKind, apply VerifyApply, target string,
+	ownID *uint64, authID *uint64,
 ) *Verify {
 	return &Verify{
-		Base:    model.NewBase(make(utils.KSMap)),
-		OwnKind: ownKind, OwnID: ownID, Number: number,
-		AuthKind: authKind, AuthId: authID, Apply: apply,
+		Base:    model.NewBase(make(data.KSMap)),
+		OwnKind: ownKind, AuthKind: authKind, Apply: apply, Target: target,
+		AuthId: authID, OwnID: ownID,
 		PendingAt: nil, VerifiedAt: nil, Attempts: 0,
 	}
 }
 
+func (v *Verify) ValidFieldRules() valid.FieldValidRules {
+	return valid.FieldValidRules{
+		valid.SceneAll: valid.FieldValidRule{
+			"own-check": func(value reflect.Value, param string) bool {
+				val := value.Interface().(TokenOwn)
+				switch val {
+				case TokenOwnOrg,
+					TokenOwnApp,
+					TokenOwnClient:
+					return true
+				default:
+					return false
+				}
+			},
+			"auth-check": func(value reflect.Value, param string) bool {
+				val := value.Interface().(AuthKind)
+				switch val {
+				case AuthKindPhone,
+					AuthKindEmail,
+					AuthKindBiometric,
+					AuthKindThirdParty:
+					return true
+				default:
+					return false
+				}
+			},
+			"apply-check": func(value reflect.Value, param string) bool {
+				val := value.Interface().(VerifyApply)
+				switch val {
+				case VerifyApplyUnregister,
+					VerifyApplyRegister,
+					VerifyApplyLogin,
+					VerifyApplyResetPwd,
+					VerifyApplyChangePhone,
+					VerifyApplyChangeEmail,
+					VerifyApplyChangeBio,
+					VerifyApplyChangeThird:
+					return true
+				default:
+					return false
+				}
+			},
+		},
+	}
+}
+
+func (v *Verify) ValidExtraRules() (data.KSMap, valid.ExtraValidRules) {
+	return v.Extra, valid.ExtraValidRules{
+		valid.SceneSave: map[valid.Tag]valid.ExtraValidRuleInfo{
+			// 验证内容
+			verifyExtraKeyBody: {
+				Field: verifyExtraKeyBody,
+				ValidFn: func(value any) bool {
+					val, ok := value.(string)
+					if !ok {
+						return false
+					}
+					return len(val) <= 0
+				},
+			},
+		},
+	}
+}
+
+func (v *Verify) ValidStructRules(scene valid.Scene, fn valid.FuncReportError) {
+	switch scene {
+	case valid.SceneAll:
+		targetOk := false
+		switch v.AuthKind {
+		case AuthKindPhone:
+			// 检测v.Number是否符合手机号格式
+			_, _, targetOk = valid.IsPhone(v.Target)
+		case AuthKindEmail:
+			_, targetOk = valid.IsEmail(v.Target)
+		default:
+			targetOk = false
+		}
+		if !targetOk {
+			fn(v.Target, "Target", "", "")
+		}
+	}
+}
+
+func (v *Verify) ValidLocalizeRules() valid.LocalizeValidRules {
+	return valid.LocalizeValidRules{
+		valid.SceneAll: valid.LocalizeValidRule{
+			Rule1: map[valid.Tag]map[valid.FieldName]valid.LocalizeValidRuleParam{
+				valid.TagRequired: {
+					"ownType":   {"required_own_type_err", false, nil},
+					"authKind":  {"required_auth_kind_err", false, nil},
+					"applyKind": {"required_apply_kind_err", false, nil},
+					"target":    {"required_target_err", false, nil},
+				},
+				valid.TagFormat: {
+					"CreateAt": {"format_create_at_err", false, nil},
+					"DeleteAt": {"format_delete_at_err", false, nil},
+					"DeleteBy": {"format_delete_by_err", false, nil},
+				},
+			}, Rule2: map[valid.Tag]valid.LocalizeValidRuleParam{
+				"own-check":        {"own_check_err", false, nil},
+				"auth-check":       {"auth_check_err", false, nil},
+				"apply-check":      {"apply_check_err", false, nil},
+				verifyExtraKeyBody: {"format_body_err", false, nil},
+			},
+		},
+	}
+}
+
 const (
-	VerifyStatusInit    model.Status = 0 // 初始状态
 	VerifyStatusPending model.Status = 1 // 等待验证
 	VerifyStatusReject  model.Status = 2 // 验证失败
 	VerifyStatusSuccess model.Status = 3 // 验证成功
-
-	VerifyOwnOrg    VerifyOwn = 1 // 组织类型
-	VerifyOwnApp    VerifyOwn = 2 // 应用类型
-	VerifyOwnClient VerifyOwn = 3 // 应用类型
 
 	VerifyApplyUnregister  VerifyApply = -1 // 注销
 	VerifyApplyRegister    VerifyApply = 1  // 注册
@@ -160,7 +262,7 @@ func (v *Verify) SetMaxAttempts(attempts *int) {
 func (v *Verify) GetMaxAttempts() int {
 	attempts, ok := v.Extra.GetInt(verifyExtraKeyMaxAttempts)
 	if !ok || attempts <= 0 {
-		return 10 // 默认最大尝试次数
+		return 5 // 默认最大尝试次数
 	}
 	return attempts
 }
