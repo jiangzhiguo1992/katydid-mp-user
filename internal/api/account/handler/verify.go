@@ -24,8 +24,8 @@ func NewVerify(
 }
 
 func (v *Verify) Post() {
-	verify := model.NewVerifyEmpty()
-	err := v.RequestBind(verify, true)
+	bind := model.NewVerifyEmpty()
+	err := v.RequestBind(bind, true)
 	if err != nil {
 		v.Response400("绑定失败", err)
 		return
@@ -36,7 +36,7 @@ func (v *Verify) Post() {
 	//verify.SetMaxSends(param.MaxSends)
 
 	// 添加记录
-	err = v.service.Add(verify)
+	err = v.service.Add(bind)
 	if err != nil {
 		v.Response400("添加验证码失败", err)
 		return
@@ -47,16 +47,16 @@ func (v *Verify) Post() {
 	sendOk := true // TODO:GG rpc发送验证码/Oauth2/等等...
 	sendAt := time.Now().Unix()
 	if sendOk {
-		verify.PendingAt = &sendAt // TODO:GG 上层返回
-		err = v.service.OnSendOk(verify)
+		bind.PendingAt = &sendAt // TODO:GG 上层返回
+		err = v.service.OnSendOk(bind)
 	} else {
-		err = v.service.OnSendFail(verify)
+		err = v.service.OnSendFail(bind)
 	}
 	if err != nil {
 		v.Response400("发送验证码失败", err)
 		return
 	}
-	v.Response200(verify)
+	v.Response200(bind)
 }
 
 func (v *Verify) Del() {
@@ -64,7 +64,21 @@ func (v *Verify) Del() {
 }
 
 func (v *Verify) Put() {
-
+	bind := model.NewVerifyEmpty()
+	err := v.RequestBind(bind, true)
+	if err != nil {
+		v.Response400("绑定失败", err)
+		return
+	}
+	valid, err := v.service.Valid(bind)
+	if err != nil {
+		v.Response400("验证失败", err)
+		return
+	} else if !valid {
+		v.Response400("验证失败", nil)
+		return
+	}
+	v.Response200(nil)
 }
 
 func (v *Verify) Get() {

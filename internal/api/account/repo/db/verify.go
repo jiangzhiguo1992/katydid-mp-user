@@ -20,11 +20,11 @@ func NewVerify() *Verify {
 	}
 }
 
-func (v *Verify) Insert(body *model.Verify) *errs.CodeErrs {
+func (v *Verify) Insert(entity *model.Verify) *errs.CodeErrs {
 	// TODO:GG 雪花ID 10+9
 	// TODO:GG 分布ID 5+14
 	//v.W.Create(&Verify{})
-	log.Debug("DB_添加验证", log.FAny("verify", body))
+	log.Debug("DB_添加验证", log.FAny("verify", entity))
 	return nil
 }
 
@@ -33,16 +33,16 @@ func (v *Verify) Delete(id uint64, deleteBy *uint64) *errs.CodeErrs {
 	return nil
 }
 
-func (v *Verify) Update(body *model.Verify) *errs.CodeErrs {
-	log.Debug("DB_修改验证", log.FAny("verify", body))
+func (v *Verify) Update(entity *model.Verify) *errs.CodeErrs {
+	log.Debug("DB_修改验证", log.FAny("verify", entity))
 	return nil
 }
 
-func (v *Verify) Select(body *model.Verify) (*model.Verify, *errs.CodeErrs) {
-	log.Debug("DB_获取验证", log.FAny("verify", body))
+func (v *Verify) Select(entity *model.Verify) (*model.Verify, *errs.CodeErrs) {
+	log.Debug("DB_获取验证", log.FAny("verify", entity))
 	return nil, nil
 }
 
-func (v *Verify) Selects(body *model.Verify) ([]*model.Verify, *errs.CodeErrs) {
+func (v *Verify) Selects(entity *model.Verify) ([]*model.Verify, *errs.CodeErrs) {
 	return nil, nil
 }

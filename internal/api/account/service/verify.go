@@ -30,33 +30,33 @@ func NewVerify(
 	}
 }
 
-func (v *Verify) Add(verify *model.Verify) *errs.CodeErrs {
+func (v *Verify) Add(entity *model.Verify) *errs.CodeErrs {
 	body := ""
-	switch verify.AuthKind {
+	switch entity.AuthKind {
 	case model.AuthKindPhone:
 	case model.AuthKindEmail:
 		body = num.Random(6) // TODO:GG 外部传config?
 	default:
-		return errs.Match2(fmt.Sprintf("不支持的验证类型 kind: %s", strconv.Itoa(int(verify.AuthKind))))
+		return errs.Match2(fmt.Sprintf("不支持的验证类型 kind: %s", strconv.Itoa(int(entity.AuthKind))))
 	}
-	verify.SetBody(&body)
+	entity.SetBody(&body)
 
 	// TODO:GG pendingAt之内的数量(发送成功的)
-	temp := time.Now().Unix() - verify.GetPerSaves()
-	verify.PendingAt = &temp
-	results, err := v.db.Selects(verify)
+	temp := time.Now().Unix() - entity.GetPerSaves()
+	entity.PendingAt = &temp
+	results, err := v.db.Selects(entity)
 	if err != nil {
 		return err
-	} else if (results != nil) && (len(results) > verify.GetMaxSaves()) {
+	} else if (results != nil) && (len(results) > entity.GetMaxSaves()) {
 		return errs.Match2("验证码数量超过限制")
 	}
 
 	// TODO:GG 检查authId和ownId是否存在
 
-	verify.PendingAt = nil // reset
-	verify.ValidAt = nil   // reset
-	verify.ValidTimes = 0  // reset
-	return v.db.Insert(verify)
+	entity.PendingAt = nil // reset
+	entity.ValidAt = nil   // reset
+	entity.ValidTimes = 0  // reset
+	return v.db.Insert(entity)
 }
 
 func (v *Verify) Del(ID uint64) *errs.CodeErrs {
@@ -64,42 +64,42 @@ func (v *Verify) Del(ID uint64) *errs.CodeErrs {
 	return nil
 }
 
-func (v *Verify) OnSendOk(verify *model.Verify) *errs.CodeErrs {
-	verify.Status = model.VerifyStatusPending
+func (v *Verify) OnSendOk(entity *model.Verify) *errs.CodeErrs {
+	entity.Status = model.VerifyStatusPending
 	nowUnix := time.Now().Unix()
-	if (verify.PendingAt == nil) || (*verify.PendingAt > nowUnix) {
-		verify.PendingAt = &nowUnix
+	if (entity.PendingAt == nil) || (*entity.PendingAt > nowUnix) {
+		entity.PendingAt = &nowUnix
 	}
-	verify.ValidAt = nil  // reset
-	verify.ValidTimes = 0 // reset
-	return v.db.Update(verify)
+	entity.ValidAt = nil  // reset
+	entity.ValidTimes = 0 // reset
+	return v.db.Update(entity)
 }
 
 func (v *Verify) OnSendFail(verify *model.Verify) *errs.CodeErrs {
 	return nil
 }
 
-func (v *Verify) Valid(verify *model.Verify) (bool, *errs.CodeErrs) {
-	code, ok := verify.GetBody()
+func (v *Verify) Valid(entity *model.Verify) (bool, *errs.CodeErrs) {
+	body, ok := entity.GetBody()
 	if !ok {
 		return false, errs.Match2("验证：没有验证码！")
 	}
-	body, err := v.db.Select(verify)
+	verify, err := v.db.Select(entity)
 	if err != nil {
 		return false, err
 	}
-	if !body.CanValid() {
+	if !verify.CanValid() {
 		return false, errs.Match2("失效的验证码")
 	}
-	realCode, ok := body.GetBody()
+	realBody, ok := verify.GetBody()
 	if !ok {
 		return false, errs.Match2("验证：没有验证码！")
 	}
 	validOk := false
-	switch body.AuthKind {
+	switch verify.AuthKind {
 	case model.AuthKindPhone:
 	case model.AuthKindEmail:
-		validOk = realCode == code
+		validOk = realBody == body
 	case model.AuthKindBiometric:
 		// TODO:GG 生物特征
 	case model.AuthKindThirdParty:
@@ -108,21 +108,21 @@ func (v *Verify) Valid(verify *model.Verify) (bool, *errs.CodeErrs) {
 		return false, errs.Match2("验证：不支持的类型！")
 	}
 	if validOk {
-		body.Status = model.VerifyStatusSuccess
+		verify.Status = model.VerifyStatusSuccess
 		log.Debug("认证成功",
-			log.FString("needCode", realCode),
-			log.FString("requestCode", code),
+			log.FString("needCode", realBody),
+			log.FString("requestCode", body),
 		)
 	} else {
-		body.Status = model.VerifyStatusReject
+		verify.Status = model.VerifyStatusReject
 		log.Debug("认证失败",
-			log.FString("needCode", realCode),
-			log.FString("requestCode", code),
+			log.FString("needCode", realBody),
+			log.FString("requestCode", body),
 		)
 	}
 	now := time.Now().Unix()
-	body.ValidAt = &now
-	body.ValidTimes++
-	err = v.db.Update(body)
+	verify.ValidAt = &now
+	verify.ValidTimes++
+	err = v.db.Update(verify)
 	return validOk, err
 }
