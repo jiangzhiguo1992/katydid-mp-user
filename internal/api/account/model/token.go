@@ -16,9 +16,9 @@ const (
 )
 
 const (
-	TokenOwnOrg    TokenOwn = "org"    // 组织类型
-	TokenOwnApp    TokenOwn = "app"    // 应用类型
-	TokenOwnClient TokenOwn = "client" // 客户端类型
+	TokenOwnOrg    TokenOwn = 1 // 组织类型
+	TokenOwnApp    TokenOwn = 2 // 应用类型
+	TokenOwnClient TokenOwn = 3 // 客户端类型
 )
 
 type (
@@ -50,7 +50,7 @@ type (
 	}
 
 	// TokenOwn 令牌拥有者类型
-	TokenOwn string
+	TokenOwn int16
 )
 
 // NewToken 创建一个新的Token实例

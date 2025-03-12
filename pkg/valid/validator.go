@@ -10,11 +10,11 @@ import (
 const (
 	SceneAll    Scene = 0
 	SceneBind   Scene = 1
-	SceneSave   Scene = 10
+	SceneSave   Scene = 10 // = insert + update
 	SceneInsert Scene = 11
 	SceneUpdate Scene = 12
 	SceneQuery  Scene = 13
-	SceneShow   Scene = 20
+	SceneReturn Scene = 20 // = response
 	SceneCustom Scene = 1000
 
 	TagRequired Tag = "required"

@@ -63,7 +63,7 @@ func (b *Base) ValidFieldRules() valid.FieldValidRules {
 		valid.SceneInsert:     valid.FieldValidRule{},
 		valid.SceneUpdate:     valid.FieldValidRule{},
 		valid.SceneQuery:      valid.FieldValidRule{},
-		valid.SceneShow:       valid.FieldValidRule{},
+		valid.SceneReturn:     valid.FieldValidRule{},
 		valid.SceneCustom + 1: valid.FieldValidRule{},
 	}
 }
