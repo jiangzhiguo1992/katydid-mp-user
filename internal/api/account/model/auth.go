@@ -99,11 +99,23 @@ func NewAuth(accountID uint64, kind AuthKind) *Auth {
 	}
 }
 
+func NewAuthPasswordEmpty() *AuthPassword {
+	return &AuthPassword{
+		Auth: NewAuthEmpty(),
+	}
+}
+
 func NewAuthPassword(accountID uint64, username, password string) *AuthPassword {
 	return &AuthPassword{
 		Auth:     NewAuth(accountID, AuthKindPassword),
 		Username: username,
 		Password: password,
+	}
+}
+
+func NewAuthPhoneEmpty() *AuthPhone {
+	return &AuthPhone{
+		Auth: NewAuthEmpty(),
 	}
 }
 
@@ -115,6 +127,12 @@ func NewAuthPhone(accountID uint64, areaCode, number string) *AuthPhone {
 	}
 }
 
+func NewAuthEmailEmpty() *AuthEmail {
+	return &AuthEmail{
+		Auth: NewAuthEmpty(),
+	}
+}
+
 func NewAuthEmail(accountID uint64, username, domain string) *AuthEmail {
 	return &AuthEmail{
 		Auth:     NewAuth(accountID, AuthKindEmail),
@@ -123,10 +141,22 @@ func NewAuthEmail(accountID uint64, username, domain string) *AuthEmail {
 	}
 }
 
+func NewAuthBiometricEmpty() *AuthBiometric {
+	return &AuthBiometric{
+		Auth: NewAuthEmpty(),
+	}
+}
+
 func NewAuthBiometric(accountID uint64, kind AuthBioKind) *AuthBiometric {
 	return &AuthBiometric{
 		Auth: NewAuth(accountID, AuthKindBiometric),
 		Kind: kind,
+	}
+}
+
+func NewAuthThirdPartyEmpty() *AuthThirdParty {
+	return &AuthThirdParty{
+		Auth: NewAuthEmpty(),
 	}
 }
 

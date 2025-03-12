@@ -219,9 +219,9 @@ func ZapLoggerWithConfig(config LoggerConfig) gin.HandlerFunc {
 		requestID := c.GetHeader(XRequestIDHeader)
 		if requestID == "" {
 			requestID = config.TraceIDFunc()
+			c.Set(RequestIDKey, requestID)
+			c.Header(XRequestIDHeader, requestID)
 		}
-		c.Set(RequestIDKey, requestID)
-		c.Header(XRequestIDHeader, requestID)
 
 		// 记录开始时间
 		start := time.Now()
@@ -284,7 +284,7 @@ func ZapLoggerWithConfig(config LoggerConfig) gin.HandlerFunc {
 			log.FString("method", method),
 			log.FString("path", path),
 			log.FString("ip", clientIP),
-			log.FString("request_id", requestID),
+			log.FString("request-id", requestID),
 			log.FDuration("latency", latency),
 			log.FInt("size", size),
 		}

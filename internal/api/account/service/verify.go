@@ -6,7 +6,6 @@ import (
 	"katydid-mp-user/internal/pkg/service"
 	"katydid-mp-user/pkg/errs"
 	"katydid-mp-user/pkg/log"
-	"katydid-mp-user/pkg/valid"
 	"katydid-mp-user/utils"
 	"strconv"
 	"time"
@@ -22,19 +21,6 @@ type (
 		*service.Base
 
 		Params struct {
-			Add *struct {
-				OwnKind     model.VerifyOwn
-				OwnID       *uint64
-				Number      string
-				AuthKind    model.AuthKind
-				AuthID      *uint64
-				Apply       model.VerifyApply
-				ExpireS     *int64
-				MaxSends    *int
-				MaxAttempts *int
-			}
-			Del *struct {
-			}
 			OnSendOk *struct {
 				VerifyID  uint64
 				PendingAt *int64
@@ -62,13 +48,20 @@ type (
 	}
 )
 
-func (v *Verify) Add() (*model.Verify, *errs.CodeErrs) {
-	param := v.Params.Add
-	verify := model.NewVerify(
-		param.OwnKind, param.OwnID, param.Number,
-		param.AuthKind, param.AuthID, param.Apply,
-	)
-	valid.Check(verify, valid.SceneInsert) // TODO:GG 完善
+func NewVerify(
+// db *db.Account, cache *cache.Account,
+// isOwnerAuthEnable func(ownKind model.TokenOwn, ownID uint64, kind model.AuthKind) (bool, *errs.CodeErrs),
+// getMaxNumByOwner func(ownKind model.TokenOwn, ownID uint64) (int, *errs.CodeErrs),
+) *Verify {
+	return &Verify{
+		Base: service.NewBase(nil),
+		//db:   db, cache: cache,
+		//IsOwnerAuthEnable: isOwnerAuthEnable,
+		//GetMaxNumByOwner:  getMaxNumByOwner,
+	}
+}
+
+func (v *Verify) Add(verify *model.Verify) (*model.Verify, *errs.CodeErrs) {
 	body := ""
 	switch verify.AuthKind {
 	case model.AuthKindPhone:
@@ -78,32 +71,28 @@ func (v *Verify) Add() (*model.Verify, *errs.CodeErrs) {
 		body = fmt.Sprintf("kind: %s", strconv.Itoa(int(verify.AuthKind)))
 	}
 	verify.SetBody(&body)
-	verify.SetExpireSec(param.ExpireS)
-	verify.SetMaxSends(param.MaxSends)
-	verify.SetMaxAttempts(param.MaxAttempts)
 
 	// TODO:GG DB
 	log.Debug("DB_添加验证", log.FAny("verify", verify))
 	return verify, nil
 }
 
-func (v *Verify) Del() *errs.CodeErrs {
+func (v *Verify) Del(ID uint64) *errs.CodeErrs {
 	// TODO:GG DB删除
 	return nil
 }
 
-func (v *Verify) AfterSend() (*model.Verify, *errs.CodeErrs) {
-	param := v.Params.OnSendOk
+func (v *Verify) OnSendOk(ID uint64, pendingAt *int64) (*model.Verify, *errs.CodeErrs) {
 	// TODO:GG DB获取
-	verify := &model.Verify{}
+	verify := model.NewVerifyEmpty()
 	log.Debug("DB_获取验证", log.FAny("verify", verify))
 
 	verify.Status = model.VerifyStatusPending
-	if param.PendingAt != nil && *param.PendingAt > 0 {
-		verify.PendingAt = param.PendingAt
+	nowUnix := time.Now().Unix()
+	if (pendingAt != nil) && (*pendingAt > 0) && (*pendingAt <= nowUnix) {
+		verify.PendingAt = pendingAt
 	} else {
-		now := time.Now().Unix()
-		verify.PendingAt = &now
+		verify.PendingAt = &nowUnix
 	}
 	verify.VerifiedAt = nil // reset
 	verify.Attempts = 0     // reset
@@ -112,6 +101,10 @@ func (v *Verify) AfterSend() (*model.Verify, *errs.CodeErrs) {
 	log.Debug("DB_修改验证", log.FAny("verify", verify))
 
 	return verify, nil
+}
+
+func (v *Verify) OnSendFail() (*model.Verify, *errs.CodeErrs) {
+	return nil, nil
 }
 
 func (v *Verify) Valid() (bool, *errs.CodeErrs) {
