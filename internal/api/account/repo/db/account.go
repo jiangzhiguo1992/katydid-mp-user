@@ -19,6 +19,8 @@ func NewAccount() *Account {
 }
 
 func (a *Account) Insert() {
+	// TODO:GG 雪花ID 10+9
+	// TODO:GG 分布ID 5+14
 	//a.W.Create(&Account{})
 }
 
