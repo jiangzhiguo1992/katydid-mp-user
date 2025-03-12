@@ -3,78 +3,60 @@ package service
 import (
 	"fmt"
 	"katydid-mp-user/internal/api/account/model"
+	"katydid-mp-user/internal/api/account/repo/db"
 	"katydid-mp-user/internal/pkg/service"
 	"katydid-mp-user/pkg/errs"
 	"katydid-mp-user/pkg/log"
-	"katydid-mp-user/utils"
+	"katydid-mp-user/pkg/num"
 	"strconv"
 	"time"
-)
-
-const (
-	VerifyCodeLength = 6 // 验证码长度 // TODO:GG 移动到configs/clients
 )
 
 type (
 	// Verify 验证码服务
 	Verify struct {
 		*service.Base
-
-		Params struct {
-			OnSendOk *struct {
-				VerifyID  uint64
-				PendingAt *int64
-				ExpireSec int64
-			}
-			OnSendFail *struct {
-				VerifyID uint64
-				TryTimes int
-			}
-			Valid *struct {
-				OwnKind  model.VerifyOwn
-				OwnID    *uint64
-				Number   string
-				AuthKind model.AuthKind
-				AuthID   *uint64
-				Apply    model.VerifyApply
-				Body     string
-			}
-		}
-		//db    *db.Account
-		//cache *cache.Account
-
-		//IsOwnerAuthEnable func(ownKind model.TokenOwn, ownID uint64, kind model.AuthKind) (bool, *errs.CodeErrs)
-		//GetMaxNumByOwner  func(ownKind model.TokenOwn, ownID uint64) (int, *errs.CodeErrs)
+		db *db.Verify
+		//cache *cache.Verify
 	}
 )
 
 func NewVerify(
-// db *db.Account, cache *cache.Account,
-// isOwnerAuthEnable func(ownKind model.TokenOwn, ownID uint64, kind model.AuthKind) (bool, *errs.CodeErrs),
-// getMaxNumByOwner func(ownKind model.TokenOwn, ownID uint64) (int, *errs.CodeErrs),
+	db *db.Verify, // cache *cache.Account,
 ) *Verify {
 	return &Verify{
 		Base: service.NewBase(nil),
-		//db:   db, cache: cache,
-		//IsOwnerAuthEnable: isOwnerAuthEnable,
-		//GetMaxNumByOwner:  getMaxNumByOwner,
+		db:   db, // cache: cache,
 	}
 }
 
-func (v *Verify) Add(verify *model.Verify) (*model.Verify, *errs.CodeErrs) {
+func (v *Verify) Add(verify *model.Verify) *errs.CodeErrs {
 	body := ""
 	switch verify.AuthKind {
 	case model.AuthKindPhone:
 	case model.AuthKindEmail:
-		body = utils.Random(VerifyCodeLength)
+		body = num.Random(6) // TODO:GG 外部传config?
 	default:
-		body = fmt.Sprintf("kind: %s", strconv.Itoa(int(verify.AuthKind)))
+		return errs.Match2(fmt.Sprintf("不支持的验证类型 kind: %s", strconv.Itoa(int(verify.AuthKind))))
 	}
 	verify.SetBody(&body)
 
-	// TODO:GG DB
-	log.Debug("DB_添加验证", log.FAny("verify", verify))
-	return verify, nil
+	// TODO:GG pendingAt之内的数量(发送成功的)
+	temp := time.Now().Unix() - verify.GetPerSaves()
+	verify.PendingAt = &temp
+	results, err := v.db.Selects(verify)
+	if err != nil {
+		return err
+	} else if (results != nil) && (len(results) > verify.GetMaxSaves()) {
+		return errs.Match2("验证码数量超过限制")
+	}
+
+	// TODO:GG 检查authId和ownId是否存在
+
+	verify.PendingAt = nil // reset
+	verify.ValidAt = nil   // reset
+	verify.ValidTimes = 0  // reset
+	return v.db.Insert(verify)
 }
 
 func (v *Verify) Del(ID uint64) *errs.CodeErrs {
@@ -82,69 +64,42 @@ func (v *Verify) Del(ID uint64) *errs.CodeErrs {
 	return nil
 }
 
-func (v *Verify) OnSendOk(ID uint64, pendingAt *int64) (*model.Verify, *errs.CodeErrs) {
-	// TODO:GG DB获取
-	verify := model.NewVerifyEmpty()
-	log.Debug("DB_获取验证", log.FAny("verify", verify))
-
+func (v *Verify) OnSendOk(verify *model.Verify) *errs.CodeErrs {
 	verify.Status = model.VerifyStatusPending
 	nowUnix := time.Now().Unix()
-	if (pendingAt != nil) && (*pendingAt > 0) && (*pendingAt <= nowUnix) {
-		verify.PendingAt = pendingAt
-	} else {
+	if (verify.PendingAt == nil) || (*verify.PendingAt > nowUnix) {
 		verify.PendingAt = &nowUnix
 	}
-	verify.VerifiedAt = nil // reset
-	verify.Attempts = 0     // reset
-
-	// TODO:GG DB update
-	log.Debug("DB_修改验证", log.FAny("verify", verify))
-
-	return verify, nil
+	verify.ValidAt = nil  // reset
+	verify.ValidTimes = 0 // reset
+	return v.db.Update(verify)
 }
 
-func (v *Verify) OnSendFail() (*model.Verify, *errs.CodeErrs) {
-	return nil, nil
+func (v *Verify) OnSendFail(verify *model.Verify) *errs.CodeErrs {
+	return nil
 }
 
-func (v *Verify) Valid() (bool, *errs.CodeErrs) {
-	param := v.Params.Valid
-
-	// TODO:GG DB获取
-	verify := &model.Verify{}
-	log.Debug("DB_获取验证", log.FAny("verify", verify))
-
-	if !verify.CanValid() {
+func (v *Verify) Valid(verify *model.Verify) (bool, *errs.CodeErrs) {
+	code, ok := verify.GetBody()
+	if !ok {
+		return false, errs.Match2("验证：没有验证码！")
+	}
+	body, err := v.db.Select(verify)
+	if err != nil {
+		return false, err
+	}
+	if !body.CanValid() {
 		return false, errs.Match2("失效的验证码")
 	}
-
-	switch param.AuthKind {
+	realCode, ok := body.GetBody()
+	if !ok {
+		return false, errs.Match2("验证：没有验证码！")
+	}
+	validOk := false
+	switch body.AuthKind {
 	case model.AuthKindPhone:
 	case model.AuthKindEmail:
-
-		body, ok := verify.GetBody()
-		if !ok {
-			return false, errs.Match2("验证：没有验证码！")
-		}
-		verify.Attempts++
-		if body != param.Body {
-			log.Debug("认证失败",
-				log.FString("needCode", body),
-				log.FString("requestCode", param.Body),
-			)
-			verify.Status = model.VerifyStatusReject
-			log.Debug("DB_更新", log.FAny("verify", verify))
-		} else if verify.Status == model.VerifyStatusSuccess {
-			log.Warn("重复认证失败",
-				log.FString("needCode", body),
-				log.FString("requestCode", param.Body),
-			)
-		} else {
-			verify.Status = model.VerifyStatusSuccess
-			now := time.Now().Unix()
-			verify.VerifiedAt = &now
-			log.Debug("DB_更新", log.FAny("verify", verify))
-		}
+		validOk = realCode == code
 	case model.AuthKindBiometric:
 		// TODO:GG 生物特征
 	case model.AuthKindThirdParty:
@@ -152,5 +107,22 @@ func (v *Verify) Valid() (bool, *errs.CodeErrs) {
 	default:
 		return false, errs.Match2("验证：不支持的类型！")
 	}
-	return false, nil
+	if validOk {
+		body.Status = model.VerifyStatusSuccess
+		log.Debug("认证成功",
+			log.FString("needCode", realCode),
+			log.FString("requestCode", code),
+		)
+	} else {
+		body.Status = model.VerifyStatusReject
+		log.Debug("认证失败",
+			log.FString("needCode", realCode),
+			log.FString("requestCode", code),
+		)
+	}
+	now := time.Now().Unix()
+	body.ValidAt = &now
+	body.ValidTimes++
+	err = v.db.Update(body)
+	return validOk, err
 }

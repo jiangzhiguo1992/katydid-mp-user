@@ -21,7 +21,7 @@ type (
 		AuthId *uint64 `json:"authId"` // 认证Id
 
 		PendingAt  *int64 `json:"pendingAt"`  // 等待时间(发送成功时间)
-		VerifiedAt *int64 `json:"verifiedAt"` // 验证时间
+		ValidAt    *int64 `json:"validAt"`    // 验证时间
 		ValidTimes int    `json:"validTimes"` // 验证次数
 	}
 
@@ -41,7 +41,7 @@ func NewVerify(
 		Base:    model.NewBase(make(data.KSMap)),
 		OwnKind: ownKind, AuthKind: authKind, Apply: apply, Target: target,
 		AuthId: authID, OwnID: ownID,
-		PendingAt: nil, VerifiedAt: nil, ValidTimes: 0,
+		PendingAt: nil, ValidAt: nil, ValidTimes: 0,
 	}
 }
 
@@ -185,7 +185,7 @@ func (v *Verify) IsExpired() bool {
 
 // IsVerified 检查是否已验证成功
 func (v *Verify) IsVerified() bool {
-	return v.Status == VerifyStatusSuccess && v.VerifiedAt != nil
+	return v.Status == VerifyStatusSuccess && v.ValidAt != nil
 }
 
 // CanValid 检查是否可以验证 TODO:GG 上层实现times++
