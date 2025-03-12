@@ -1,8 +1,8 @@
 package model
 
 import (
+	"katydid-mp-user/pkg/data"
 	"katydid-mp-user/pkg/valid"
-	"katydid-mp-user/utils"
 	"time"
 )
 
@@ -24,7 +24,7 @@ type (
 		// required
 		// stats
 
-		Extra utils.KSMap `json:"extra" gorm:"serializer:json"` // 额外信息 (!索引/!必需)
+		Extra data.KSMap `json:"extra" gorm:"serializer:json"` // 额外信息 (!索引/!必需)
 	}
 
 	// Status 状态 (组合体可自定义)
@@ -39,11 +39,11 @@ func NewBaseEmpty() *Base {
 		//UpdateAt: time.Now().UnixMilli(), // auto
 		DeleteBy: 0,
 		DeleteAt: nil,
-		Extra:    make(utils.KSMap),
+		Extra:    make(data.KSMap),
 	}
 }
 
-func NewBase(extra utils.KSMap) *Base {
+func NewBase(extra data.KSMap) *Base {
 	return &Base{
 		//ID: nil, // auto
 		//Status: StatusInit, // auto
@@ -68,18 +68,18 @@ func (b *Base) ValidFieldRules() valid.FieldValidRules {
 	}
 }
 
-func (b *Base) ValidExtraRules() (utils.KSMap, valid.ExtraValidRules) {
+func (b *Base) ValidExtraRules() (data.KSMap, valid.ExtraValidRules) {
 	return b.Extra, valid.ExtraValidRules{
 		valid.SceneAll: map[valid.Tag]valid.ExtraValidRuleInfo{
 			// 管理员备注 (0-10000)
 			extraKeyAdminNote: {
 				Field: extraKeyAdminNote,
 				ValidFn: func(value any) bool {
-					data, ok := value.(string)
+					val, ok := value.(string)
 					if !ok {
 						return false
 					}
-					return len(data) <= 10000
+					return len(val) <= 10000
 				},
 			},
 		},
@@ -189,8 +189,8 @@ const (
 )
 
 func (b *Base) GetAdminNote() string {
-	data, _ := b.Extra.GetString(extraKeyAdminNote)
-	return data
+	val, _ := b.Extra.GetString(extraKeyAdminNote)
+	return val
 }
 
 func (b *Base) SetAdminNote(adminNote *string) {

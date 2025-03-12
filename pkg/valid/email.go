@@ -68,6 +68,21 @@ func IsEmailDomain(domain string) bool {
 	return domainRegex.MatchString(domain)
 }
 
+// FindEmailsInText extracts and counts valid email addresses in a text
+func FindEmailsInText(text string) []string {
+	emailRegex := regexp.MustCompile(`[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}`)
+	matches := emailRegex.FindAllString(text, -1)
+
+	validEmails := make([]string, 0)
+	for _, match := range matches {
+		if _, ok := IsEmail(match); ok {
+			validEmails = append(validEmails, match)
+		}
+	}
+
+	return validEmails
+}
+
 // parseEmail splits an email into its components
 func parseEmail(email string) (*EmailComponents, bool) {
 	// Remove whitespace
@@ -104,19 +119,4 @@ func parseEmail(email string) (*EmailComponents, bool) {
 		Domain:   domain,
 		TLD:      tld,
 	}, true
-}
-
-// FindEmailsInText extracts and counts valid email addresses in a text
-func FindEmailsInText(text string) []string {
-	emailRegex := regexp.MustCompile(`[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}`)
-	matches := emailRegex.FindAllString(text, -1)
-
-	validEmails := make([]string, 0)
-	for _, match := range matches {
-		if _, ok := IsEmail(match); ok {
-			validEmails = append(validEmails, match)
-		}
-	}
-
-	return validEmails
 }
