@@ -2,6 +2,7 @@ package valid
 
 import (
 	"regexp"
+	"sort"
 	"strings"
 )
 
@@ -13,10 +14,10 @@ type PhoneCountryCode struct {
 }
 
 var (
-	// internationalPhoneRegex regular expression for international phone number validation
-	//internationalPhoneRegex = regexp.MustCompile(`^\+([1-9]\d{0,2})[ -]?(\(?\d{1,4}\)?[ -]?\d{1,4}[ -]?\d{1,9})$`)
+	// internationalPhoneRegex 用于国际电话号码验证的正则表达式
+	internationalPhoneRegex = regexp.MustCompile(`^\+([1-9]\d{0,3})[ -]?(\(?\d{1,4}\)?[ -]?\d{1,4}[ -]?\d{1,9})$`)
 
-	// numberOnlyRegex For validating just the number part (digits only)
+	// numberOnlyRegex 用于仅验证号码部分(纯数字)
 	numberOnlyRegex = regexp.MustCompile(`^[0-9]{6,15}$`)
 
 	// CountryCodes List of country codes
@@ -232,54 +233,72 @@ var (
 		{"1939", "Puerto Rico", []string{"^[2-9]\\d{6}$"}},
 	}
 
-	// Map for faster lookups
-	countryCodeMap = make(map[string]PhoneCountryCode)
+	// 缓存用于快速查找
+	countryCodeMap     = make(map[string]PhoneCountryCode)
+	sortedCountryCodes []string
+	compiledPatterns   = make(map[string][]*regexp.Regexp)
 )
 
 func init() {
-	// Build map for faster lookups
+	// 构建查找映射并预编译所有正则表达式
 	for _, countryCode := range CountryCodes {
 		countryCodeMap[countryCode.Code] = countryCode
+		sortedCountryCodes = append(sortedCountryCodes, countryCode.Code)
+
+		// ���编译模式以提升性能
+		var patterns []*regexp.Regexp
+		for _, pattern := range countryCode.Patterns {
+			patterns = append(patterns, regexp.MustCompile(pattern))
+		}
+		compiledPatterns[countryCode.Code] = patterns
 	}
+
+	// 按长度降序排序国家代码，确保先匹配最长的代码
+	sort.Slice(sortedCountryCodes, func(i, j int) bool {
+		return len(sortedCountryCodes[i]) > len(sortedCountryCodes[j])
+	})
 }
 
 // IsPhone 将phone分割成CountryCode和number，并验证数据
-func IsPhone(phone string) (string, *PhoneCountryCode, bool) {
-	phone = strings.TrimSpace(phone)
-	phone = strings.ReplaceAll(phone, " ", "")
+func IsPhone(phone string) (*PhoneCountryCode, string, bool) {
+	if phone = cleanPhoneNumber(phone); phone == "" {
+		return nil, "", false
+	}
 
 	// 检查是否是国际格式电话号码
 	if strings.HasPrefix(phone, "+") {
-		// 移除加号
-		phone = strings.TrimPrefix(phone, "+")
+		// 使用国际电话正则表达式
+		matches := internationalPhoneRegex.FindStringSubmatch(phone)
+		if len(matches) == 3 {
+			code := matches[1]
+			number := strings.ReplaceAll(matches[2], "-", "")
+			number = strings.ReplaceAll(number, "(", "")
+			number = strings.ReplaceAll(number, ")", "")
+			number = strings.ReplaceAll(number, " ", "")
 
-		// 尝试找到匹配的国家代码
-		for _, code := range CountryCodes {
-			if strings.HasPrefix(phone, code.Code) {
-				number := phone[len(code.Code):]
-				countryCode, exists := countryCodeMap[code.Code]
-				if exists {
-					_, _, valid := IsPhoneNumber(code.Code, number)
-					return number, &countryCode, valid
-				}
+			if countryCode, exists := countryCodeMap[code]; exists {
+				_, _, valid := IsPhoneNumber(code, number)
+				return &countryCode, number, valid
 			}
 		}
-		return phone, nil, false
+
+		// 如果正则不匹配，尝试逐一检查前缀
+		phone = strings.TrimPrefix(phone, "+")
+		return findMatchingCountryCode(phone)
 	}
 
 	// 如果不是国际格式，检查是否是有效的纯数字格式
 	if numberOnlyRegex.MatchString(phone) {
-		return phone, nil, true // 返回号码，但没有国家代码
+		return nil, phone, true
 	}
 
-	return phone, nil, false
+	return nil, phone, false
 }
 
+// IsPhoneNumber 验证特定国家代码的电话号码
 func IsPhoneNumber(code, number string) (*PhoneCountryCode, string, bool) {
 	// 清理号码，移除非数字字符
-	number = strings.TrimSpace(number)
-	number = strings.ReplaceAll(number, " ", "")
-	number = regexp.MustCompile(`\D`).ReplaceAllString(number, "")
+	number = regexp.MustCompile(`\D`).ReplaceAllString(cleanPhoneNumber(number), "")
 	if number == "" {
 		return nil, "", false
 	}
@@ -290,68 +309,60 @@ func IsPhoneNumber(code, number string) (*PhoneCountryCode, string, bool) {
 		return nil, "", false
 	}
 
-	// 检查号码是否匹配指定的正则模式
-	if len(countryCode.Patterns) > 0 {
-		validPattern := false
-		for _, pattern := range countryCode.Patterns {
-			re := regexp.MustCompile(pattern)
+	// 使用预编译的正则表达式验证
+	patterns := compiledPatterns[code]
+	if len(patterns) > 0 {
+		for _, re := range patterns {
 			if re.MatchString(number) {
-				validPattern = true
-				break
+				return countryCode, number, true
 			}
 		}
-		if !validPattern {
-			return countryCode, number, false
-		}
+		return countryCode, number, false
 	}
 
 	return countryCode, number, true
 }
 
-// IsPhoneCountryCode checks if the provided string is a valid country code
+// IsPhoneCountryCode 检查提供的字符串是否是有效的国家代码
 func IsPhoneCountryCode(code string) (*PhoneCountryCode, bool) {
-	// Trim any whitespace
-	code = strings.TrimSpace(code)
-	code = strings.ReplaceAll(code, " ", "")
+	code = cleanPhoneNumber(code)
 	if code == "" {
 		return nil, false
 	}
 
-	// Remove leading '+' if present
+	// 移除前导的'+'(如果存在)
 	if strings.HasPrefix(code, "+") {
 		code = strings.TrimPrefix(code, "+")
 	}
 
-	// Check if the country code is valid
+	// 检查国家代码是否有效
 	countryCode, exists := countryCodeMap[code]
 	return &countryCode, exists
 }
 
-// FormatPhone formats a phone number according to country code format
-// It takes a full phone number string (with country code) and formats it
+// FormatPhone 根据国家代码格式格式化电话号码
 func FormatPhone(phone string) string {
-	number, code, ok := IsPhone(phone)
+	code, number, ok := IsPhone(phone)
 	if !ok {
 		return phone
 	}
 
-	// If we don't have country code, just return the number
-	if code.Code == "" {
+	// 如果没有国家代码，只返回号码
+	if code == nil {
 		return number
 	}
 
-	// Simple formatting with a space between country code and number
+	// 简单格式化，在国家代码和号码之间添加空格
 	return "+" + code.Code + " " + number
 }
 
-// ExtractPossibleNumbers finds potential phone numbers in text
-func ExtractPossibleNumbers(text string) []string {
-	// This regex looks for patterns that might be phone numbers
-	// It's intentionally lenient to catch various formats
-	phonePattern := regexp.MustCompile(`(?:(?:\+|00)[1-9]\d{0,3}[\s.-]*)?(?:\(?\d{1,4}\)?[\s.-]*)?\d{3,4}[\s.-]*\d{3,4}`)
+// FindPhonesInText 从文本中查找可能的电话号码
+func FindPhonesInText(text string) []string {
+	// 使用更精确的正则表达式模式
+	phonePattern := regexp.MustCompile(`(?:(?:\+|00)[1-9]\d{0,3}[\s.-]*)?(?:\(?\d{1,4}\)?[\s.-]*)?\d{3,4}[\s.-]*\d{3,4}(?:[\s.-]*\d{1,4})?`)
 	matches := phonePattern.FindAllString(text, -1)
 
-	// Filter to only valid numbers
+	// 过滤只保留有效号码
 	var validNumbers []string
 	for _, match := range matches {
 		_, _, ok := IsPhone(match)
@@ -363,7 +374,7 @@ func ExtractPossibleNumbers(text string) []string {
 	return validNumbers
 }
 
-// FindPhoneCountryByName searches for a country code by name
+// FindPhoneCountryByName 通过名称搜索国家代码
 func FindPhoneCountryByName(name string) []PhoneCountryCode {
 	name = strings.ToLower(name)
 	var results []PhoneCountryCode
@@ -375,4 +386,24 @@ func FindPhoneCountryByName(name string) []PhoneCountryCode {
 	}
 
 	return results
+}
+
+// 查找匹配的国家代码，通过按长度排序后的代码列表提高效率
+func findMatchingCountryCode(phone string) (*PhoneCountryCode, string, bool) {
+	for _, code := range sortedCountryCodes {
+		if strings.HasPrefix(phone, code) {
+			number := phone[len(code):]
+			countryCode := countryCodeMap[code]
+			_, _, valid := IsPhoneNumber(code, number)
+			return &countryCode, number, valid
+		}
+	}
+	return nil, phone, false
+}
+
+// 清理电话号码，移除非必要字符
+func cleanPhoneNumber(phone string) string {
+	phone = strings.TrimSpace(phone)
+	phone = strings.ReplaceAll(phone, " ", "")
+	return phone
 }
