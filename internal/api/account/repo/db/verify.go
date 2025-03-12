@@ -40,7 +40,7 @@ func (v *Verify) Update(entity *model.Verify) *errs.CodeErrs {
 
 func (v *Verify) Select(entity *model.Verify) (*model.Verify, *errs.CodeErrs) {
 	log.Debug("DB_获取验证", log.FAny("verify", entity))
-	return nil, nil
+	return entity, nil
 }
 
 func (v *Verify) Selects(entity *model.Verify) ([]*model.Verify, *errs.CodeErrs) {
