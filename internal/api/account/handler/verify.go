@@ -14,13 +14,11 @@ type Verify struct {
 
 func NewVerify(
 // db *db.Account, cache *cache.Account,
-// getMaxNumByOwner func(ownKind model.TokenOwn, ownID uint64) (int, *errs.CodeErrs),
-// isOwnerAuthEnable func(ownKind model.TokenOwn, ownID uint64, kind model.AuthKind) (bool, *errs.CodeErrs),
 ) *Verify {
 	return &Verify{
-		Base:    handler.NewBase(nil),
+		Base: handler.NewBase(nil),
 		service: service.NewVerify(
-		//db, cache, isOwnerAuthEnable, getMaxNumByOwner,
+			nil,
 		),
 	}
 }
@@ -32,23 +30,28 @@ func (v *Verify) Post() {
 		v.Response400("绑定失败", err)
 		return
 	}
-	// TODO:GG 哪里传进来比较好呢
+
+	// TODO:GG 哪里传进来比较好呢 (client.Extra)
 	//verify.SetExpireSec(param.ExpireS)
 	//verify.SetMaxSends(param.MaxSends)
-	//verify.SetMaxAttempts(param.MaxAttempts)
 
 	// 添加记录
-	verify, err = v.service.Add(verify)
+	err = v.service.Add(verify)
 	if err != nil {
 		v.Response400("添加验证码失败", err)
 		return
 	}
 
-	// TODO:GG 发送验证码/Oauth2/等等...
-	sendOkAt := time.Now().Unix()
-
-	// 发送成功
-	verify, err = v.service.OnSendOk(verify.ID, &sendOkAt)
+	//verifyExtraKeyPerSends  = "perSends"  // 发送时间范围 TODO:GG 上层实现
+	//verifyExtraKeyMaxSends  = "maxSends"  // 最大发送次数 TODO:GG 上层实现
+	sendOk := true // TODO:GG rpc发送验证码/Oauth2/等等...
+	sendAt := time.Now().Unix()
+	if sendOk {
+		verify.PendingAt = &sendAt // TODO:GG 上层返回
+		err = v.service.OnSendOk(verify)
+	} else {
+		err = v.service.OnSendFail(verify)
+	}
 	if err != nil {
 		v.Response400("发送验证码失败", err)
 		return

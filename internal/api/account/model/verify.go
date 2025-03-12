@@ -115,9 +115,7 @@ func (v *Verify) ValidStructRules(scene valid.Scene, fn valid.FuncReportError) {
 		targetOk := false
 		switch v.AuthKind {
 		case AuthKindPhone:
-			if len(v.Target) == 1 {
-				_, _, targetOk = valid.IsPhone(v.Target[0])
-			} else if len(v.Target) == 1 {
+			if len(v.Target) == 2 {
 				_, _, targetOk = valid.IsPhoneNumber(v.Target[0], v.Target[1])
 			}
 		case AuthKindEmail:
@@ -128,7 +126,7 @@ func (v *Verify) ValidStructRules(scene valid.Scene, fn valid.FuncReportError) {
 			targetOk = false
 		}
 		if !targetOk {
-			fn(v.Target, "Target", "", "")
+			fn(v.Target, "Target", "target-check", "")
 		}
 	}
 }
@@ -138,20 +136,16 @@ func (v *Verify) ValidLocalizeRules() valid.LocalizeValidRules {
 		valid.SceneAll: valid.LocalizeValidRule{
 			Rule1: map[valid.Tag]map[valid.FieldName]valid.LocalizeValidRuleParam{
 				valid.TagRequired: {
-					"ownKind":  {"required_own_type_err", false, nil},
-					"authKind": {"required_auth_kind_err", false, nil},
-					"apply":    {"required_apply_kind_err", false, nil},
-					"target":   {"required_target_err", false, nil},
-				},
-				valid.TagFormat: {
-					"CreateAt": {"format_create_at_err", false, nil},
-					"DeleteAt": {"format_delete_at_err", false, nil},
-					"DeleteBy": {"format_delete_by_err", false, nil},
+					"OwnKind":  {"required_own_kind_err", false, nil},
+					"AuthKind": {"required_auth_kind_err", false, nil},
+					"Apply":    {"required_apply_kind_err", false, nil},
+					"Target":   {"required_target_err", false, nil},
 				},
 			}, Rule2: map[valid.Tag]valid.LocalizeValidRuleParam{
 				"own-check":        {"own_check_err", false, nil},
 				"auth-check":       {"auth_check_err", false, nil},
 				"apply-check":      {"apply_check_err", false, nil},
+				"target-check":     {"target_check_err", false, nil},
 				verifyExtraKeyBody: {"format_body_err", false, nil},
 			},
 		},
@@ -188,7 +182,7 @@ func (v *Verify) IsVerified() bool {
 	return v.Status == VerifyStatusSuccess && v.ValidAt != nil
 }
 
-// CanValid 检查是否可以验证 TODO:GG 上层实现times++
+// CanValid 检查是否可以验证
 func (v *Verify) CanValid() bool {
 	if v.Status < VerifyStatusPending || v.Status >= VerifyStatusSuccess {
 		return false
@@ -203,10 +197,10 @@ func (v *Verify) CanValid() bool {
 const (
 	verifyExtraKeyBody      = "body"      // 验证内容
 	verifyExtraKeyExpireSec = "expireSec" // 过期时间S
-	verifyExtraKeyPerSends  = "perSends"  // 发送时间范围 TODO:GG 上层实现
-	verifyExtraKeyMaxSends  = "maxSends"  // 最大发送次数 TODO:GG 上层实现
-	verifyExtraKeyPerSaves  = "perSaves"  // 保存时间范围 TODO:GG 上层实现
-	verifyExtraKeyMaxSaves  = "maxSaves"  // 最大保存次数 TODO:GG 上层实现
+	verifyExtraKeyPerSends  = "perSends"  // 发送时间范围
+	verifyExtraKeyMaxSends  = "maxSends"  // 最大发送次数
+	verifyExtraKeyPerSaves  = "perSaves"  // 保存时间范围
+	verifyExtraKeyMaxSaves  = "maxSaves"  // 最大保存次数
 	verifyExtraKeyMaxTimes  = "maxTimes"  // 最大验证次数
 )
 
@@ -218,16 +212,16 @@ func (v *Verify) GetBody() (string, bool) {
 	return v.Extra.GetString(verifyExtraKeyBody)
 }
 
+func (v *Verify) SetExpireSec(expireSec *int64) {
+	v.Extra.SetInt64(verifyExtraKeyExpireSec, expireSec)
+}
+
 func (v *Verify) GetExpireSec() int64 {
 	val, ok := v.Extra.GetInt64(verifyExtraKeyExpireSec)
 	if !ok || val <= 0 {
 		return 60 * 5 // 默认过期时间为5分
 	}
 	return val
-}
-
-func (v *Verify) SetExpireSec(expireSec *int64) {
-	v.Extra.SetInt64(verifyExtraKeyExpireSec, expireSec)
 }
 
 func (v *Verify) SetPerSends(perSends *int64) {
