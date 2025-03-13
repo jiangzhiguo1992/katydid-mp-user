@@ -12,7 +12,7 @@ type (
 	// Verify 验证内容
 	Verify struct {
 		*model.Base
-		OwnKind  TokenOwn    `json:"ownKind" validate:"required,own-check"`   // 验证平台 (组织/应用)
+		OwnKind  OwnKind     `json:"ownKind" validate:"required,own-check"`   // 验证平台 (组织/应用)
 		OwnID    *uint64     `json:"ownId"`                                   // 认证拥有者Id (组织/应用)
 		AuthKind AuthKind    `json:"authKind" validate:"required,auth-check"` // 认证类型 (手机号/邮箱/...)
 		AuthId   *uint64     `json:"authId"`                                  // 认证Id
@@ -33,7 +33,7 @@ func NewVerifyEmpty() *Verify {
 }
 
 func NewVerify(
-	ownKind TokenOwn, ownID *uint64, authKind AuthKind, authID *uint64, apply VerifyApply, target []string,
+	ownKind OwnKind, ownID *uint64, authKind AuthKind, authID *uint64, apply VerifyApply, target []string,
 ) *Verify {
 	return &Verify{
 		Base:    model.NewBase(make(data.KSMap)),
@@ -46,11 +46,13 @@ func (v *Verify) ValidFieldRules() valid.FieldValidRules {
 	return valid.FieldValidRules{
 		valid.SceneAll: valid.FieldValidRule{
 			"own-check": func(value reflect.Value, param string) bool {
-				val := value.Interface().(TokenOwn)
+				val := value.Interface().(OwnKind)
 				switch val {
-				case TokenOwnOrg,
-					TokenOwnApp,
-					TokenOwnClient:
+				case OwnKindOrg,
+					OwnKindRole,
+					OwnKindApp,
+					OwnKindClient,
+					OwnKindUser:
 					return true
 				default:
 					return false
@@ -169,12 +171,11 @@ const (
 )
 
 // IsExpired 检查验证是否已过期
-func (v *Verify) IsExpired() bool {
+func (v *Verify) IsExpired(expireSec int64) bool {
 	if v.PendingAt == nil {
 		return false
 	}
 	now := time.Now().Unix()
-	expireSec := v.GetExpireSec()
 	return (now - *v.PendingAt) >= expireSec
 }
 
@@ -184,25 +185,19 @@ func (v *Verify) IsVerified() bool {
 }
 
 // CanValid 检查是否可以验证
-func (v *Verify) CanValid() bool {
+func (v *Verify) CanValid(expireSec int64, maxValidTimes int) bool {
 	if v.Status < VerifyStatusPending || v.Status >= VerifyStatusSuccess {
 		return false
-	} else if v.IsExpired() {
+	} else if v.IsExpired(expireSec) {
 		return false
-	} else if v.ValidTimes >= v.GetMaxTimes() {
+	} else if v.ValidTimes >= maxValidTimes {
 		return false
 	}
 	return true
 }
 
 const (
-	verifyExtraKeyBody      = "body"      // 验证内容
-	verifyExtraKeyExpireSec = "expireSec" // 过期时间S
-	verifyExtraKeyPerSends  = "perSends"  // 发送时间范围
-	verifyExtraKeyMaxSends  = "maxSends"  // 最大发送次数
-	verifyExtraKeyPerSaves  = "perSaves"  // 保存时间范围
-	verifyExtraKeyMaxSaves  = "maxSaves"  // 最大保存次数
-	verifyExtraKeyMaxTimes  = "maxTimes"  // 最大验证次数
+	verifyExtraKeyBody = "body" // 验证内容
 )
 
 func (v *Verify) SetBody(body *string) {
@@ -211,76 +206,4 @@ func (v *Verify) SetBody(body *string) {
 
 func (v *Verify) GetBody() (string, bool) {
 	return v.Extra.GetString(verifyExtraKeyBody)
-}
-
-func (v *Verify) SetExpireSec(expireSec *int64) {
-	v.Extra.SetInt64(verifyExtraKeyExpireSec, expireSec)
-}
-
-func (v *Verify) GetExpireSec() int64 {
-	val, ok := v.Extra.GetInt64(verifyExtraKeyExpireSec)
-	if !ok || val <= 0 {
-		return 60 * 5 // 默认过期时间为5分
-	}
-	return val
-}
-
-func (v *Verify) SetPerSends(perSends *int64) {
-	v.Extra.SetInt64(verifyExtraKeyPerSends, perSends)
-}
-
-func (v *Verify) GetPerSends() int64 {
-	val, ok := v.Extra.GetInt64(verifyExtraKeyPerSends)
-	if !ok || val <= 0 {
-		return 60 // 默认发送时间范围为60秒
-	}
-	return val
-}
-
-func (v *Verify) SetMaxSends(sends *int) {
-	v.Extra.SetInt(verifyExtraKeyMaxSends, sends)
-}
-
-func (v *Verify) GetMaxSends() int {
-	val, ok := v.Extra.GetInt(verifyExtraKeyMaxSends)
-	if !ok || val <= 0 {
-		return 3 // 默认最大发送次数(60s)
-	}
-	return val
-}
-
-func (v *Verify) SetPerSaves(perSaves *int64) {
-	v.Extra.SetInt64(verifyExtraKeyPerSaves, perSaves)
-}
-
-func (v *Verify) GetPerSaves() int64 {
-	val, ok := v.Extra.GetInt64(verifyExtraKeyPerSaves)
-	if !ok || val <= 0 {
-		return 60 * 60 // 默认保存时间范围为1小时
-	}
-	return val
-}
-
-func (v *Verify) SetMaxSaves(saves *int) {
-	v.Extra.SetInt(verifyExtraKeyMaxSaves, saves)
-}
-
-func (v *Verify) GetMaxSaves() int {
-	val, ok := v.Extra.GetInt(verifyExtraKeyMaxSaves)
-	if !ok || val <= 0 {
-		return 5 // 默认最大保存次数(1h)
-	}
-	return val
-}
-
-func (v *Verify) SetMaxTimes(attempts *int) {
-	v.Extra.SetInt(verifyExtraKeyMaxTimes, attempts)
-}
-
-func (v *Verify) GetMaxTimes() int {
-	val, ok := v.Extra.GetInt(verifyExtraKeyMaxTimes)
-	if !ok || val <= 0 {
-		return 10 // 默认最大尝试次数(60s)
-	}
-	return val
 }

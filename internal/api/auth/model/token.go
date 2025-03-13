@@ -34,11 +34,11 @@ type (
 
 	// TokenClaims JWT的payload结构
 	TokenClaims struct {
-		TokenID   string   `json:"jti,omitempty"`       // JWT唯一标识符
-		AccountID uint64   `json:"accountId,omitempty"` // 账号ID
-		UserID    *uint64  `json:"userId,omitempty"`    // 用户ID
-		OwnKind   AuthKind `json:"ownKind,omitempty"`   // 令牌拥有者类型
-		OwnID     uint64   `json:"ownId,omitempty"`     // 令牌拥有者ID
+		TokenID   string  `json:"jti,omitempty"`       // JWT唯一标识符
+		AccountID uint64  `json:"accountId,omitempty"` // 账号ID
+		UserID    *uint64 `json:"userId,omitempty"`    // 用户ID
+		OwnKind   OwnKind `json:"ownKind,omitempty"`   // 令牌拥有者类型
+		OwnID     uint64  `json:"ownId,omitempty"`     // 令牌拥有者ID
 		// TODO:GG roles
 		jwt.RegisteredClaims `json:"-"` // 注册声明(不序列化)
 	}
@@ -46,7 +46,7 @@ type (
 
 // NewToken 创建一个新的Token实例
 func NewToken(
-	accountID uint64, userID *uint64, ownKind AuthKind, ownID uint64,
+	accountID uint64, userID *uint64, ownKind OwnKind, ownID uint64,
 	expireSec, refExpireHou int64, issuer string,
 ) *Token {
 	token := &Token{
@@ -62,7 +62,7 @@ func NewToken(
 }
 
 func NewTokenClaims(
-	accountID uint64, userID *uint64, ownKind AuthKind, ownID uint64,
+	accountID uint64, userID *uint64, ownKind OwnKind, ownID uint64,
 	expireSec int64, issuer string,
 ) *TokenClaims {
 	// 生成唯一令牌ID
