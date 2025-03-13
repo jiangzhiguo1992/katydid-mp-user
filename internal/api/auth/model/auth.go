@@ -3,7 +3,7 @@ package model
 import (
 	"errors"
 	"katydid-mp-user/internal/pkg/model"
-	"katydid-mp-user/utils"
+	"katydid-mp-user/pkg/data"
 	"time"
 )
 
@@ -15,38 +15,36 @@ var _ IAuth = (*AuthThirdParty)(nil)
 
 type (
 	IAuth interface {
-		IsEnabled() bool                     // 检查认证方式是否启用
-		IsBlocked() bool                     // 检查认证方式是否被封禁
-		IsActive() bool                      // 检查认证方式是否已激活过
-		GetAccountID() uint64                // 获取关联的账号ID
-		GetKind() AuthKind                   // 获取认证类型
-		Verify(credential any) (bool, error) // 验证认证信息
+		IsEnabled() bool      // 检查认证方式是否启用
+		IsBlocked() bool      // 检查认证方式是否被封禁
+		IsActive() bool       // 检查认证方式是否已激活过
+		GetAccountID() uint64 // 获取关联的账号ID
+		GetKind() AuthKind    // 获取认证类型
+		//Verify(credential any) bool // 验证认证信息
 	}
 
-	// Auth 可验证账号基础
+	// Auth 可验证账号基础 TODO:GG 检查唯一性
 	Auth struct {
 		*model.Base
-
-		AccountID uint64 `json:"accountId"` // 账户Id
-
-		Kind AuthKind `json:"kind"` // 认证类型
+		AccountID uint64   `json:"accountId"` // 账户Id
+		Kind      AuthKind `json:"kind"`      // 认证类型
 	}
 
 	// AuthPassword 用户名+密码
 	AuthPassword struct {
 		*Auth
-		Username string `json:"Username"` // 用户名
+		Username string `json:"username"` // 用户名
 
 		Password string `json:"omitempty" gorm:"column:password_hash"` // 密码 (md5)
-		// TODO:GG 二级密码
 	}
 
 	// AuthPhone 手机号+短信
 	AuthPhone struct {
 		*Auth
-		AreaCode string `json:"areaCode"` // 手机区号
-		Number   string `json:"number"`   // 手机号
-		Operator string `json:"operator"` // 运营商
+		Code   string `json:"code"`   // 国家区号
+		Number string `json:"number"` // 手机号
+
+		Operator *string `json:"operator"` // 运营商
 	}
 
 	// AuthEmail 邮箱+邮件
@@ -54,24 +52,23 @@ type (
 		*Auth
 		Username string `json:"username"` // 用户名
 		Domain   string `json:"domain"`   // 域名
+
+		Entity *string `json:"entity"` // 邮箱服务商 (eg:163/qq/...)
+		TLD    *string `json:"tld"`    // 顶级域名 (eg:com/cn/org/...)
 	}
 
 	// AuthBiometric 生物特征
 	AuthBiometric struct {
 		*Auth
-		// 有一个id?
-
 		Kind AuthBioKind `json:"kind"` // 生物特征类型 (eg:人脸/指纹/声纹/...)
-		// extra => credential
+		// TODO:GG 有一个id?
 	}
 
 	// AuthThirdParty 第三方账号链接
 	AuthThirdParty struct {
 		*Auth
-
-		Provider AuthTPKind `json:"provider" gorm:"index"` // 平台 (eg:微信/QQ/...)
-		OpenId   string     `json:"openId"`                // 第三方平台唯一标识
-		// extra => AccessToken,RefreshToken, ExpiredAt, UserInfo, linkId
+		Kind   AuthTPKind `json:"kind"`   // 平台 (eg:微信/QQ/...)
+		OpenId string     `json:"openId"` // 第三方平台唯一标识
 	}
 
 	// AuthKind 认证类型
@@ -93,9 +90,8 @@ func NewAuthEmpty() *Auth {
 // NewAuth 创建指定类型的认证实例
 func NewAuth(accountID uint64, kind AuthKind) *Auth {
 	return &Auth{
-		Base:      model.NewBase(make(utils.KSMap)),
-		AccountID: accountID,
-		Kind:      kind,
+		Base:      model.NewBase(make(data.KSMap)),
+		AccountID: accountID, Kind: kind,
 	}
 }
 
@@ -105,11 +101,13 @@ func NewAuthPasswordEmpty() *AuthPassword {
 	}
 }
 
-func NewAuthPassword(accountID uint64, username, password string) *AuthPassword {
+func NewAuthPassword(
+	accountID uint64,
+	username, password string,
+) *AuthPassword {
 	return &AuthPassword{
 		Auth:     NewAuth(accountID, AuthKindPassword),
-		Username: username,
-		Password: password,
+		Username: username, Password: password,
 	}
 }
 
@@ -119,11 +117,14 @@ func NewAuthPhoneEmpty() *AuthPhone {
 	}
 }
 
-func NewAuthPhone(accountID uint64, areaCode, number string) *AuthPhone {
+func NewAuthPhone(
+	accountID uint64,
+	code, number string,
+) *AuthPhone {
 	return &AuthPhone{
-		Auth:     NewAuth(accountID, AuthKindPhone),
-		AreaCode: areaCode,
-		Number:   number,
+		Auth: NewAuth(accountID, AuthKindPhone),
+		Code: code, Number: number,
+		Operator: nil,
 	}
 }
 
@@ -133,11 +134,14 @@ func NewAuthEmailEmpty() *AuthEmail {
 	}
 }
 
-func NewAuthEmail(accountID uint64, username, domain string) *AuthEmail {
+func NewAuthEmail(
+	accountID uint64,
+	username, domain string,
+) *AuthEmail {
 	return &AuthEmail{
 		Auth:     NewAuth(accountID, AuthKindEmail),
-		Username: username,
-		Domain:   domain,
+		Username: username, Domain: domain,
+		Entity: nil, TLD: nil,
 	}
 }
 
@@ -147,7 +151,10 @@ func NewAuthBiometricEmpty() *AuthBiometric {
 	}
 }
 
-func NewAuthBiometric(accountID uint64, kind AuthBioKind) *AuthBiometric {
+func NewAuthBiometric(
+	accountID uint64,
+	kind AuthBioKind,
+) *AuthBiometric {
 	return &AuthBiometric{
 		Auth: NewAuth(accountID, AuthKindBiometric),
 		Kind: kind,
@@ -160,11 +167,13 @@ func NewAuthThirdPartyEmpty() *AuthThirdParty {
 	}
 }
 
-func NewAuthThirdParty(accountID uint64, provider AuthTPKind, openId string) *AuthThirdParty {
+func NewAuthThirdParty(
+	accountID uint64,
+	kind AuthTPKind, openId string,
+) *AuthThirdParty {
 	return &AuthThirdParty{
-		Auth:     NewAuth(accountID, AuthKindThirdParty),
-		Provider: provider,
-		OpenId:   openId,
+		Auth: NewAuth(accountID, AuthKindThirdParty),
+		Kind: kind, OpenId: openId,
 	}
 }
 
@@ -217,76 +226,63 @@ func (a *Auth) GetKind() AuthKind {
 	return a.Kind
 }
 
-func (a *Auth) Verify(_ any) (bool, error) {
-	// 检查是否被阻止
-	if !a.IsEnabled() {
-		return false, errors.New("authentication disabled")
-	} else if a.IsBlocked() {
-		return false, errors.New("authentication blocked until ")
-	}
-	return true, errors.New("verify not implemented")
+func (a *Auth) Verify(_ any) bool {
+	return a.IsEnabled() && !a.IsBlocked()
 }
 
 // Verify 实现密码验证
-func (a *AuthPassword) Verify(credential any) (bool, error) {
-	ok2, err := a.Auth.Verify(nil)
-	if !ok2 || err != nil {
-		return ok2, err
+func (a *AuthPassword) Verify(credential any) bool {
+	if !a.Auth.Verify(nil) {
+		return false
 	}
-
 	cred, ok := credential.(struct {
 		Username string
 		Password string
 	})
 	if !ok {
-		return false, errors.New("invalid credential format")
+		return false
 	}
 
 	//salt, _ := a.GetPasswordSalt()
 	// 实际场景中应该使用安全的密码哈希比较
 	// 例如: hashedPassword := HashPassword(cred.Password, salt)
 	// TODO: 比较 hashedPassword 和 a.Password
-	success := a.Username == cred.Username && a.Password == cred.Password
 
-	if !success {
-		return false, errors.New("invalid username or password")
+	if (a.Username != cred.Username) || (a.Password != cred.Password) {
+		return false
 	}
-
-	return false, nil
+	return true
 }
 
 // Verify 实现手机号验证
-func (a *AuthPhone) Verify(credential any) (bool, error) {
-	ok2, err := a.Auth.Verify(nil)
-	if !ok2 || err != nil {
-		return ok2, err
+func (a *AuthPhone) Verify(credential any) bool {
+	if !a.Auth.Verify(nil) {
+		return false
 	}
-
 	cred, ok := credential.(struct {
-		AreaCode string
-		Number   string
-		Code     string
-		Verify   *Verify
+		Code   string
+		Number string
+		Body   string
 	})
 	if !ok {
-		return false, errors.New("invalid credential format")
+		return false
 	}
 
-	if a.AreaCode != cred.AreaCode || a.Number != cred.Number {
-		return false, nil
+	if (a.Code != cred.Code) || (a.Number != cred.Number) {
+		return false
 	}
-	if cred.Verify == nil {
-		return false, nil
-	}
-	body, ok := cred.Verify.GetBody()
-	if !ok || body == "" {
-		return false, nil
-	}
-	success := cred.Code == body
-	if !success {
-		return false, nil
-	}
-	return true, nil
+	// else if cred.Body == nil {
+	//	return false, nil
+	//}
+	//body, ok := cred.Verify.GetBody()
+	//if !ok || body == "" {
+	//	return false, nil
+	//}
+	//success := cred.Code == body
+	//if !success {
+	//	return false, nil
+	//}
+	return true
 }
 
 // Verify 实现邮箱验证码验证
@@ -350,13 +346,26 @@ func (a *AuthThirdParty) Verify(credential any) (bool, error) {
 	return true, nil
 }
 
+func (a *AuthPhone) PhoneNumber() string {
+	return "+" + a.Code + " " + a.Number
+}
+
 func (a *AuthEmail) EmailAddress() string {
 	return a.Username + "@" + a.Domain
 }
 
 const (
-	authExtraKeyBlockedUntil = "blockedUntil" // 阻止验证直到某个时间点(过于频繁的send)
-	authExtraKeyPasswordSalt = "passwordSalt" // 密码盐
+	authExtraKeyBlockedUntil   = "blockedUntil"   // 阻止验证直到某个时间点(过于频繁的send)
+	authExtraKeyPasswordSalt   = "passwordSalt"   // 密码盐 TODO:GG 不response
+	authExtraKeyUserSecondPwd  = "userSecondPwd"  // 二级密码 TODO:GG 不response
+	authExtraKeyUserScreenPwd  = "userScreenPwd"  // 锁屏密码 TODO:GG 不response
+	authExtraKeyPhoneUrgent    = "phoneUrgent"    // 紧急联系人 TODO:GG 不response
+	authExtraKeyBioCredential  = "bioCredential"  // 生物特征凭证 TODO:GG 不response
+	authExtraKeyTPAccessToken  = "tpAccessToken"  // 第三方平台访问令牌 TODO:GG 不response
+	authExtraKeyTPRefreshToken = "tpRefreshToken" // 刷新令牌 TODO:GG 不response
+	authExtraKeyTPExpiredAt    = "tpExpiredAt"    // 过期时间 TODO:GG 不response
+	authExtraKeyTPUserInfo     = "tpUserInfo"     // 第三方平台用户信息 TODO:GG 不response
+	authExtraKeyTPLinkId       = "tpLinkId"       // 关联ID TODO:GG 不response
 )
 
 func (a *Auth) SetBlockedUntil(blockUtilUnix *int64) {

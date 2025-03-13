@@ -3,23 +3,21 @@ package model
 import (
 	"errors"
 	"katydid-mp-user/internal/pkg/model"
-	"katydid-mp-user/utils"
+	"katydid-mp-user/pkg/data"
 	"time"
 )
 
 // Account 账号结构
 type Account struct {
 	*model.Base
-
-	UserID *uint64 `json:"userId"` // 账号拥有者Id (有些org/app不填user)
-
-	Nickname string `json:"nickname"` // 昵称 (没有user的app/org会用这个，放外面是方便搜索)
+	UserID   *uint64 `json:"userId"`   // 账号拥有者Id (有些org/app不填user)
+	Nickname string  `json:"nickname"` // 昵称 (没有user的app/org会用这个，放外面是方便搜索)
 
 	Tokens    map[TokenOwn]map[uint64]string `json:"tokens"`    // [ownID] -> token列表(jwt)
 	ActiveAts map[TokenOwn]map[uint64]int64  `json:"activeAts"` // [ownID] -> 激活组织时间集合 (最早的就是注册的平台)
-	ExpireAts map[TokenOwn]map[uint64]int64  `json:"expireAts"` // [ownID] -> token过期时间列表 -1为永久
+	ExpireAts map[TokenOwn]map[uint64]int64  `json:"expireAts"` // [ownID] -> token过期时间列表 -1为永久 TODO:GG 不信任的设备，登录会RefreshToken
 
-	Auths map[AuthKind][]*IAuth `json:"auths"` // 认证方式列表
+	Auths map[AuthKind][]IAuth `json:"auths"` // 认证方式列表
 
 	//LoginHistory  []*Entry `json:"loginHistory"`  // 登录历史(login)
 	//EntryHistory  []any    `json:"entryHistory"`  // 进入历史(entry)
@@ -32,19 +30,19 @@ func NewAccountEmpty() *Account {
 		Tokens:    make(map[TokenOwn]map[uint64]string),
 		ActiveAts: make(map[TokenOwn]map[uint64]int64),
 		ExpireAts: make(map[TokenOwn]map[uint64]int64),
-		Auths:     make(map[AuthKind][]*IAuth),
+		Auths:     make(map[AuthKind][]IAuth),
 	}
 }
 
 func NewAccount(userID *uint64, nickname string) *Account {
 	return &Account{
-		Base:      model.NewBase(make(utils.KSMap)),
+		Base:      model.NewBase(make(data.KSMap)),
 		UserID:    userID,
 		Nickname:  nickname,
 		Tokens:    make(map[TokenOwn]map[uint64]string),
 		ActiveAts: make(map[TokenOwn]map[uint64]int64),
 		ExpireAts: make(map[TokenOwn]map[uint64]int64),
-		Auths:     make(map[AuthKind][]*IAuth),
+		Auths:     make(map[AuthKind][]IAuth),
 	}
 }
 

@@ -2,8 +2,8 @@ package service
 
 import (
 	"fmt"
-	"katydid-mp-user/internal/api/account/model"
-	"katydid-mp-user/internal/api/account/repo/db"
+	"katydid-mp-user/internal/api/auth/model"
+	"katydid-mp-user/internal/api/auth/repo/db"
 	"katydid-mp-user/internal/pkg/service"
 	"katydid-mp-user/pkg/errs"
 	"katydid-mp-user/pkg/log"

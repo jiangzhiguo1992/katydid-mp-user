@@ -1,13 +1,13 @@
 package handler
 
 import (
-	"katydid-mp-user/internal/api/account/model"
-	"katydid-mp-user/internal/api/account/repo/cache"
-	"katydid-mp-user/internal/api/account/repo/db"
-	"katydid-mp-user/internal/api/account/service"
+	"katydid-mp-user/internal/api/auth/model"
+	"katydid-mp-user/internal/api/auth/repo/cache"
+	"katydid-mp-user/internal/api/auth/repo/db"
+	"katydid-mp-user/internal/api/auth/service"
 	"katydid-mp-user/internal/pkg/handler"
+	"katydid-mp-user/pkg/data"
 	"katydid-mp-user/pkg/errs"
-	"katydid-mp-user/utils"
 )
 
 type Account struct {
@@ -29,28 +29,28 @@ func NewAccount(
 }
 
 func (a *Account) Post() {
-	param := &struct {
+	bind := &struct {
 		OwnType  int     `json:"ownType" form:"ownType" binding:"required"`
 		OwnId    uint64  `json:"ownId" form:"ownId" binding:"required"`
 		Nickname string  `json:"nickname" form:"nickname"`
 		UserId   *uint64 `json:"userId" form:"userId"`
 
-		AuthKind int         `json:"authKind" form:"authKind" binding:"required"`
-		Extra    utils.KSMap `json:"extra" form:"extra" binding:"required"`
+		AuthKind int        `json:"authKind" form:"authKind" binding:"required"`
+		Extra    data.KSMap `json:"extra" form:"extra" binding:"required"`
 	}{}
-	err := a.RequestBind(param, true)
+	err := a.RequestBind(bind, true)
 	if err != nil {
 		a.Response400("", err)
 		return
 	}
-	ownKind := model.TokenOwn(rune(param.OwnType))
+	ownKind := model.TokenOwn(rune(bind.OwnType))
 	//authKind := model.TokenOwn(rune(param.AuthKind))
 
 	// TODO:GG 先check Verify？
 
 	// TODO:GG 再Add Auth?
 
-	add, err := a.service.AddAccount(ownKind, param.OwnId, param.UserId, param.Nickname, nil)
+	add, err := a.service.AddAccount(ownKind, bind.OwnId, bind.UserId, bind.Nickname, nil)
 	if err != nil {
 		a.Response400("添加account失败", err)
 		return

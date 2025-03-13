@@ -1,8 +1,8 @@
 package handler
 
 import (
-	"katydid-mp-user/internal/api/account/model"
-	"katydid-mp-user/internal/api/account/service"
+	"katydid-mp-user/internal/api/auth/model"
+	"katydid-mp-user/internal/api/auth/service"
 	"katydid-mp-user/internal/pkg/handler"
 	"time"
 )

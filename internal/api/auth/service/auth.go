@@ -1,11 +1,11 @@
 package service
 
 import (
-	"katydid-mp-user/internal/api/account/model"
+	"katydid-mp-user/internal/api/auth/model"
 	"katydid-mp-user/internal/pkg/service"
+	"katydid-mp-user/pkg/data"
 	"katydid-mp-user/pkg/errs"
 	"katydid-mp-user/pkg/log"
-	"katydid-mp-user/utils"
 )
 
 type (
@@ -62,7 +62,7 @@ func (a *Auth) Upd(instance *model.Auth) *errs.CodeErrs {
 	return nil
 }
 
-func (a *Auth) Get(kind uint16, maps utils.KSMap) (model.IAuth, *errs.CodeErrs) {
+func (a *Auth) Get(kind uint16, maps data.KSMap) (model.IAuth, *errs.CodeErrs) {
 	//	switch kind {
 	//	case model.AuthKindPwd:
 	//		if username, ok := maps.GetString("username"); ok {

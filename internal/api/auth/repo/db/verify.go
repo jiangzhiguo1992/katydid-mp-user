@@ -1,7 +1,7 @@
 package db
 
 import (
-	"katydid-mp-user/internal/api/account/model"
+	"katydid-mp-user/internal/api/auth/model"
 	"katydid-mp-user/internal/pkg/db"
 	"katydid-mp-user/pkg/errs"
 	"katydid-mp-user/pkg/log"
