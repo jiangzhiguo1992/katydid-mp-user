@@ -18,8 +18,7 @@ type (
 		DeleteAt *int64 `json:"deleteAt"`                             // 删除时间 // TODO:GG 所有的查询都带上index `gorm:"index"`
 		DeleteBy int64  `json:"deleteBy"`                             // 删除人
 
-		// unique_id
-		// foreign_id
+		// id
 		// index
 		// required
 		// stats

@@ -56,7 +56,7 @@ func (v *Verify) Post() {
 		v.Response400("发送验证码失败", err)
 		return
 	}
-	v.Response200(bind)
+	v.Response200(bind) // TODO:GG 不应该返回，只有200就行，或者过期时间,code_len等
 }
 
 func (v *Verify) Del() {

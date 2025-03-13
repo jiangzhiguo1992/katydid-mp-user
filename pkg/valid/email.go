@@ -11,6 +11,7 @@ type EmailComponents struct {
 	Address  string // Full email address
 	Username string // Local part before @
 	Domain   string // Domain part after @
+	Entity   string // Entity part (subdomain)
 	TLD      string // Top-level domain (last part of domain)
 }
 
@@ -112,11 +113,13 @@ func parseEmail(email string) (*EmailComponents, bool) {
 	}
 
 	tld := domainParts[len(domainParts)-1]
+	entity := strings.Join(domainParts[:len(domainParts)-1], ".")
 
 	return &EmailComponents{
 		Address:  email,
 		Username: username,
 		Domain:   domain,
+		Entity:   entity,
 		TLD:      tld,
 	}, true
 }

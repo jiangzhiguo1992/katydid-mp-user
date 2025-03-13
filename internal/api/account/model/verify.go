@@ -13,12 +13,11 @@ type (
 	Verify struct {
 		*model.Base
 		OwnKind  TokenOwn    `json:"ownKind" validate:"required,own-check"`   // 验证平台 (组织/应用)
+		OwnID    *uint64     `json:"ownId"`                                   // 认证拥有者Id (组织/应用)
 		AuthKind AuthKind    `json:"authKind" validate:"required,auth-check"` // 认证类型 (手机号/邮箱/...)
+		AuthId   *uint64     `json:"authId"`                                  // 认证Id
 		Apply    VerifyApply `json:"apply" validate:"required,apply-check"`   // 申请类型 (注册/登录/修改密码/...)
 		Target   []string    `json:"target" validate:"required"`              // 标识，用户名/手机号/邮箱/生物特征/第三方平台
-
-		OwnID  *uint64 `json:"ownId"`  // 认证拥有者Id (组织/应用)
-		AuthId *uint64 `json:"authId"` // 认证Id
 
 		PendingAt  *int64 `json:"pendingAt"`  // 等待时间(发送成功时间)
 		ValidAt    *int64 `json:"validAt"`    // 验证时间
@@ -34,13 +33,11 @@ func NewVerifyEmpty() *Verify {
 }
 
 func NewVerify(
-	ownKind TokenOwn, authKind AuthKind, apply VerifyApply, target []string,
-	ownID *uint64, authID *uint64,
+	ownKind TokenOwn, ownID *uint64, authKind AuthKind, authID *uint64, apply VerifyApply, target []string,
 ) *Verify {
 	return &Verify{
 		Base:    model.NewBase(make(data.KSMap)),
-		OwnKind: ownKind, AuthKind: authKind, Apply: apply, Target: target,
-		AuthId: authID, OwnID: ownID,
+		OwnKind: ownKind, OwnID: ownID, AuthKind: authKind, AuthId: authID, Apply: apply, Target: target,
 		PendingAt: nil, ValidAt: nil, ValidTimes: 0,
 	}
 }
@@ -121,6 +118,10 @@ func (v *Verify) ValidStructRules(scene valid.Scene, fn valid.FuncReportError) {
 		case AuthKindEmail:
 			if len(v.Target) == 1 {
 				_, targetOk = valid.IsEmail(v.Target[0])
+			} else if len(v.Target) == 2 {
+				if valid.IsEmailUsername(v.Target[0]) {
+					targetOk = valid.IsEmailDomain(v.Target[1])
+				}
 			}
 		default:
 			targetOk = false
