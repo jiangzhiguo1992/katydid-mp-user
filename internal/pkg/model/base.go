@@ -33,7 +33,7 @@ type (
 func NewBaseEmpty() *Base {
 	return &Base{
 		//ID: nil, // auto
-		//Status: StatusInit, // auto
+		Status: StatusInit, // auto
 		//CreateAt: time.Now().UnixMilli(), // auto
 		//UpdateAt: time.Now().UnixMilli(), // auto
 		DeleteBy: 0,
@@ -45,7 +45,7 @@ func NewBaseEmpty() *Base {
 func NewBase(extra data.KSMap) *Base {
 	return &Base{
 		//ID: nil, // auto
-		//Status: StatusInit, // auto
+		Status: StatusInit, // auto
 		//CreateAt: time.Now().UnixMilli(), // auto
 		//UpdateAt: time.Now().UnixMilli(), // auto
 		DeleteBy: 0,
