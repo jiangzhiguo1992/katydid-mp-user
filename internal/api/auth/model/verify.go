@@ -34,8 +34,10 @@ func NewVerifyEmpty() *Verify {
 func NewVerify(
 	ownKind OwnKind, ownID uint64, authKind AuthKind, apply VerifyApply, target []string,
 ) *Verify {
+	base := model.NewBase(make(data.KSMap))
+	base.Status = VerifyStatusInit
 	return &Verify{
-		Base:    model.NewBase(make(data.KSMap)),
+		Base:    base,
 		OwnKind: ownKind, OwnID: ownID, AuthKind: authKind, Apply: apply, Target: target,
 		PendingAt: nil, ValidAt: nil, ValidTimes: 0,
 	}
@@ -153,6 +155,7 @@ func (v *Verify) ValidLocalizeRules() valid.LocalizeValidRules {
 }
 
 const (
+	VerifyStatusInit    model.Status = 0 // 初始状态
 	VerifyStatusPending model.Status = 1 // 等待验证
 	VerifyStatusReject  model.Status = 2 // 验证失败
 	VerifyStatusSuccess model.Status = 3 // 验证成功

@@ -21,6 +21,7 @@ type (
 		RefreshTokenExpireAts map[OwnKind]map[uint64]int64  `json:"refExpireAts"`  // [OwnKind][OwnID] -> refreshToken过期时间列表 -1为永久
 
 		Auths map[AuthKind][]IAuth `json:"auths,omitempty"` // 认证方式列表 TODO:GG 没有auths了之后，就是unActive了
+		// roles TODO:GG 放在extra还是这里外键关联？
 		//LoginHistory  []*Entry `json:"loginHistory"`  // 登录历史(login)
 		//EntryHistory  []any    `json:"entryHistory"`  // 进入历史(entry)
 		//AccessHistory []any    `json:"accessHistory"` // 访问历史(api)
@@ -41,8 +42,10 @@ func NewAccountEmpty() *Account {
 func NewAccount(
 	ownKind OwnKind, ownID uint64, userID *uint64, nickname string,
 ) *Account {
+	base := model.NewBase(make(data.KSMap))
+	base.Status = AccountStatusInit
 	return &Account{
-		Base:    model.NewBase(make(data.KSMap)),
+		Base:    base,
 		OwnKind: ownKind, OwnID: ownID, UserID: userID, Nickname: nickname,
 		Tokens:                make(map[OwnKind]map[uint64]string),
 		TokenExpireAts:        make(map[OwnKind]map[uint64]int64),
@@ -53,15 +56,31 @@ func NewAccount(
 }
 
 const (
-	AccountStatusBanned model.Status = -2 // 封禁 (不能访问任何api)
-	AccountStatusLocked model.Status = -1 // 锁定 (不能登录)
-	AccountStatusInit   model.Status = 0  // 初始
-	AccountStatusActive model.Status = 1  // 激活 (必须有附带一个认证才能创建)
+	AccountStatusBanned     model.Status = -3 // 封禁 (不能获取到，不能访问任何api，包括注销/注册)
+	AccountStatusUnRegister model.Status = -2 // 注销 (不能获取到，可以重新注册)
+	AccountStatusLocked     model.Status = -1 // 锁定 (能获取到，暂时锁定，不能登录)
+	AccountStatusInit       model.Status = 0  // 初始 (未激活状态)
+	AccountStatusActive     model.Status = 1  // 激活 (能访问api，必须有附带requires认证才能创建)
 )
+
+// CanRegister 可否注册
+func (a *Account) CanRegister() bool {
+	return a.Status > AccountStatusBanned
+}
+
+// IsUnRegister 是否注销
+func (a *Account) IsUnRegister() bool {
+	return a.Status <= AccountStatusUnRegister
+}
 
 // CanLogin 可否登录
 func (a *Account) CanLogin() bool {
 	return a.Status > AccountStatusLocked
+}
+
+// IsNeedAuth 是否需要认证
+func (a *Account) IsNeedAuth() bool {
+	return a.Status == AccountStatusInit
 }
 
 // CanAccess 可否访问
@@ -157,13 +176,10 @@ func (a *Account) IsRefreshTokenExpired(ownKind OwnKind, ownID uint64) bool {
 
 // GenerateTokens 为账号生成token
 func (a *Account) GenerateTokens(
-	ownKind OwnKind, ownID uint64, issuer string,
-	jwtSecret string, expireSec, refExpireHou int64,
+	ownKind OwnKind, ownID uint64,
+	issuer string, jwtSecret string,
+	expireSec, refExpireHou int64,
 ) (*Token, bool) {
-	// 检查账号状态 TODO:GG 移到service?
-	if !a.CanLogin() {
-		return nil, false
-	}
 	// 旧的token
 	oldToken, _ := a.GetToken(ownKind, ownID)
 	// 创建新的Token
@@ -188,8 +204,9 @@ func (a *Account) GenerateTokens(
 
 // ValidateToken 验证token/refreshToken
 func (a *Account) ValidateToken(
-	ownKind OwnKind, ownID uint64, token string,
-	jwtSecret string, checkExpire bool,
+	ownKind OwnKind, ownID uint64,
+	token string, jwtSecret string,
+	checkExpire bool,
 ) (*TokenClaims, bool) {
 	// 检查账号状态 TODO:GG 移到service?
 	if !a.CanAccess() {

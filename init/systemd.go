@@ -16,8 +16,8 @@ func init() {
 	if e != nil {
 		panic(e)
 	}
-	//configs.Subscribe("account.enable", func(v any) {
-	//	slog.Info("reload account.enable", slog.Any("v", v))
+	//configs.Subscribe("auth.enable", func(v any) {
+	//	slog.Info("reload auth.enable", slog.Any("v", v))
 	//}) // TODO:GG 订阅reload
 
 	// logger
@@ -47,7 +47,7 @@ func init() {
 		log.Error(msg)
 	})
 
-	// perm
+	// role
 	perm.Init(&perm.Config{
 		LogEnable: true,
 	})
