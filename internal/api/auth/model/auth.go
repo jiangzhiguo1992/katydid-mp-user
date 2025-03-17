@@ -10,6 +10,7 @@ var _ IAuth = (*AuthCellphone)(nil)
 var _ IAuth = (*AuthEmail)(nil)
 
 type (
+	// IAuth 认证接口
 	IAuth interface {
 		IsBlocked() bool    // 检查认证方式是否被封禁
 		IsEnabled() bool    // 检查认证方式是否启用

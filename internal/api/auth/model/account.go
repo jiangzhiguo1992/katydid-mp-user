@@ -110,7 +110,7 @@ func (a *Account) GetAuthKinds() []AuthKind {
 	return kinds
 }
 
-// AddRole 添加角色
+// AddRole 添加角色 TODO:GG 在这里?
 func (a *Account) AddRole(role string) {
 	roles, ok := a.GetRoles()
 	if !ok {
@@ -126,7 +126,7 @@ func (a *Account) AddRole(role string) {
 	a.SetRoles(&roles)
 }
 
-// HasRole 检查是否拥有指定角色
+// HasRole 检查是否拥有指定角色 TODO:GG 在这里?
 func (a *Account) HasRole(role string) bool {
 	roles, ok := a.GetRoles()
 	if !ok {
