@@ -85,8 +85,8 @@ func (a *Account) ValidLocalizeRules() valid.LocalizeValidRules {
 		valid.SceneAll: valid.LocalizeValidRule{
 			Rule1: map[valid.Tag]map[valid.FieldName]valid.LocalizeValidRuleParam{
 				valid.TagRequired: {
-					"OwnKind": {"format_account_own_kind_err", false, nil},
-					"OwnID":   {"format_account_own_id_err", false, nil},
+					"OwnKind": {"required_account_own_kind_err", false, nil},
+					"OwnID":   {"required_account_own_id_err", false, nil},
 				},
 			}, Rule2: map[valid.Tag]valid.LocalizeValidRuleParam{
 				"range-own":       {"range_account_own_err", false, nil},

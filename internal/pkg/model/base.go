@@ -107,9 +107,9 @@ func (b *Base) ValidLocalizeRules() valid.LocalizeValidRules {
 				valid.TagFormat:   {},
 				valid.TagRange:    {},
 				valid.TagCheck: {
-					"CreateAt": {"format_create_at_err", false, nil},
-					"DeleteAt": {"format_delete_at_err", false, nil},
-					"DeleteBy": {"format_delete_by_err", false, nil},
+					"CreateAt": {"check_create_at_err", false, nil},
+					"DeleteAt": {"check_delete_at_err", false, nil},
+					"DeleteBy": {"check_delete_by_err", false, nil},
 				},
 			}, Rule2: map[valid.Tag]valid.LocalizeValidRuleParam{
 				extraKeyAdminNote: {"format_admin_note_err", false, nil},

@@ -4,6 +4,7 @@ import (
 	"crypto/rand"
 	"encoding/base64"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
@@ -161,4 +162,33 @@ func ParseJWT(tokenStr string, secret string, checkExpire bool) (*TokenClaims, e
 		return claims, nil
 	}
 	return nil, fmt.Errorf("无效的token结构")
+}
+
+// IsTokenFormat 检查格式 (header.payload.signature)
+func IsTokenFormat(tokenStr string) bool {
+	// 检查是否为空
+	if tokenStr == "" {
+		return false
+	}
+
+	// 检查是否包含两个点分隔符
+	parts := strings.Split(tokenStr, ".")
+	if len(parts) != 3 {
+		return false
+	}
+
+	// 检查每个部分是否不为空
+	for _, part := range parts {
+		if part == "" {
+			return false
+		}
+
+		// 检查每个部分是否是有效的base64URL编码
+		if _, err := base64.RawURLEncoding.DecodeString(part); err != nil {
+			// 注意：签名部分可能有填充，所以这里的验证不是完全严格的
+			// 实际应用中可能需要更精确的验证
+			return false
+		}
+	}
+	return true
 }
