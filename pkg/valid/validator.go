@@ -19,6 +19,7 @@ const (
 
 	TagRequired Tag = "required"
 	TagFormat   Tag = "format"
+	TagRange    Tag = "range"
 	TagCheck    Tag = "check"
 )
 

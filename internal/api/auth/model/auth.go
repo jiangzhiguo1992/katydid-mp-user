@@ -32,7 +32,7 @@ type (
 	// Auth 可验证账号基础
 	Auth struct {
 		*model.Base
-		Kind   AuthKind `json:"kind" validate:"required,kind-check"` // 认证类型
+		Kind   AuthKind `json:"kind" validate:"required,check-kind"` // 认证类型
 		UserID *uint64  `json:"userId"`                              // 认证用户Id (有些org/app不填user，这里是第一绑定)
 
 		// implements
@@ -44,7 +44,7 @@ type (
 	// AuthPassword 用户名+密码
 	AuthPassword struct {
 		*Auth
-		Username *string `json:"username" validate:"required,username-format"` // 用户名(可能为空)
+		Username *string `json:"username" validate:"required,format-username"` // 用户名(可能为空)
 
 		PasswordMD5 string `json:"omitempty" validate:"required"` // 密码
 	}
@@ -52,8 +52,8 @@ type (
 	// AuthCellphone 移动手机号+短信
 	AuthCellphone struct {
 		*Auth
-		Code   string `json:"code" validate:"required,code-range"`      // 国家区号
-		Number string `json:"number" validate:"required,number-format"` // 手机号
+		Code   string `json:"code" validate:"required,range-code"` // 国家区号
+		Number string `json:"number" validate:"required"`          // 手机号
 
 		Operator *string `json:"operator"` // 运营商
 	}
@@ -61,8 +61,8 @@ type (
 	// AuthEmail 邮箱+邮件
 	AuthEmail struct {
 		*Auth
-		Username string `json:"username" validate:"required,username-format"` // 用户名
-		Domain   string `json:"domain" validate:"required,domain-format"`     // 域名
+		Username string `json:"username" validate:"required,format-username"` // 用户名
+		Domain   string `json:"domain" validate:"required,format-domain"`     // 域名
 
 		Entity *string `json:"entity"` // 邮箱服务商 (eg:163/qq/...)
 		TLD    *string `json:"tld"`    // 顶级域名 (eg:com/cn/org/...)
@@ -81,19 +81,30 @@ func NewAuthEmpty() *Auth {
 	}
 }
 
-// NewAuth 创建指定类型的认证实例
+func NewAuthPasswordEmpty() *AuthPassword {
+	return &AuthPassword{
+		Auth: NewAuthEmpty(),
+	}
+}
+
+func NewAuthCellphoneEmpty() *AuthCellphone {
+	return &AuthCellphone{
+		Auth: NewAuthEmpty(),
+	}
+}
+
+func NewAuthEmailEmpty() *AuthEmail {
+	return &AuthEmail{
+		Auth: NewAuthEmpty(),
+	}
+}
+
 func NewAuth(kind AuthKind) *Auth {
 	base := model.NewBase(make(data.KSMap))
 	base.Status = AuthStatusInit
 	return &Auth{
 		Base: base,
 		Kind: kind,
-	}
-}
-
-func NewAuthPasswordEmpty() *AuthPassword {
-	return &AuthPassword{
-		Auth: NewAuthEmpty(),
 	}
 }
 
@@ -106,25 +117,13 @@ func NewAuthPassword(
 	}
 }
 
-func NewAuthPhoneEmpty() *AuthCellphone {
-	return &AuthCellphone{
-		Auth: NewAuthEmpty(),
-	}
-}
-
-func NewAuthPhone(
+func NewAuthCellphone(
 	code, number string,
 ) *AuthCellphone {
 	return &AuthCellphone{
 		Auth: NewAuth(AuthKindCellphone),
 		Code: code, Number: number,
 		Operator: nil,
-	}
-}
-
-func NewAuthEmailEmpty() *AuthEmail {
-	return &AuthEmail{
-		Auth: NewAuthEmpty(),
 	}
 }
 
@@ -142,12 +141,12 @@ func (a *AuthPassword) ValidFieldRules() valid.FieldValidRules {
 	return valid.FieldValidRules{
 		valid.SceneAll: valid.FieldValidRule{
 			// 认证类型
-			"kind-check": func(value reflect.Value, param string) bool {
+			"check-kind": func(value reflect.Value, param string) bool {
 				val := value.Interface().(AuthKind)
 				return val == AuthKindPassword
 			},
 			// 用户名
-			"username-format": func(value reflect.Value, param string) bool {
+			"format-username": func(value reflect.Value, param string) bool {
 				val := value.Interface().(string)
 				// 长度检查：3-30个字符
 				if len(val) < 3 || len(val) > 30 {
@@ -192,6 +191,46 @@ func (a *AuthPassword) ValidFieldRules() valid.FieldValidRules {
 	}
 }
 
+func (a *AuthCellphone) ValidFieldRules() valid.FieldValidRules {
+	return valid.FieldValidRules{
+		valid.SceneAll: valid.FieldValidRule{
+			// 认证类型
+			"check-kind": func(value reflect.Value, param string) bool {
+				val := value.Interface().(AuthKind)
+				return val == AuthKindCellphone
+			},
+			// 手机区号
+			"range-code": func(value reflect.Value, param string) bool {
+				val := value.Interface().(string)
+				_, ok := valid.IsPhoneCountryCode(val)
+				return ok
+			},
+		},
+	}
+}
+
+func (a *AuthEmail) ValidFieldRules() valid.FieldValidRules {
+	return valid.FieldValidRules{
+		valid.SceneAll: valid.FieldValidRule{
+			// 认证类型
+			"kind-check": func(value reflect.Value, param string) bool {
+				val := value.Interface().(AuthKind)
+				return val == AuthKindEmail
+			},
+			// 邮箱用户名
+			"format-username": func(value reflect.Value, param string) bool {
+				val := value.Interface().(string)
+				return valid.IsEmailUsername(val)
+			},
+			// 邮箱域名
+			"format-domain": func(value reflect.Value, param string) bool {
+				val := value.Interface().(string)
+				return valid.IsEmailDomain(val)
+			},
+		},
+	}
+}
+
 func (a *AuthPassword) ValidExtraRules() (data.KSMap, valid.ExtraValidRules) {
 	return a.Extra, valid.ExtraValidRules{
 		valid.SceneSave: map[valid.Tag]valid.ExtraValidRuleInfo{
@@ -210,19 +249,67 @@ func (a *AuthPassword) ValidExtraRules() (data.KSMap, valid.ExtraValidRules) {
 	}
 }
 
+func (a *AuthCellphone) ValidStructRules(scene valid.Scene, fn valid.FuncReportError) {
+	switch scene {
+	case valid.SceneAll:
+		_, _, ok := valid.IsPhoneNumber(a.Code, a.Number)
+		if !ok {
+			fn(a.Number, "Number", valid.TagFormat, "")
+		}
+	}
+}
+
 func (a *AuthPassword) ValidLocalizeRules() valid.LocalizeValidRules {
 	return valid.LocalizeValidRules{
 		valid.SceneAll: valid.LocalizeValidRule{
 			Rule1: map[valid.Tag]map[valid.FieldName]valid.LocalizeValidRuleParam{
 				valid.TagRequired: {
 					"AuthKind":    {"required_auth_kind_err", false, nil},
-					"Username":    {"required_username_err", false, nil},
-					"PasswordMD5": {"required_password_err", false, nil},
+					"Username":    {"required_auth_username_err", false, nil},
+					"PasswordMD5": {"required_auth_password_err", false, nil},
 				},
 			}, Rule2: map[valid.Tag]valid.LocalizeValidRuleParam{
-				"kind-check":             {"kind_check_err", false, nil},
-				"username-format":        {"username_format_err", false, nil},
-				authExtraKeyPasswordSalt: {"pwd_salt_check_err", false, nil},
+				"check-kind":             {"check_auth_kind_err", false, nil},
+				"format-username":        {"format_auth_username_err", false, nil},
+				authExtraKeyPasswordSalt: {"require_auth_password_salt_err", false, nil},
+			},
+		},
+	}
+}
+
+func (a *AuthCellphone) ValidLocalizeRules() valid.LocalizeValidRules {
+	return valid.LocalizeValidRules{
+		valid.SceneAll: valid.LocalizeValidRule{
+			Rule1: map[valid.Tag]map[valid.FieldName]valid.LocalizeValidRuleParam{
+				valid.TagRequired: {
+					"AuthKind": {"required_auth_kind_err", false, nil},
+					"Code":     {"required_auth_cellphone_code_err", false, nil},
+					"Number":   {"required_auth_cellphone_number_err", false, nil},
+				},
+				valid.TagFormat: {
+					"Number": {"format_auth_cellphone_number_err", false, nil},
+				},
+			}, Rule2: map[valid.Tag]valid.LocalizeValidRuleParam{
+				"check-kind": {"check_auth_kind_err", false, nil},
+				"range-code": {"range_auth_cellphone_code_err", false, nil},
+			},
+		},
+	}
+}
+
+func (a *AuthEmail) ValidLocalizeRules() valid.LocalizeValidRules {
+	return valid.LocalizeValidRules{
+		valid.SceneAll: valid.LocalizeValidRule{
+			Rule1: map[valid.Tag]map[valid.FieldName]valid.LocalizeValidRuleParam{
+				valid.TagRequired: {
+					"AuthKind": {"required_auth_kind_err", false, nil},
+					"Username": {"required_auth_email_username_err", false, nil},
+					"Domain":   {"required_auth_email_domain_err", false, nil},
+				},
+			}, Rule2: map[valid.Tag]valid.LocalizeValidRuleParam{
+				"check-kind":      {"check_auth_kind_err", false, nil},
+				"format-username": {"format_auth_email_username_err", false, nil},
+				"format-domain":   {"format_auth_email_domain_err", false, nil},
 			},
 		},
 	}
