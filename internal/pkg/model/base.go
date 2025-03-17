@@ -128,6 +128,14 @@ const (
 	deleteByAdminOffset = -10000 // 系统管理员删除偏移量
 )
 
+func (b *Base) IsBlack() bool {
+	return b.Status <= StatusBlack
+}
+
+func (b *Base) IsWhite() bool {
+	return b.Status >= StatusWhite
+}
+
 func (b *Base) CreatedTime() time.Time {
 	return time.UnixMilli(b.CreateAt)
 }

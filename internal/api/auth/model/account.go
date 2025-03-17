@@ -80,24 +80,6 @@ func (a *Account) ValidFieldRules() valid.FieldValidRules {
 	}
 }
 
-func (a *Account) ValidExtraRules() (data.KSMap, valid.ExtraValidRules) {
-	return a.Extra, valid.ExtraValidRules{
-		valid.SceneAll: map[valid.Tag]valid.ExtraValidRuleInfo{
-			// 状态原因
-			accExtraKeyStatusReason: {
-				Field: accExtraKeyStatusReason,
-				ValidFn: func(value any) bool {
-					val, ok := value.(string)
-					if !ok {
-						return false
-					}
-					return len(val) <= 1_000
-				},
-			},
-		},
-	}
-}
-
 func (a *Account) ValidLocalizeRules() valid.LocalizeValidRules {
 	return valid.LocalizeValidRules{
 		valid.SceneAll: valid.LocalizeValidRule{
@@ -107,10 +89,9 @@ func (a *Account) ValidLocalizeRules() valid.LocalizeValidRules {
 					"OwnID":   {"format_account_own_id_err", false, nil},
 				},
 			}, Rule2: map[valid.Tag]valid.LocalizeValidRuleParam{
-				"range-own":             {"range_account_own_err", false, nil},
-				"format-number":         {"format_account_number_err", false, nil},
-				"format-nickname":       {"format_account_nickname_err", false, nil},
-				accExtraKeyStatusReason: {"range_account_status_reason_err", false, nil},
+				"range-own":       {"range_account_own_err", false, nil},
+				"format-number":   {"format_account_number_err", false, nil},
+				"format-nickname": {"format_account_nickname_err", false, nil},
 			},
 		},
 	}
@@ -219,11 +200,9 @@ func (a *Account) HasRole(role string) bool {
 }
 
 const (
-	accExtraKeyAvatarID     = "avatarId"     // 头像ID
-	accExtraKeyAvatarUrl    = "avatarUrl"    // 头像URL
-	accExtraKeyStatusAt     = "statusAt"     // 状态时间
-	accExtraKeyStatusReason = "statusReason" // 状态原因
-	accExtraKeyRoles        = "roles"        // 角色列表 (默认只有org下的用户有) TODO:GG 放在extra？还是这里外键关联？还是不放？
+	accExtraKeyAvatarID  = "avatarId"  // 头像ID
+	accExtraKeyAvatarUrl = "avatarUrl" // 头像URL
+	accExtraKeyRoles     = "roles"     // 角色列表 (默认只有org下的用户有) TODO:GG 放在extra？还是这里外键关联？还是不放？
 )
 
 func (a *Account) SetAvatarID(avatarId *int64) {
@@ -240,22 +219,6 @@ func (a *Account) SetAvatarUrl(avatarUrl *string) {
 
 func (a *Account) GetAvatarUrl() (string, bool) {
 	return a.Extra.GetString(accExtraKeyAvatarUrl)
-}
-
-func (a *Account) SetStatusAt(statusAt *int64) {
-	a.Extra.SetInt64(accExtraKeyStatusAt, statusAt)
-}
-
-func (a *Account) GetStatusAt() (int64, bool) {
-	return a.Extra.GetInt64(accExtraKeyStatusAt)
-}
-
-func (a *Account) SetStatusReason(reason *string) {
-	a.Extra.SetString(accExtraKeyStatusReason, reason)
-}
-
-func (a *Account) GetStatusReason() (string, bool) {
-	return a.Extra.GetString(accExtraKeyStatusReason)
 }
 
 func (a *Account) SetRoles(roles *[]string) {

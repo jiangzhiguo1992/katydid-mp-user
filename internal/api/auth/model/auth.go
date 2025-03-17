@@ -101,7 +101,7 @@ func NewAuthEmailEmpty() *AuthEmail {
 
 func NewAuth(kind AuthKind) *Auth {
 	base := model.NewBase(make(data.KSMap))
-	base.Status = AuthStatusInit
+	base.Status = model.StatusInit
 	return &Auth{
 		Base: base,
 		Kind: kind,
@@ -317,10 +317,6 @@ func (a *AuthEmail) ValidLocalizeRules() valid.LocalizeValidRules {
 }
 
 const (
-	AuthStatusBlock  model.Status = -1 // 封禁状态
-	AuthStatusInit   model.Status = 0  // 初始状态
-	AuthStatusActive model.Status = 1  // 激活状态
-
 	OwnKindOrg    OwnKind = 10 // 组织
 	OwnKindRole   OwnKind = 11 // 角色
 	OwnKindApp    OwnKind = 20 // 应用
@@ -343,15 +339,15 @@ const (
 )
 
 func (a *Auth) IsBlocked() bool {
-	return a.Status <= AuthStatusBlock
+	return a.IsBlack()
 }
 
 func (a *Auth) IsEnabled() bool {
-	return a.Status >= AuthStatusInit
+	return a.Status >= model.StatusInit
 }
 
 func (a *Auth) IsActive() bool {
-	return a.Status >= AuthStatusActive
+	return a.IsWhite()
 }
 
 func (a *Auth) GetKind() AuthKind {
@@ -367,8 +363,8 @@ func (a *Auth) SetAccount(account *Account) {
 		a.Accounts[account.OwnKind] = make(map[uint64]*Account)
 	}
 	a.Accounts[account.OwnKind][account.ID] = account
-	if a.Status < AuthStatusActive {
-		a.Status = AuthStatusActive
+	if (a.Status >= model.StatusInit) && (a.Status < model.StatusWhite) {
+		a.Status = model.StatusWhite
 	}
 	if account.Auths[a.Kind] == nil {
 		account.AddAuth(a)
@@ -382,8 +378,8 @@ func (a *Auth) DelAccount(account *Account) {
 			delete(a.Accounts, account.OwnKind)
 		}
 	}
-	if (a.Status >= AuthStatusActive) && (len(a.Accounts) == 0) {
-		a.Status = AuthStatusInit
+	if (a.Status >= model.StatusWhite) && (len(a.Accounts) == 0) {
+		a.Status = model.StatusInit
 	}
 	if account.Auths[a.Kind] != nil {
 		account.DelAuth(a)
