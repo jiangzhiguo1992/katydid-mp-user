@@ -62,7 +62,7 @@ func (v *Verify) ValidFieldRules() valid.FieldValidRules {
 			"auth-check": func(value reflect.Value, param string) bool {
 				val := value.Interface().(AuthKind)
 				switch val {
-				case AuthKindPhone,
+				case AuthKindCellphone,
 					AuthKindEmail,
 					AuthKindBiometric,
 					AuthKindThirdParty:
@@ -114,11 +114,11 @@ func (v *Verify) ValidStructRules(scene valid.Scene, fn valid.FuncReportError) {
 	case valid.SceneAll:
 		targetOk := false
 		switch v.AuthKind {
-		case AuthKindPhone:
+		case AuthKindCellphone: // TODO:GG DB存{"cellphone:86_12345678901"}
 			if len(v.Target) == 2 {
 				_, _, targetOk = valid.IsPhoneNumber(v.Target[0], v.Target[1])
 			}
-		case AuthKindEmail:
+		case AuthKindEmail: // TODO:GG DB存{"email:address@domain"}
 			if len(v.Target) == 2 {
 				if valid.IsEmailUsername(v.Target[0]) {
 					targetOk = valid.IsEmailDomain(v.Target[1])
