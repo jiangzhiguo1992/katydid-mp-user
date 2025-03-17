@@ -61,7 +61,7 @@ func (v *Verify) ValidFieldRules() valid.FieldValidRules {
 				}
 			},
 			// 认证类型
-			"rangeauth": func(value reflect.Value, param string) bool {
+			"range-auth": func(value reflect.Value, param string) bool {
 				val := value.Interface().(AuthKind)
 				switch val {
 				case AuthKindCellphone,

@@ -78,7 +78,7 @@ func (b *Base) ValidExtraRules() (data.KSMap, valid.ExtraValidRules) {
 					if !ok {
 						return false
 					}
-					return len(val) <= 10000
+					return len(val) <= 10_000
 				},
 			},
 		},

@@ -3,21 +3,24 @@ package model
 import (
 	"katydid-mp-user/internal/pkg/model"
 	"katydid-mp-user/pkg/data"
+	"katydid-mp-user/pkg/valid"
+	"reflect"
 )
 
 type (
 	// Account 账号结构
 	Account struct {
 		*model.Base
-		OwnKind  OwnKind `json:"ownKind"`  // 账号拥有者类型(注册的)
-		OwnID    uint64  `json:"ownId"`    // 账号拥有者ID(注册的)
-		Nickname string  `json:"nickname"` // 昵称 (没有user的app/org会用这个，放外面是方便搜索)
+		OwnKind  OwnKind `json:"ownKind" validate:"required,range-own"` // 账号拥有者类型(注册的)
+		OwnID    uint64  `json:"ownId" validate:"required"`             // 账号拥有者ID(注册的)
+		Number   *uint64 `json:"number" validate:"format-number"`       // 账号标识 (自定义数字，防止暴露ID)
+		Nickname *string `json:"nickname" validate:"format-nickname"`   // 昵称 (没有user的app/org会用这个，放外面是方便搜索)
 
 		Auths map[AuthKind]IAuth `json:"auths,omitempty"` // 认证方式列表 (多对多)
 
-		//LoginHistory  []*Entry `json:"loginHistory"`  // 登录历史(login)
-		//EntryHistory  []any    `json:"entryHistory"`  // 进入历史(entry)
-		//AccessHistory []any    `json:"accessHistory"` // 访问历史(api)
+		LoginHistory  []any `json:"loginHistory"`  // 登录历史(login)
+		EntryHistory  []any `json:"entryHistory"`  // 进入历史(entry)
+		AccessHistory []any `json:"accessHistory"` // 访问历史(api)
 	}
 )
 
@@ -29,14 +32,87 @@ func NewAccountEmpty() *Account {
 }
 
 func NewAccount(
-	ownKind OwnKind, ownID uint64, nickname string,
+	ownKind OwnKind, ownID uint64, number *uint64, nickname *string,
 ) *Account {
 	base := model.NewBase(make(data.KSMap))
 	base.Status = AccountStatusInit
 	return &Account{
 		Base:    base,
-		OwnKind: ownKind, OwnID: ownID, Nickname: nickname,
+		OwnKind: ownKind, OwnID: ownID, Number: number, Nickname: nickname,
 		Auths: make(map[AuthKind]IAuth),
+	}
+}
+
+func (a *Account) ValidFieldRules() valid.FieldValidRules {
+	return valid.FieldValidRules{
+		valid.SceneAll: valid.FieldValidRule{
+			// 所属类型
+			"range-own": func(value reflect.Value, param string) bool {
+				val := value.Interface().(OwnKind)
+				switch val {
+				case OwnKindOrg,
+					OwnKindRole,
+					OwnKindApp,
+					OwnKindClient,
+					OwnKindUser:
+					return true
+				default:
+					return false
+				}
+			},
+			// 账号标识
+			"format-number": func(value reflect.Value, param string) bool {
+				val := value.Interface().(*uint64)
+				if val == nil {
+					return true
+				}
+				return *val > 1_000_000
+			},
+			// 昵称
+			"format-nickname": func(value reflect.Value, param string) bool {
+				val := value.Interface().(*string)
+				if val == nil {
+					return true
+				}
+				return (len(*val) >= 3) && (len(*val) <= 100)
+			},
+		},
+	}
+}
+
+func (a *Account) ValidExtraRules() (data.KSMap, valid.ExtraValidRules) {
+	return a.Extra, valid.ExtraValidRules{
+		valid.SceneAll: map[valid.Tag]valid.ExtraValidRuleInfo{
+			// 状态原因
+			accExtraKeyStatusReason: {
+				Field: accExtraKeyStatusReason,
+				ValidFn: func(value any) bool {
+					val, ok := value.(string)
+					if !ok {
+						return false
+					}
+					return len(val) <= 1_000
+				},
+			},
+		},
+	}
+}
+
+func (a *Account) ValidLocalizeRules() valid.LocalizeValidRules {
+	return valid.LocalizeValidRules{
+		valid.SceneAll: valid.LocalizeValidRule{
+			Rule1: map[valid.Tag]map[valid.FieldName]valid.LocalizeValidRuleParam{
+				valid.TagFormat: {
+					"OwnKind": {"format_account_own_kind_err", false, nil},
+					"OwnID":   {"format_account_own_id_err", false, nil},
+				},
+			}, Rule2: map[valid.Tag]valid.LocalizeValidRuleParam{
+				"range-own":             {"range_account_own_err", false, nil},
+				"format-number":         {"format_account_number_err", false, nil},
+				"format-nickname":       {"format_account_nickname_err", false, nil},
+				accExtraKeyStatusReason: {"range_account_status_reason_err", false, nil},
+			},
+		},
 	}
 }
 
@@ -73,6 +149,7 @@ func (a *Account) CanAccess() bool {
 	return a.Status >= AccountStatusActive
 }
 
+// AddAuth 添加认证方式
 func (a *Account) AddAuth(auth IAuth) {
 	if a.Auths == nil {
 		a.Auths = make(map[AuthKind]IAuth)
@@ -84,6 +161,7 @@ func (a *Account) AddAuth(auth IAuth) {
 	a.Auths[auth.GetKind()].SetAccount(a)
 }
 
+// DelAuth 删除认证方式
 func (a *Account) DelAuth(auth IAuth) {
 	if a.Auths == nil {
 		return

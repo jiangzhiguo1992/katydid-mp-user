@@ -254,6 +254,7 @@ func (a *AuthCellphone) ValidStructRules(scene valid.Scene, fn valid.FuncReportE
 	case valid.SceneAll:
 		_, _, ok := valid.IsPhoneNumber(a.Code, a.Number)
 		if !ok {
+			// 手机区号+号码
 			fn(a.Number, "Number", valid.TagFormat, "")
 		}
 	}
@@ -409,10 +410,12 @@ func (a *Auth) GetVerify(apply VerifyApply) *Verify {
 	return nil
 }
 
+// FullNumber 返回完整的手机号
 func (a *AuthCellphone) FullNumber() string {
 	return "+" + a.Code + " " + a.Number
 }
 
+// EmailAddress 返回邮箱地址
 func (a *AuthEmail) EmailAddress() string {
 	return a.Username + "@" + a.Domain
 }
