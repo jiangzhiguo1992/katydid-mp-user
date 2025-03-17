@@ -1,4 +1,4 @@
-package model
+package auth
 
 import (
 	"crypto/rand"
@@ -12,7 +12,6 @@ import (
 const (
 	TokenKindBasic  TokenKind = "Basic"  // Basic令牌类型
 	TokenKindBearer TokenKind = "Bearer" // Bearer令牌类型
-	TokenKindJWT    TokenKind = "JWT"    // JWT令牌类型
 )
 
 type (
@@ -37,7 +36,7 @@ type (
 	TokenClaims struct {
 		TokenID string `json:"jti,omitempty"` // JWT唯一标识符
 
-		OwnKind   OwnKind `json:"ownKind,omitempty"`   // 令牌拥有者类型
+		OwnKind   int16   `json:"ownKind,omitempty"`   // 令牌拥有者类型
 		OwnID     uint64  `json:"ownId,omitempty"`     // 令牌拥有者ID
 		AccountID uint64  `json:"accountId,omitempty"` // 账号ID
 		UserID    *uint64 `json:"userId,omitempty"`    // 用户ID
@@ -49,7 +48,7 @@ type (
 
 // NewToken 创建一个新的Token实例
 func NewToken(
-	ownKind OwnKind, ownID uint64, accountID uint64, userID *uint64, issuer string,
+	ownKind int16, ownID uint64, accountID uint64, userID *uint64, issuer string,
 	expireSec, refExpireHou int64,
 ) *Token {
 	token := &Token{
@@ -64,7 +63,7 @@ func NewToken(
 }
 
 func NewTokenClaims(
-	ownKind OwnKind, ownID uint64, accountID uint64, userID *uint64,
+	ownKind int16, ownID uint64, accountID uint64, userID *uint64,
 	issuer string, expireSec int64,
 ) *TokenClaims {
 	// 生成唯一令牌ID

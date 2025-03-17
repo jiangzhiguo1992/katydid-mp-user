@@ -10,7 +10,7 @@ check_interval = 60 # 检查间隔，min
 file_max_age = 30  # 保留时间，day
 file_max_size = 100  # 单文件最大大小，MB
 
-[account]
+[auth]
 enable = true
 
 [client]

@@ -14,9 +14,9 @@ type (
 
 		AppConf `mapstructure:",squash"`
 
-		Account AccountConf `toml:"account" mapstructure:"account"`
-		Client  ClientConf  `toml:"client" mapstructure:"client"`
-		User    UserConf    `toml:"user" mapstructure:"user"`
+		Auth   AuthConf   `toml:"auth" mapstructure:"auth"`
+		Client ClientConf `toml:"client" mapstructure:"client"`
+		User   UserConf   `toml:"user" mapstructure:"user"`
 	}
 
 	RemoteConf struct {
@@ -40,7 +40,7 @@ type (
 		ModuleConf `mapstructure:",squash"`
 	}
 
-	AccountConf struct {
+	AuthConf struct {
 		ModuleConf `mapstructure:",squash"`
 	}
 
@@ -123,7 +123,7 @@ func (m *Config) IsProd() bool {
 }
 
 func (m *Config) merge() {
-	m.Account.ModuleConf = m.AppConf.ModuleConf
+	m.Auth.ModuleConf = m.AppConf.ModuleConf
 	m.Client.ModuleConf = m.AppConf.ModuleConf
 	m.User.ModuleConf = m.AppConf.ModuleConf
 }

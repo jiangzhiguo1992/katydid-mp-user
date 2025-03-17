@@ -1,6 +1,6 @@
 env_name = "环境_测试"
 
-[account]
+[auth]
 enable = true
 
 [client]
