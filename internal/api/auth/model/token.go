@@ -38,18 +38,15 @@ func NewTokenEmpty() *Token {
 }
 
 func NewToken(
-	accessToken string, refreshToken *string,
 	ownKind OwnKind, ownID uint64, deviceID string, accountID uint64,
-	accessExpireAt int64, refreshExpireAt *int64,
+	userID, roleID *uint64,
 ) *Token {
 	base := model.NewBase(make(map[string]any))
 	base.Status = model.StatusInit
 	return &Token{
-		Base:        base,
-		AccessToken: accessToken, RefreshToken: refreshToken,
+		Base:    base,
 		OwnKind: ownKind, OwnID: ownID, DeviceID: deviceID, AccountID: accountID,
-		AccessExpireAt: accessExpireAt, RefreshExpireAt: refreshExpireAt,
-		UserID: nil, RoleID: nil,
+		UserID: userID, RoleID: roleID,
 	}
 }
 
@@ -110,28 +107,39 @@ func (t *Token) ValidLocalizeRules() valid.LocalizeValidRules {
 // Generate 生成token
 func (t *Token) Generate(
 	issuer string, jwtSecret string,
-	accessExpireSec int64, refreshExpireHou *int64,
+	accessExpireSec, refreshExpireHou int64,
 ) (*auth.Token, *auth.Token, bool) {
 	// 创建新的Access，生成JWT令牌 (传旧的token进去)
-	accessToken := auth.NewToken(int16(t.OwnKind), t.OwnID, t.AccountID, t.UserID, issuer, accessExpireSec)
-	if err := accessToken.GenerateJWTTokens(jwtSecret, &t.AccessToken); err != nil {
-		return nil, nil, false
+	var accessToken *auth.Token
+	if accessExpireSec != 0 {
+		accessToken = auth.NewToken(int16(t.OwnKind), t.OwnID, t.AccountID, t.UserID, issuer, accessExpireSec)
+		if err := accessToken.GenerateJWTTokens(jwtSecret, &t.AccessToken); err != nil {
+			return nil, nil, false
+		}
+		t.AccessToken = accessToken.Token
+		if accessToken.ExpireSec > 0 {
+			t.AccessExpireAt = time.Now().Add(time.Duration(accessToken.ExpireSec) * time.Second).Unix()
+		} else {
+			t.AccessExpireAt = accessToken.ExpireSec
+		}
 	}
-	t.AccessToken = accessToken.Token
-	t.AccessExpireAt = time.Now().Add(time.Duration(accessToken.ExpireSec) * time.Second).Unix()
 
 	// 创建新的Refresh，生成JWT令牌 (传旧的token进去)
 	var refreshToken *auth.Token
-	if refreshExpireHou != nil {
+	if refreshExpireHou != 0 {
 		// 刷新令牌通常比访问令牌有更长的有效期
-		refreshExpireSec := *refreshExpireHou * 3600
+		refreshExpireSec := refreshExpireHou * 3600
 		refreshToken = auth.NewToken(int16(t.OwnKind), t.OwnID, t.AccountID, t.UserID, issuer, refreshExpireSec)
 		if err := refreshToken.GenerateJWTTokens(jwtSecret, t.RefreshToken); err != nil {
 			return nil, nil, false
 		}
 		t.RefreshToken = &refreshToken.Token
-		timeAt := time.Now().Add(time.Duration(refreshToken.ExpireSec) * time.Second).Unix()
-		t.RefreshExpireAt = &timeAt
+		if refreshExpireHou > 0 {
+			timeAt := time.Now().Add(time.Duration(refreshToken.ExpireSec) * time.Second).Unix()
+			t.RefreshExpireAt = &timeAt
+		} else {
+			t.RefreshExpireAt = &refreshExpireHou
+		}
 	}
 	return accessToken, refreshToken, true
 }
@@ -145,7 +153,7 @@ func (t *Token) ValidateAccess(
 		return nil, false
 	}
 	// 解析和验证JWT
-	checkExpire = checkExpire && (t.AccessExpireAt < 0)
+	checkExpire = checkExpire && (t.AccessExpireAt > 0)
 	claims, err := auth.ParseJWT(t.AccessToken, jwtSecret, checkExpire)
 	return claims, err != nil
 }
@@ -162,7 +170,7 @@ func (t *Token) ValidateRefresh(
 		return nil, false
 	}
 	// 解析和验证JWT
-	checkExpire = checkExpire && (t.RefreshExpireAt != nil) && (*t.RefreshExpireAt < 0)
+	checkExpire = checkExpire && (t.RefreshExpireAt != nil) && (*t.RefreshExpireAt > 0)
 	claims, err := auth.ParseJWT(*t.RefreshToken, jwtSecret, checkExpire)
 	return claims, err != nil
 }
