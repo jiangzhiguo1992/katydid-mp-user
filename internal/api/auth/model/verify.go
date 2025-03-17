@@ -140,7 +140,7 @@ func (v *Verify) ValidStructRules(scene valid.Scene, fn valid.FuncReportError) {
 		}
 		if !targetOk {
 			// 接受验证的目标
-			fn(v.Target, "Target", "format-target", "")
+			fn(v.Target, "Target", valid.TagFormat, "")
 		}
 	}
 }
@@ -155,11 +155,13 @@ func (v *Verify) ValidLocalizeRules() valid.LocalizeValidRules {
 					"Apply":    {"required_verify_apply_kind_err", false, nil},
 					"Target":   {"required_verify_target_err", false, nil},
 				},
+				valid.TagFormat: {
+					"Target": {"format_verify_target_err", false, nil},
+				},
 			}, Rule2: map[valid.Tag]valid.LocalizeValidRuleParam{
 				"range-own":        {"range_verify_own_err", false, nil},
 				"range-auth":       {"range_verify_auth_err", false, nil},
 				"range-apply":      {"range_verify_apply_err", false, nil},
-				"format-target":    {"format_verify_target_err", false, nil},
 				verifyExtraKeyBody: {"format_verify_body_err", false, nil},
 			},
 		},

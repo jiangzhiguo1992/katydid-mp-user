@@ -18,9 +18,9 @@ type (
 
 		Auths map[AuthKind]IAuth `json:"auths,omitempty"` // 认证方式列表 (多对多)
 
-		LoginHistory  []any `json:"loginHistory"`  // 登录历史(login)
-		EntryHistory  []any `json:"entryHistory"`  // 进入历史(entry)
-		AccessHistory []any `json:"accessHistory"` // 访问历史(api)
+		LoginHistory  []any `json:"loginHistory,omitempty"`  // 登录历史(login)
+		EntryHistory  []any `json:"entryHistory,omitempty"`  // 进入历史(entry)
+		AccessHistory []any `json:"accessHistory,omitempty"` // 访问历史(api)
 	}
 )
 
@@ -84,7 +84,7 @@ func (a *Account) ValidLocalizeRules() valid.LocalizeValidRules {
 	return valid.LocalizeValidRules{
 		valid.SceneAll: valid.LocalizeValidRule{
 			Rule1: map[valid.Tag]map[valid.FieldName]valid.LocalizeValidRuleParam{
-				valid.TagFormat: {
+				valid.TagRequired: {
 					"OwnKind": {"format_account_own_kind_err", false, nil},
 					"OwnID":   {"format_account_own_id_err", false, nil},
 				},

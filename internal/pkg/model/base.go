@@ -89,12 +89,12 @@ func (b *Base) ValidStructRules(scene valid.Scene, fn valid.FuncReportError) {
 	switch scene {
 	case valid.SceneQuery:
 		if b.CreateAt < b.UpdateAt {
-			fn(b.CreateAt, "CreateAt", valid.TagFormat, "")
+			fn(b.CreateAt, "CreateAt", valid.TagCheck, "")
 		}
 		if (b.DeleteAt == nil) && (b.DeleteBy != 0) {
-			fn(b.DeleteAt, "DeleteAt", valid.TagFormat, "")
+			fn(b.DeleteAt, "DeleteAt", valid.TagCheck, "")
 		} else if (b.DeleteAt != nil) && (b.DeleteBy == 0) {
-			fn(b.DeleteBy, "DeleteBy", valid.TagFormat, "")
+			fn(b.DeleteBy, "DeleteBy", valid.TagCheck, "")
 		}
 	}
 }
@@ -103,7 +103,10 @@ func (b *Base) ValidLocalizeRules() valid.LocalizeValidRules {
 	return valid.LocalizeValidRules{
 		valid.SceneAll: valid.LocalizeValidRule{
 			Rule1: map[valid.Tag]map[valid.FieldName]valid.LocalizeValidRuleParam{
-				valid.TagFormat: {
+				valid.TagRequired: {},
+				valid.TagFormat:   {},
+				valid.TagRange:    {},
+				valid.TagCheck: {
 					"CreateAt": {"format_create_at_err", false, nil},
 					"DeleteAt": {"format_delete_at_err", false, nil},
 					"DeleteBy": {"format_delete_by_err", false, nil},
