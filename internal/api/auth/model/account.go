@@ -74,7 +74,7 @@ func (a *Account) ValidFieldRules() valid.FieldValidRules {
 				if val == nil {
 					return true
 				}
-				return (len(*val) >= 3) && (len(*val) <= 100)
+				return (len(*val) >= 3) && (len(*val) <= 50)
 			},
 		},
 	}

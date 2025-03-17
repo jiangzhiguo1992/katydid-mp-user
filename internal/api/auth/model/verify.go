@@ -113,7 +113,7 @@ func (v *Verify) ValidExtraRules() (data.KSMap, valid.ExtraValidRules) {
 					if !ok {
 						return false
 					}
-					return len(val) <= 0
+					return len(val) > 0
 				},
 			},
 		},
