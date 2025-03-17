@@ -10,7 +10,8 @@ type (
 	// Token 令牌
 	Token struct {
 		*model.Base
-		Token string `json:"token"` // token
+		AccessToken  string `json:"accessToken"`            // 访问token
+		RefreshToken string `json:"refreshToken,omitempty"` // 刷新token
 
 		OwnKind   OwnKind `json:"ownKind"`   // 账号类型
 		OwnID     uint64  `json:"ownId"`     // 账号ID
@@ -21,7 +22,8 @@ type (
 		RoleID *uint64 `json:"roleId"` // 角色ID TODO:GG user传过来的? 还是account传过来的? 可以传到token里面
 		// TODO:GG 很多ID都要绑定token，方便获取，记得更新也要关联
 
-		ExpireAt int64 `json:"expireAt"` // 过期时间
+		AccessExpireAt  int64 `json:"accessExpireAt"`  // 访问token过期时间
+		RefreshExpireAt int64 `json:"refreshExpireAt"` // 刷新token过期时间
 
 		Account *Account `json:"account,omitempty"` // 账号信息
 	}
@@ -34,57 +36,85 @@ func NewTokenEmpty() *Token {
 }
 
 func NewToken(
-	token string,
+	accessToken, refreshToken string,
 	ownKind OwnKind, ownID uint64, deviceID string, accountID uint64,
-	expireAt int64,
+	accessExpireAt, refreshExpireAt int64,
 ) *Token {
 	return &Token{
-		Base:      model.NewBase(make(map[string]any)),
-		AccountID: accountID, OwnKind: ownKind, OwnID: ownID,
-		DeviceID: deviceID, Token: token, ExpireAt: expireAt,
+		Base:        model.NewBase(make(map[string]any)),
+		AccessToken: accessToken, RefreshToken: refreshToken,
+		OwnKind: ownKind, OwnID: ownID, DeviceID: deviceID, AccountID: accountID,
+		AccessExpireAt: accessExpireAt, RefreshExpireAt: refreshExpireAt,
+		UserID: nil, RoleID: nil,
 	}
-}
-
-// IsExpired 检查token是否已过期
-func (t *Token) IsExpired() bool {
-	if t.ExpireAt < 0 { // -1表示永不过期
-		return false
-	} else if t.ExpireAt == 0 {
-		return true // 不能使用
-	}
-	return time.Now().Unix() > t.ExpireAt
 }
 
 // Generate 生成token
 func (t *Token) Generate(
 	issuer string, jwtSecret string,
-	expireSec int64,
-) (*auth.Token, bool) {
-	// 创建新的Token
-	token := auth.NewToken(int16(t.OwnKind), t.OwnID, t.AccountID, t.UserID, issuer, expireSec)
-	// 生成JWT令牌 (传旧的token进去)
-	if err := token.GenerateJWTTokens(jwtSecret, &t.Token); err != nil {
-		return nil, false
+	accessExpireSec, refreshExpireHou int64,
+) (*auth.Token, *auth.Token, bool) {
+	// 创建新的Token，生成JWT令牌 (传旧的token进去)
+	accessToken := auth.NewToken(int16(t.OwnKind), t.OwnID, t.AccountID, t.UserID, issuer, accessExpireSec)
+	if err := accessToken.GenerateJWTTokens(jwtSecret, &t.AccessToken); err != nil {
+		return nil, nil, false
+	}
+	// 刷新令牌通常比访问令牌有更长的有效期
+	refreshExpireSec := refreshExpireHou * 3600
+	refreshToken := auth.NewToken(int16(t.OwnKind), t.OwnID, t.AccountID, t.UserID, issuer, refreshExpireSec)
+	if err := refreshToken.GenerateJWTTokens(jwtSecret, &t.RefreshToken); err != nil {
+		return nil, nil, false
 	}
 	// 记录token
-	t.Token = token.Token
-	t.ExpireAt = time.Now().Add(time.Duration(token.ExpireSec) * time.Second).Unix()
-	return token, true
+	t.AccessToken = accessToken.Token
+	t.AccessExpireAt = time.Now().Add(time.Duration(accessToken.ExpireSec) * time.Second).Unix()
+	t.RefreshToken = refreshToken.Token
+	t.RefreshExpireAt = time.Now().Add(time.Duration(refreshToken.ExpireSec) * time.Second).Unix()
+	return accessToken, refreshToken, true
 }
 
-// ValidateToken 验证token
-func (t *Token) ValidateToken(
-	token string, jwtSecret string, checkExpire bool,
+// ValidateAccess 验证访问令牌
+func (t *Token) ValidateAccess(
+	jwtSecret string, checkExpire bool,
 ) (*auth.TokenClaims, bool) {
-	// 验证是否匹配
-	if t.Token != token {
-		return nil, false
-	}
 	// 检查过期时间
-	if checkExpire && t.IsExpired() {
+	if checkExpire && t.IsAccessExpired() {
 		return nil, false
 	}
 	// 解析和验证JWT
-	claims, err := auth.ParseJWT(token, jwtSecret, checkExpire)
+	claims, err := auth.ParseJWT(t.AccessToken, jwtSecret, checkExpire)
 	return claims, err != nil
+}
+
+// ValidateRefresh 验证刷新令牌
+func (t *Token) ValidateRefresh(
+	jwtSecret string, checkExpire bool,
+) (*auth.TokenClaims, bool) {
+	// 检查过期时间
+	if checkExpire && t.IsRefreshExpired() {
+		return nil, false
+	}
+	// 解析和验证JWT
+	claims, err := auth.ParseJWT(t.RefreshToken, jwtSecret, checkExpire)
+	return claims, err != nil
+}
+
+// IsAccessExpired 检查访问token是否过期
+func (t *Token) IsAccessExpired() bool {
+	if t.AccessExpireAt < 0 { // -1表示永不过期
+		return false
+	} else if t.AccessExpireAt == 0 {
+		return true // 不能使用
+	}
+	return time.Now().Unix() > t.AccessExpireAt
+}
+
+// IsRefreshExpired 检查刷新token是否过期
+func (t *Token) IsRefreshExpired() bool {
+	if t.RefreshExpireAt < 0 { // -1表示永不过期
+		return false
+	} else if t.RefreshExpireAt == 0 {
+		return true // 不能使用
+	}
+	return time.Now().Unix() > t.RefreshExpireAt
 }
