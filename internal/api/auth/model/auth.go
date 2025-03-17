@@ -3,6 +3,9 @@ package model
 import (
 	"katydid-mp-user/internal/pkg/model"
 	"katydid-mp-user/pkg/data"
+	"katydid-mp-user/pkg/valid"
+	"reflect"
+	"unicode"
 )
 
 var _ IAuth = (*AuthPassword)(nil)
@@ -29,28 +32,28 @@ type (
 	// Auth 可验证账号基础
 	Auth struct {
 		*model.Base
-		Kind   AuthKind `json:"kind"`   // 认证类型
-		UserID *uint64  `json:"userId"` // 认证用户Id (有些org/app不填user，这里是第一绑定)
+		Kind   AuthKind `json:"kind" validate:"required,kind-check"` // 认证类型
+		UserID *uint64  `json:"userId"`                              // 认证用户Id (有些org/app不填user，这里是第一绑定)
 
 		// implements
 
-		Accounts map[OwnKind]map[uint64]*Account `json:"accountId"`          // 账户Id (多对多)
-		Verifies map[VerifyApply]*Verify         `json:"verifies,omitempty"` // 认证信息
+		Accounts map[OwnKind]map[uint64]*Account `json:"-"` // 账户Id (多对多表)
+		Verifies map[VerifyApply]*Verify         `json:"-"` // 认证信息
 	}
 
 	// AuthPassword 用户名+密码
 	AuthPassword struct {
 		*Auth
-		Username *string `json:"username"` // 用户名(可能为空)
+		Username *string `json:"username" validate:"required,username-format"` // 用户名(可能为空)
 
-		Password string `json:"omitempty" gorm:"column:password_hash"` // 密码 (md5)
+		PasswordMD5 string `json:"omitempty" validate:"required"` // 密码
 	}
 
 	// AuthCellphone 移动手机号+短信
 	AuthCellphone struct {
 		*Auth
-		Code   string `json:"code"`   // 国家区号
-		Number string `json:"number"` // 手机号
+		Code   string `json:"code" validate:"required,code-range"`      // 国家区号
+		Number string `json:"number" validate:"required,number-format"` // 手机号
 
 		Operator *string `json:"operator"` // 运营商
 	}
@@ -58,8 +61,8 @@ type (
 	// AuthEmail 邮箱+邮件
 	AuthEmail struct {
 		*Auth
-		Username string `json:"username"` // 用户名
-		Domain   string `json:"domain"`   // 域名
+		Username string `json:"username" validate:"required,username-format"` // 用户名
+		Domain   string `json:"domain" validate:"required,domain-format"`     // 域名
 
 		Entity *string `json:"entity"` // 邮箱服务商 (eg:163/qq/...)
 		TLD    *string `json:"tld"`    // 顶级域名 (eg:com/cn/org/...)
@@ -95,11 +98,11 @@ func NewAuthPasswordEmpty() *AuthPassword {
 }
 
 func NewAuthPassword(
-	username *string, password string,
+	username *string, passwordMD5 string,
 ) *AuthPassword {
 	return &AuthPassword{
 		Auth:     NewAuth(AuthKindPassword),
-		Username: username, Password: password,
+		Username: username, PasswordMD5: passwordMD5,
 	}
 }
 
@@ -132,6 +135,96 @@ func NewAuthEmail(
 		Auth:     NewAuth(AuthKindEmail),
 		Username: username, Domain: domain,
 		Entity: nil, TLD: nil,
+	}
+}
+
+func (a *AuthPassword) ValidFieldRules() valid.FieldValidRules {
+	return valid.FieldValidRules{
+		valid.SceneAll: valid.FieldValidRule{
+			// 认证类型
+			"kind-check": func(value reflect.Value, param string) bool {
+				val := value.Interface().(AuthKind)
+				return val == AuthKindPassword
+			},
+			// 用户名
+			"username-format": func(value reflect.Value, param string) bool {
+				val := value.Interface().(string)
+				// 长度检查：3-30个字符
+				if len(val) < 3 || len(val) > 30 {
+					return false
+				}
+
+				// 必须以字母开头
+				if !unicode.IsLetter(rune(val[0])) {
+					return false
+				}
+
+				// 不能以连字符或下划线结尾
+				lastChar := val[len(val)-1]
+				if lastChar == '-' || lastChar == '_' {
+					return false
+				}
+
+				// 不能有连续的连字符或下划线
+				hasContinuousSpecial := false
+				lastIsSpecial := false
+
+				for i, char := range val {
+					if i == 0 {
+						continue // 已经检查过第一个字符
+					}
+					// 只允许字母、数字、下划线和连字符
+					if !unicode.IsLetter(char) && !unicode.IsDigit(char) && char != '_' && char != '-' {
+						return false
+					}
+					// 检查连续的特殊字符
+					isSpecial := char == '_' || char == '-'
+					if isSpecial && lastIsSpecial {
+						hasContinuousSpecial = true
+						break
+					}
+					lastIsSpecial = isSpecial
+				}
+				return !hasContinuousSpecial
+
+			},
+		},
+	}
+}
+
+func (a *AuthPassword) ValidExtraRules() (data.KSMap, valid.ExtraValidRules) {
+	return a.Extra, valid.ExtraValidRules{
+		valid.SceneSave: map[valid.Tag]valid.ExtraValidRuleInfo{
+			// 密码盐
+			authExtraKeyPasswordSalt: {
+				Field: authExtraKeyPasswordSalt,
+				ValidFn: func(value any) bool {
+					val, ok := value.(string)
+					if !ok {
+						return false
+					}
+					return len(val) <= 0
+				},
+			},
+		},
+	}
+}
+
+func (a *AuthPassword) ValidLocalizeRules() valid.LocalizeValidRules {
+	return valid.LocalizeValidRules{
+		valid.SceneAll: valid.LocalizeValidRule{
+			Rule1: map[valid.Tag]map[valid.FieldName]valid.LocalizeValidRuleParam{
+				valid.TagRequired: {
+					"AuthKind":    {"required_auth_kind_err", false, nil},
+					"Username":    {"required_username_err", false, nil},
+					"PasswordMD5": {"required_password_err", false, nil},
+				},
+			}, Rule2: map[valid.Tag]valid.LocalizeValidRuleParam{
+				"kind-check":             {"kind_check_err", false, nil},
+				"username-format":        {"username_format_err", false, nil},
+				authExtraKeyPasswordSalt: {"pwd_salt_check_err", false, nil},
+			},
+		},
 	}
 }
 

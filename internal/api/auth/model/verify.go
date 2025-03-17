@@ -12,10 +12,10 @@ type (
 	// Verify 验证内容
 	Verify struct {
 		*model.Base
-		OwnKind  OwnKind     `json:"ownKind" validate:"required,own-check"`   // 验证平台 (组织/应用)
+		OwnKind  OwnKind     `json:"ownKind" validate:"required,own-range"`   // 验证平台 (组织/应用)
 		OwnID    uint64      `json:"ownId"`                                   // 认证拥有者Id (组织/应用)
-		AuthKind AuthKind    `json:"authKind" validate:"required,auth-check"` // 认证类型 (手机号/邮箱/...)
-		Apply    VerifyApply `json:"apply" validate:"required,apply-check"`   // 申请类型 (注册/登录/修改密码/...)
+		AuthKind AuthKind    `json:"authKind" validate:"required,auth-range"` // 认证类型 (手机号/邮箱/...)
+		Apply    VerifyApply `json:"apply" validate:"required,apply-range"`   // 申请类型 (注册/登录/修改密码/...)
 		Target   []string    `json:"target" validate:"required"`              // 标识，用户名/手机号/邮箱/生物特征/第三方平台 // TODO:GG DB存{"cellphone:86_12345678901"}/{"email:address@domain"}
 
 		SendAt     *int64 `json:"sendAt"`     // 发送时间(发送成功时间)
@@ -46,7 +46,8 @@ func NewVerify(
 func (v *Verify) ValidFieldRules() valid.FieldValidRules {
 	return valid.FieldValidRules{
 		valid.SceneAll: valid.FieldValidRule{
-			"own-check": func(value reflect.Value, param string) bool {
+			// 所属类型
+			"own-range": func(value reflect.Value, param string) bool {
 				val := value.Interface().(OwnKind)
 				switch val {
 				case OwnKindOrg,
@@ -59,7 +60,8 @@ func (v *Verify) ValidFieldRules() valid.FieldValidRules {
 					return false
 				}
 			},
-			"auth-check": func(value reflect.Value, param string) bool {
+			// 认证类型
+			"auth-range": func(value reflect.Value, param string) bool {
 				val := value.Interface().(AuthKind)
 				switch val {
 				case AuthKindCellphone,
@@ -79,7 +81,8 @@ func (v *Verify) ValidFieldRules() valid.FieldValidRules {
 					return false
 				}
 			},
-			"apply-check": func(value reflect.Value, param string) bool {
+			// 验证类型
+			"apply-range": func(value reflect.Value, param string) bool {
 				val := value.Interface().(VerifyApply)
 				switch val {
 				case VerifyApplyUnregister,
@@ -136,7 +139,8 @@ func (v *Verify) ValidStructRules(scene valid.Scene, fn valid.FuncReportError) {
 			targetOk = false
 		}
 		if !targetOk {
-			fn(v.Target, "Target", "target-check", "")
+			// 接受验证的目标
+			fn(v.Target, "Target", "target-format", "")
 		}
 	}
 }
@@ -152,11 +156,11 @@ func (v *Verify) ValidLocalizeRules() valid.LocalizeValidRules {
 					"Target":   {"required_target_err", false, nil},
 				},
 			}, Rule2: map[valid.Tag]valid.LocalizeValidRuleParam{
-				"own-check":        {"own_check_err", false, nil},
-				"auth-check":       {"auth_check_err", false, nil},
-				"apply-check":      {"apply_check_err", false, nil},
-				"target-check":     {"target_check_err", false, nil},
-				verifyExtraKeyBody: {"format_body_err", false, nil},
+				"own-range":        {"own_range_err", false, nil},
+				"auth-range":       {"auth_range_err", false, nil},
+				"apply-range":      {"apply_range_err", false, nil},
+				"target-format":    {"target_format_err", false, nil},
+				verifyExtraKeyBody: {"body_format_err", false, nil},
 			},
 		},
 	}
@@ -204,6 +208,7 @@ func (v *Verify) CanValid(expireSec int64, maxValidTimes int) bool {
 	return true
 }
 
+// Valid 验证
 func (v *Verify) Valid(body string) bool {
 	exist, ok := v.GetBody()
 	if !ok {
