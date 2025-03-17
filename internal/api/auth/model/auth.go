@@ -1,45 +1,50 @@
 package model
 
 import (
-	"errors"
 	"katydid-mp-user/internal/pkg/model"
 	"katydid-mp-user/pkg/data"
-	"time"
 )
 
 var _ IAuth = (*AuthPassword)(nil)
-var _ IAuth = (*AuthPhone)(nil)
+var _ IAuth = (*AuthCellphone)(nil)
 var _ IAuth = (*AuthEmail)(nil)
-var _ IAuth = (*AuthBiometric)(nil)
-var _ IAuth = (*AuthThirdParty)(nil)
 
 type (
 	IAuth interface {
-		IsEnabled() bool      // 检查认证方式是否启用
-		IsBlocked() bool      // 检查认证方式是否被封禁
-		IsActive() bool       // 检查认证方式是否已激活过
-		GetAccountID() uint64 // 获取关联的账号ID
-		GetKind() AuthKind    // 获取认证类型
-		//Verify(credential any) bool // 验证认证信息
+		IsBlocked() bool   // 检查认证方式是否被封禁
+		IsEnabled() bool   // 检查认证方式是否启用
+		IsActive() bool    // 检查认证方式是否已激活过
+		GetKind() AuthKind // 获取认证类型
+
+		SetAccount(*Account)                             // 关联账号信息
+		DelAccount(*Account)                             // 删除关联账号信息
+		GetAccAccounts() map[OwnKind]map[uint64]*Account // 获取关联的账号ID
+		GetAccount(OwnKind, uint64) *Account             // 获取关联的账号ID
+
+		GetVerify(VerifyApply) *Verify // 获取认证信息
 	}
 
-	// Auth 可验证账号基础 TODO:GG 检查唯一性
+	// Auth 可验证账号基础
 	Auth struct {
 		*model.Base
-		AccountID uint64   `json:"accountId"` // 账户Id
-		Kind      AuthKind `json:"kind"`      // 认证类型
+		Kind AuthKind `json:"kind"` // 认证类型
+
+		// implements
+
+		Accounts map[OwnKind]map[uint64]*Account `json:"accountId"`          // 账户Id (多对多)
+		Verifies map[VerifyApply]*Verify         `json:"verifies,omitempty"` // 认证信息
 	}
 
 	// AuthPassword 用户名+密码
 	AuthPassword struct {
 		*Auth
-		Username string `json:"username"` // 用户名
+		Username *string `json:"username"` // 用户名(可能为空)
 
 		Password string `json:"omitempty" gorm:"column:password_hash"` // 密码 (md5)
 	}
 
-	// AuthPhone 手机号+短信
-	AuthPhone struct {
+	// AuthCellphone 移动手机号+短信
+	AuthCellphone struct {
 		*Auth
 		Code   string `json:"code"`   // 国家区号
 		Number string `json:"number"` // 手机号
@@ -57,28 +62,11 @@ type (
 		TLD    *string `json:"tld"`    // 顶级域名 (eg:com/cn/org/...)
 	}
 
-	// AuthBiometric 生物特征
-	AuthBiometric struct {
-		*Auth
-		Kind AuthBioKind `json:"kind"` // 生物特征类型 (eg:人脸/指纹/声纹/...)
-		// TODO:GG 有一个id?
-	}
-
-	// AuthThirdParty 第三方账号链接
-	AuthThirdParty struct {
-		*Auth
-		Kind   AuthTPKind `json:"kind"`   // 平台 (eg:微信/QQ/...)
-		OpenId string     `json:"openId"` // 第三方平台唯一标识
-	}
+	// OwnKind 认证拥有者类型
+	OwnKind int16
 
 	// AuthKind 认证类型
 	AuthKind int16
-
-	// AuthBioKind 生物特征类型
-	AuthBioKind int16
-
-	// AuthTPKind 第三方平台类型
-	AuthTPKind int16
 )
 
 func NewAuthEmpty() *Auth {
@@ -88,10 +76,12 @@ func NewAuthEmpty() *Auth {
 }
 
 // NewAuth 创建指定类型的认证实例
-func NewAuth(accountID uint64, kind AuthKind) *Auth {
+func NewAuth(kind AuthKind) *Auth {
+	base := model.NewBase(make(data.KSMap))
+	base.Status = AuthStatusInit
 	return &Auth{
-		Base:      model.NewBase(make(data.KSMap)),
-		AccountID: accountID, Kind: kind,
+		Base: base,
+		Kind: kind,
 	}
 }
 
@@ -102,27 +92,25 @@ func NewAuthPasswordEmpty() *AuthPassword {
 }
 
 func NewAuthPassword(
-	accountID uint64,
-	username, password string,
+	username *string, password string,
 ) *AuthPassword {
 	return &AuthPassword{
-		Auth:     NewAuth(accountID, AuthKindPassword),
+		Auth:     NewAuth(AuthKindPassword),
 		Username: username, Password: password,
 	}
 }
 
-func NewAuthPhoneEmpty() *AuthPhone {
-	return &AuthPhone{
+func NewAuthPhoneEmpty() *AuthCellphone {
+	return &AuthCellphone{
 		Auth: NewAuthEmpty(),
 	}
 }
 
 func NewAuthPhone(
-	accountID uint64,
 	code, number string,
-) *AuthPhone {
-	return &AuthPhone{
-		Auth: NewAuth(accountID, AuthKindPhone),
+) *AuthCellphone {
+	return &AuthCellphone{
+		Auth: NewAuth(AuthKindCellphone),
 		Code: code, Number: number,
 		Operator: nil,
 	}
@@ -135,45 +123,12 @@ func NewAuthEmailEmpty() *AuthEmail {
 }
 
 func NewAuthEmail(
-	accountID uint64,
 	username, domain string,
 ) *AuthEmail {
 	return &AuthEmail{
-		Auth:     NewAuth(accountID, AuthKindEmail),
+		Auth:     NewAuth(AuthKindEmail),
 		Username: username, Domain: domain,
 		Entity: nil, TLD: nil,
-	}
-}
-
-func NewAuthBiometricEmpty() *AuthBiometric {
-	return &AuthBiometric{
-		Auth: NewAuthEmpty(),
-	}
-}
-
-func NewAuthBiometric(
-	accountID uint64,
-	kind AuthBioKind,
-) *AuthBiometric {
-	return &AuthBiometric{
-		Auth: NewAuth(accountID, AuthKindBiometric),
-		Kind: kind,
-	}
-}
-
-func NewAuthThirdPartyEmpty() *AuthThirdParty {
-	return &AuthThirdParty{
-		Auth: NewAuthEmpty(),
-	}
-}
-
-func NewAuthThirdParty(
-	accountID uint64,
-	kind AuthTPKind, openId string,
-) *AuthThirdParty {
-	return &AuthThirdParty{
-		Auth: NewAuth(accountID, AuthKindThirdParty),
-		Kind: kind, OpenId: openId,
 	}
 }
 
@@ -182,171 +137,80 @@ const (
 	AuthStatusInit   model.Status = 0  // 初始状态
 	AuthStatusActive model.Status = 1  // 激活状态
 
-	AuthKindPassword   AuthKind = 1 // 密码
-	AuthKindPhone      AuthKind = 2 // 短信
-	AuthKindEmail      AuthKind = 3 // 邮箱
-	AuthKindBiometric  AuthKind = 4 // 生物特征
-	AuthKindThirdParty AuthKind = 5 // 第三方平台
+	OwnKindOrg    OwnKind = 10 // 组织
+	OwnKindRole   OwnKind = 11 // 角色
+	OwnKindApp    OwnKind = 20 // 应用
+	OwnKindClient OwnKind = 21 // 客户端
+	OwnKindUser   OwnKind = 30 // 用户
 
-	AuthBioKindFace   AuthBioKind = 1 // 人脸
-	AuthBioKindFinger AuthBioKind = 2 // 指纹
-	AuthBioKindVoice  AuthBioKind = 3 // 声纹
-	AuthBioKindIris   AuthBioKind = 4 // 虹膜
-
-	AuthTPKindWechat   AuthTPKind = 1 // 微信
-	AuthTPKindQQ       AuthTPKind = 2 // QQ
-	AuthTPKindIns      AuthTPKind = 3 // Instagram
-	AuthTPKindFacebook AuthTPKind = 4 // Facebook
-	AuthTPKindGoogle   AuthTPKind = 5 // Google
-	AuthTPKindApple    AuthTPKind = 6 // Apple
+	AuthKindPassword    AuthKind = 10  // 密码
+	AuthKindCellphone   AuthKind = 20  // 短信
+	AuthKindEmail       AuthKind = 30  // 邮箱
+	AuthKindBioFace     AuthKind = 40  // 生物特征-人脸
+	AuthKindBioFinger   AuthKind = 41  // 生物特征-指纹
+	AuthKindBioVoice    AuthKind = 42  // 生物特征-声纹
+	AuthKindBioIris     AuthKind = 43  // 生物特征-虹膜
+	AuthKindThirdGoogle AuthKind = 100 // 三方平台-Google
+	AuthKindThirdApple  AuthKind = 101 // 三方平台-Apple
+	AuthKindThirdWechat AuthKind = 102 // 三方平台-微信
+	AuthKindThirdQQ     AuthKind = 103 // 三方平台-QQ
+	AuthKindThirdIns    AuthKind = 104 // 三方平台-Instagram
+	AuthKindThirdFB     AuthKind = 105 // 三方平台-Facebook
 )
+
+func (a *Auth) IsBlocked() bool {
+	return a.Status <= AuthStatusBlock
+}
 
 func (a *Auth) IsEnabled() bool {
 	return a.Status >= AuthStatusInit
-}
-
-func (a *Auth) IsBlocked() bool {
-	blockedUntil, ok := a.GetBlockedUntil()
-	if !ok {
-		return false
-	}
-	blockTime := time.Unix(blockedUntil, 0)
-	return time.Now().Before(blockTime)
 }
 
 func (a *Auth) IsActive() bool {
 	return a.Status >= AuthStatusActive
 }
 
-func (a *Auth) GetAccountID() uint64 {
-	return a.AccountID
-}
-
 func (a *Auth) GetKind() AuthKind {
 	return a.Kind
 }
 
-func (a *Auth) Verify(_ any) bool {
-	return a.IsEnabled() && !a.IsBlocked()
+func (a *Auth) SetAccount(account *Account) {
+	if _, ok := a.Accounts[account.OwnKind]; !ok {
+		a.Accounts[account.OwnKind] = make(map[uint64]*Account)
+	}
+	a.Accounts[account.OwnKind][account.ID] = account
 }
 
-// Verify 实现密码验证
-func (a *AuthPassword) Verify(credential any) bool {
-	if !a.Auth.Verify(nil) {
-		return false
+func (a *Auth) DelAccount(account *Account) {
+	if owns, ok := a.Accounts[account.OwnKind]; ok {
+		delete(owns, account.ID)
+		if len(owns) == 0 {
+			delete(a.Accounts, account.OwnKind)
+		}
 	}
-	cred, ok := credential.(struct {
-		Username string
-		Password string
-	})
-	if !ok {
-		return false
-	}
-
-	//salt, _ := a.GetPasswordSalt()
-	// 实际场景中应该使用安全的密码哈希比较
-	// 例如: hashedPassword := HashPassword(cred.Password, salt)
-	// TODO: 比较 hashedPassword 和 a.Password
-
-	if (a.Username != cred.Username) || (a.Password != cred.Password) {
-		return false
-	}
-	return true
 }
 
-// Verify 实现手机号验证
-func (a *AuthPhone) Verify(credential any) bool {
-	if !a.Auth.Verify(nil) {
-		return false
+func (a *Auth) GetAccAccounts() map[OwnKind]map[uint64]*Account {
+	return a.Accounts
+}
+
+func (a *Auth) GetAccount(ownKind OwnKind, ownID uint64) *Account {
+	if owns, ok := a.Accounts[ownKind]; ok {
+		if account, ok := owns[ownID]; ok {
+			return account
+		}
 	}
-	cred, ok := credential.(struct {
-		Code   string
-		Number string
-		Body   string
-	})
-	if !ok {
-		return false
+	return nil
+}
+
+func (a *Auth) GetVerify(apply VerifyApply) *Verify {
+	if verify, ok := a.Verifies[apply]; ok {
+		return verify
 	}
-
-	if (a.Code != cred.Code) || (a.Number != cred.Number) {
-		return false
-	}
-	// else if cred.Body == nil {
-	//	return false, nil
-	//}
-	//body, ok := cred.Verify.GetBody()
-	//if !ok || body == "" {
-	//	return false, nil
-	//}
-	//success := cred.Code == body
-	//if !success {
-	//	return false, nil
-	//}
-	return true
+	return nil
 }
 
-// Verify 实现邮箱验证码验证
-func (a *AuthEmail) Verify(credential any) (bool, error) {
-	//cred, ok := credential.(struct {
-	//	Email string
-	//	Code  string
-	//})
-	//
-	//if !ok {
-	//	return false, errors.New("invalid credential format")
-	//}
-	//
-	//if a.EmailAddress() != cred.Email {
-	//	return false, errors.New("email mismatch")
-	//}
-	//body, ok := verify.GetBody()
-	//if !ok || body == "" {
-	//	return false, errors.New("no verification code found")
-	//}
-	//
-	//if verify.IsExpired() {
-	//	return false, errors.New("verification code expired")
-	//}
-	//return body == cred.Code, nil
-	return true, nil
-}
-
-// Verify 实现生物特征验证
-func (a *AuthBiometric) Verify(credential any) (bool, error) {
-	// 生物特征验证通常需要专门的SDK或API
-	// 这里只是示例框架
-	return false, errors.New("biometric verification not implemented")
-}
-
-// Verify 实现第三方平台验证
-func (a *AuthThirdParty) Verify(credential any) (bool, error) {
-	//cred, ok := credential.(struct {
-	//	Provider    string
-	//	AccessToken string
-	//})
-	//
-	//if !ok {
-	//	return false, errors.New("invalid credential format")
-	//}
-	//
-	//if a.Provider != cred.Provider {
-	//	return false, errors.New("provider mismatch")
-	//}
-	//
-	//// 在实际应用中，应该调用第三方API验证token
-	//// 这里简化处理
-	//if a.AccessToken != cred.AccessToken {
-	//	return false, errors.New("invalid access token")
-	//}
-	//
-	//// 检查token是否过期
-	//if a.TokenExpiredAt != nil && time.Now().After(*a.TokenExpiredAt) {
-	//	return false, errors.New("access token expired")
-	//}
-	return true, nil
-}
-
-func (a *AuthPhone) PhoneNumber() string {
+func (a *AuthCellphone) FullNumber() string {
 	return "+" + a.Code + " " + a.Number
 }
 
@@ -355,26 +219,8 @@ func (a *AuthEmail) EmailAddress() string {
 }
 
 const (
-	authExtraKeyBlockedUntil   = "blockedUntil"   // 阻止验证直到某个时间点(过于频繁的send)
-	authExtraKeyPasswordSalt   = "passwordSalt"   // 密码盐 TODO:GG 不response
-	authExtraKeyUserSecondPwd  = "userSecondPwd"  // 二级密码 TODO:GG 不response
-	authExtraKeyUserScreenPwd  = "userScreenPwd"  // 锁屏密码 TODO:GG 不response
-	authExtraKeyPhoneUrgent    = "phoneUrgent"    // 紧急联系人 TODO:GG 不response
-	authExtraKeyBioCredential  = "bioCredential"  // 生物特征凭证 TODO:GG 不response
-	authExtraKeyTPAccessToken  = "tpAccessToken"  // 第三方平台访问令牌 TODO:GG 不response
-	authExtraKeyTPRefreshToken = "tpRefreshToken" // 刷新令牌 TODO:GG 不response
-	authExtraKeyTPExpiredAt    = "tpExpiredAt"    // 过期时间 TODO:GG 不response
-	authExtraKeyTPUserInfo     = "tpUserInfo"     // 第三方平台用户信息 TODO:GG 不response
-	authExtraKeyTPLinkId       = "tpLinkId"       // 关联ID TODO:GG 不response
+	authExtraKeyPasswordSalt = "passwordSalt" // 密码盐 TODO:GG 不response
 )
-
-func (a *Auth) SetBlockedUntil(blockUtilUnix *int64) {
-	a.Extra.SetInt64(authExtraKeyBlockedUntil, blockUtilUnix)
-}
-
-func (a *Auth) GetBlockedUntil() (int64, bool) {
-	return a.Extra.GetInt64(authExtraKeyBlockedUntil)
-}
 
 func (a *Auth) SetPasswordSalt(salt *string) {
 	a.Extra.SetString(authExtraKeyPasswordSalt, salt)

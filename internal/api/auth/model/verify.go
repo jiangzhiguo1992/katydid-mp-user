@@ -16,9 +16,9 @@ type (
 		OwnID    uint64      `json:"ownId"`                                   // 认证拥有者Id (组织/应用)
 		AuthKind AuthKind    `json:"authKind" validate:"required,auth-check"` // 认证类型 (手机号/邮箱/...)
 		Apply    VerifyApply `json:"apply" validate:"required,apply-check"`   // 申请类型 (注册/登录/修改密码/...)
-		Target   []string    `json:"target" validate:"required"`              // 标识，用户名/手机号/邮箱/生物特征/第三方平台
+		Target   []string    `json:"target" validate:"required"`              // 标识，用户名/手机号/邮箱/生物特征/第三方平台 // TODO:GG DB存{"cellphone:86_12345678901"}/{"email:address@domain"}
 
-		PendingAt  *int64 `json:"pendingAt"`  // 等待时间(发送成功时间)
+		SendAt     *int64 `json:"sendAt"`     // 发送时间(发送成功时间)
 		ValidAt    *int64 `json:"validAt"`    // 验证时间
 		ValidTimes int    `json:"validTimes"` // 验证次数
 	}
@@ -39,7 +39,7 @@ func NewVerify(
 	return &Verify{
 		Base:    base,
 		OwnKind: ownKind, OwnID: ownID, AuthKind: authKind, Apply: apply, Target: target,
-		PendingAt: nil, ValidAt: nil, ValidTimes: 0,
+		SendAt: nil, ValidAt: nil, ValidTimes: 0,
 	}
 }
 
@@ -64,8 +64,16 @@ func (v *Verify) ValidFieldRules() valid.FieldValidRules {
 				switch val {
 				case AuthKindCellphone,
 					AuthKindEmail,
-					AuthKindBiometric,
-					AuthKindThirdParty:
+					AuthKindBioFace,
+					AuthKindBioFinger,
+					AuthKindBioVoice,
+					AuthKindBioIris,
+					AuthKindThirdGoogle,
+					AuthKindThirdApple,
+					AuthKindThirdWechat,
+					AuthKindThirdQQ,
+					AuthKindThirdIns,
+					AuthKindThirdFB:
 					return true
 				default:
 					return false
@@ -114,11 +122,11 @@ func (v *Verify) ValidStructRules(scene valid.Scene, fn valid.FuncReportError) {
 	case valid.SceneAll:
 		targetOk := false
 		switch v.AuthKind {
-		case AuthKindCellphone: // TODO:GG DB存{"cellphone:86_12345678901"}
+		case AuthKindCellphone:
 			if len(v.Target) == 2 {
 				_, _, targetOk = valid.IsPhoneNumber(v.Target[0], v.Target[1])
 			}
-		case AuthKindEmail: // TODO:GG DB存{"email:address@domain"}
+		case AuthKindEmail:
 			if len(v.Target) == 2 {
 				if valid.IsEmailUsername(v.Target[0]) {
 					targetOk = valid.IsEmailDomain(v.Target[1])
@@ -172,11 +180,11 @@ const (
 
 // IsExpired 检查验证是否已过期
 func (v *Verify) IsExpired(expireSec int64) bool {
-	if v.PendingAt == nil {
+	if v.SendAt == nil {
 		return false
 	}
 	now := time.Now().Unix()
-	return (now - *v.PendingAt) >= expireSec
+	return (now - *v.SendAt) >= expireSec
 }
 
 // IsVerified 检查是否已验证成功
