@@ -11,10 +11,11 @@ var _ IAuth = (*AuthEmail)(nil)
 
 type (
 	IAuth interface {
-		IsBlocked() bool   // 检查认证方式是否被封禁
-		IsEnabled() bool   // 检查认证方式是否启用
-		IsActive() bool    // 检查认证方式是否已激活过
-		GetKind() AuthKind // 获取认证类型
+		IsBlocked() bool    // 检查认证方式是否被封禁
+		IsEnabled() bool    // 检查认证方式是否启用
+		IsActive() bool     // 检查认证方式是否已激活过
+		GetKind() AuthKind  // 获取认证类型
+		GetUserID() *uint64 // 认证用户Id
 
 		SetAccount(*Account)                             // 关联账号信息
 		DelAccount(*Account)                             // 删除关联账号信息
@@ -27,7 +28,8 @@ type (
 	// Auth 可验证账号基础
 	Auth struct {
 		*model.Base
-		Kind AuthKind `json:"kind"` // 认证类型
+		Kind   AuthKind `json:"kind"`   // 认证类型
+		UserID *uint64  `json:"userId"` // 认证用户Id (有些org/app不填user，这里是第一绑定)
 
 		// implements
 
@@ -172,6 +174,10 @@ func (a *Auth) IsActive() bool {
 
 func (a *Auth) GetKind() AuthKind {
 	return a.Kind
+}
+
+func (a *Auth) GetUserID() *uint64 {
+	return a.UserID
 }
 
 func (a *Auth) SetAccount(account *Account) {

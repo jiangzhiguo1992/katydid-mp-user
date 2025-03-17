@@ -21,10 +21,8 @@ type (
 		Kind     TokenKind `json:"kind"`           // 令牌类型
 		IssuedAt int64     `json:"issuedAt"`       // 签发时间
 
-		AccessToken  string `json:"accessToken"`            // 访问令牌
-		RefreshToken string `json:"refreshToken,omitempty"` // 刷新令牌
-		ExpireSec    int64  `json:"expireSec"`              // 过期时间(秒)
-		RefExpireHou int64  `json:"refExpireHou"`           // 刷新过期时间(时)
+		Token     string `json:"token"`     // 访问令牌
+		ExpireSec int64  `json:"expireSec"` // 过期时间(秒)
 
 		Claims *TokenClaims `json:"-"` // 令牌声明(不序列化)
 	}
@@ -49,14 +47,13 @@ type (
 // NewToken 创建一个新的Token实例
 func NewToken(
 	ownKind int16, ownID uint64, accountID uint64, userID *uint64, issuer string,
-	expireSec, refExpireHou int64,
+	expireSec int64,
 ) *Token {
 	token := &Token{
-		Kind:         TokenKindBearer,
-		IssuedAt:     time.Now().Unix(),
-		AccessToken:  "", // 将由GenerateJWT方法填充
-		RefreshToken: "", // 将由GenerateRefreshToken方法填充
-		ExpireSec:    expireSec, RefExpireHou: refExpireHou,
+		Kind:      TokenKindBearer,
+		IssuedAt:  time.Now().Unix(),
+		Token:     "", // 将由GenerateJWT方法填充
+		ExpireSec: expireSec,
 	}
 	token.Claims = NewTokenClaims(ownKind, ownID, accountID, userID, issuer, expireSec)
 	return token
@@ -99,39 +96,21 @@ func (t *Token) GenerateJWTTokens(secret string, oldToken *string) error {
 		}
 		tokenID = &claims.RegisteredClaims.ID
 	}
-	err := t.generateAccessJWTToken(secret, tokenID)
-	if err != nil {
-		return err
-	}
-	return t.generateRefreshJWTToken(secret, tokenID)
+	return t.generateJWTToken(secret, tokenID)
 }
 
-// generateAccessJWTToken 生成访问令牌
-func (t *Token) generateAccessJWTToken(secret string, tokenID *string) error {
+// generateJWTToken 生成访问令牌
+func (t *Token) generateJWTToken(secret string, tokenID *string) error {
 	claims := NewTokenClaims(t.Claims.OwnKind, t.Claims.OwnID, t.Claims.AccountID, t.Claims.UserID, t.Claims.Issuer, t.ExpireSec)
 	if tokenID != nil && *tokenID != "" {
-		claims.TokenID = *tokenID             // 使用相同的TokenID
-		claims.RegisteredClaims.ID = *tokenID // 使用相同的TokenID
-	}
-	var err error
-	t.AccessToken, err = claims.generateJWTToken(secret)
-	return err
-}
-
-// generateRefreshJWTToken 生成刷新令牌
-func (t *Token) generateRefreshJWTToken(secret string, tokenID *string) error {
-	// 刷新令牌通常比访问令牌有更长的有效期
-	expireSec := t.RefExpireHou * 3600
-	claims := NewTokenClaims(t.Claims.OwnKind, t.Claims.OwnID, t.Claims.AccountID, t.Claims.UserID, t.Claims.Issuer, expireSec)
-	if tokenID != nil && *tokenID != "" {
-		claims.TokenID = *tokenID             // 使用相同的TokenID
-		claims.RegisteredClaims.ID = *tokenID // 使用相同的TokenID
+		claims.TokenID = *tokenID
+		claims.RegisteredClaims.ID = *tokenID
 	} else {
 		claims.TokenID = t.Claims.TokenID             // 使用相同的TokenID
 		claims.RegisteredClaims.ID = t.Claims.TokenID // 使用相同的TokenID
 	}
 	var err error
-	t.RefreshToken, err = claims.generateJWTToken(secret)
+	t.Token, err = claims.generateJWTToken(secret)
 	return err
 }
 
@@ -149,14 +128,6 @@ func (t *Token) IsExpired() bool {
 		return true
 	}
 	return time.Now().After(t.Claims.ExpiresAt.Time)
-}
-
-// IsRefreshExpired 检查刷新令牌是否过期
-func (t *Token) IsRefreshExpired() bool {
-	if t.Claims == nil || t.Claims.ExpiresAt == nil {
-		return true
-	}
-	return time.Now().After(t.Claims.ExpiresAt.Time.Add(time.Duration(t.RefExpireHou) * time.Hour))
 }
 
 // generateSecureRandomString 生成安全的随机字符串

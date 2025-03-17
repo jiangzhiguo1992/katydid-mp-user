@@ -11,11 +11,7 @@ type (
 		*model.Base
 		OwnKind  OwnKind `json:"ownKind"`  // 账号拥有者类型(注册的)
 		OwnID    uint64  `json:"ownId"`    // 账号拥有者ID(注册的)
-		UserID   *uint64 `json:"userId"`   // 账号拥有者Id (有些org/app不填user)
 		Nickname string  `json:"nickname"` // 昵称 (没有user的app/org会用这个，放外面是方便搜索)
-
-		AccessTokens  []*Token `json:"accessTokens"`  // token列表(jwt)
-		RefreshTokens []*Token `json:"refreshTokens"` // refreshToken列表(jwt)
 
 		Auths map[AuthKind]IAuth `json:"auths,omitempty"` // 认证方式列表 (多对多)
 
@@ -27,24 +23,20 @@ type (
 
 func NewAccountEmpty() *Account {
 	return &Account{
-		Base:          model.NewBaseEmpty(),
-		AccessTokens:  []*Token{},
-		RefreshTokens: []*Token{},
-		Auths:         make(map[AuthKind]IAuth),
+		Base:  model.NewBaseEmpty(),
+		Auths: make(map[AuthKind]IAuth),
 	}
 }
 
 func NewAccount(
-	ownKind OwnKind, ownID uint64, userID *uint64, nickname string,
+	ownKind OwnKind, ownID uint64, nickname string,
 ) *Account {
 	base := model.NewBase(make(data.KSMap))
 	base.Status = AccountStatusInit
 	return &Account{
 		Base:    base,
-		OwnKind: ownKind, OwnID: ownID, UserID: userID, Nickname: nickname,
-		AccessTokens:  []*Token{},
-		RefreshTokens: []*Token{},
-		Auths:         make(map[AuthKind]IAuth),
+		OwnKind: ownKind, OwnID: ownID, Nickname: nickname,
+		Auths: make(map[AuthKind]IAuth),
 	}
 }
 
@@ -79,26 +71,6 @@ func (a *Account) IsNeedAuth() bool {
 // CanAccess 可否访问
 func (a *Account) CanAccess() bool {
 	return a.Status >= AccountStatusActive
-}
-
-// GetAccessToken 获取token
-func (a *Account) GetAccessToken(ownKind OwnKind, ownID uint64, deviceID string) (string, bool) {
-	for _, token := range a.AccessTokens {
-		if token.OwnKind == ownKind && token.OwnID == ownID && token.DeviceID == deviceID {
-			return token.Token, true
-		}
-	}
-	return "", false
-}
-
-// GetRefreshToken 获取refreshToken
-func (a *Account) GetRefreshToken(ownKind OwnKind, ownID uint64, deviceID string) (string, bool) {
-	for _, token := range a.RefreshTokens {
-		if token.OwnKind == ownKind && token.OwnID == ownID && token.DeviceID == deviceID {
-			return token.Token, true
-		}
-	}
-	return "", false
 }
 
 func (a *Account) AddAuth(auth IAuth) {
@@ -173,7 +145,7 @@ const (
 	accExtraKeyAvatarUrl    = "avatarUrl"    // 头像URL
 	accExtraKeyStatusAt     = "statusAt"     // 状态时间
 	accExtraKeyStatusReason = "statusReason" // 状态原因
-	accExtraKeyRoles        = "roles"        // 角色列表 (默认只有org下的用户有) TODO:GG 放在extra还是这里外键关联？
+	accExtraKeyRoles        = "roles"        // 角色列表 (默认只有org下的用户有) TODO:GG 放在extra？还是这里外键关联？还是不放？
 )
 
 func (a *Account) SetAvatarID(avatarId *int64) {
