@@ -179,6 +179,12 @@ func (a *Auth) SetAccount(account *Account) {
 		a.Accounts[account.OwnKind] = make(map[uint64]*Account)
 	}
 	a.Accounts[account.OwnKind][account.ID] = account
+	if a.Status < AuthStatusActive {
+		a.Status = AuthStatusActive
+	}
+	if account.Auths[a.Kind] == nil {
+		account.AddAuth(a)
+	}
 }
 
 func (a *Auth) DelAccount(account *Account) {
@@ -187,6 +193,12 @@ func (a *Auth) DelAccount(account *Account) {
 		if len(owns) == 0 {
 			delete(a.Accounts, account.OwnKind)
 		}
+	}
+	if (a.Status >= AuthStatusActive) && (len(a.Accounts) == 0) {
+		a.Status = AuthStatusInit
+	}
+	if account.Auths[a.Kind] != nil {
+		account.DelAuth(a)
 	}
 }
 
