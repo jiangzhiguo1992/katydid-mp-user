@@ -204,6 +204,23 @@ func (v *Verify) CanValid(expireSec int64, maxValidTimes int) bool {
 	return true
 }
 
+func (v *Verify) Valid(body string) bool {
+	exist, ok := v.GetBody()
+	if !ok {
+		return false
+	}
+	validOk := false
+	switch v.AuthKind {
+	case AuthKindCellphone:
+		validOk = exist == body
+	case AuthKindEmail: // TODO:GG 要是链接呢?
+		validOk = exist == body
+	default:
+		return false
+	}
+	return validOk
+}
+
 const (
 	verifyExtraKeyBody = "body" // 验证内容
 )
