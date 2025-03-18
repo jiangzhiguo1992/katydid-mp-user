@@ -18,8 +18,8 @@ type (
 	}
 )
 
-// SetWithBind 设置认证
-func (svc *Auth) SetWithBind(param model.IAuth) *errs.CodeErrs {
+// AddWithBindAccounts 添加认证并绑定账号
+func (svc *Auth) AddWithBindAccounts(param model.IAuth) *errs.CodeErrs {
 	// 记录+清洗数据
 	accounts := param.GetAccAccounts() // TODO:GG token里的的account(exist)填充到auth里
 	entity := param.Wash()
@@ -38,7 +38,7 @@ func (svc *Auth) SetWithBind(param model.IAuth) *errs.CodeErrs {
 		exist = entity
 	} else {
 		// 检查状态
-		err = svc.checkActive(exist)
+		err = svc.tryStatusActive(exist)
 		if err != nil {
 			return err
 		}
@@ -62,8 +62,8 @@ func (svc *Auth) SetWithBind(param model.IAuth) *errs.CodeErrs {
 // BindAccount 绑定账号
 func (svc *Auth) BindAccount(exist model.IAuth, account *model.Account) *errs.CodeErrs {
 	// 检查账号是否已绑定 TODO:GG 如果不是强一致性，则查多对多表
-	oldBind := exist.GetAccount(account.OwnKind, account.OwnID)
-	if oldBind != nil {
+	oldBindAccount := exist.GetAccount(account.OwnKind, account.OwnID)
+	if oldBindAccount != nil {
 		limit := svc.GetLimitAccount(int16(account.OwnKind), account.OwnID)
 		for _, authKind := range limit.AuthLogins {
 			if int16(exist.GetKind()) == authKind {
@@ -75,11 +75,17 @@ func (svc *Auth) BindAccount(exist model.IAuth, account *model.Account) *errs.Co
 	// 更新auth下的account关联 (多对多表修改)
 	// TODO:GG 更新外表accountID，新旧都会改，需要在这里更新吗？
 	// TODO:GG 被绑定的account也需要修改auth，auth只同时bind一个(当前own下)账号
+	if oldBindAccount != nil {
+		delete(oldBindAccount.Auths, exist.GetKind())
+	}
+	if oldBindAuth := account.Auths[exist.GetKind()]; oldBindAuth != nil {
+		delete(account.Auths, oldBindAuth.GetKind())
+	}
 	exist.SetAccount(account)
 	account.Auths[exist.GetKind()] = exist
 
 	// 更新auth的状态
-	return svc.checkBind(exist)
+	return svc.tryStatusBind(exist)
 }
 
 // UnbindAccount 解绑账号
@@ -88,12 +94,11 @@ func (svc *Auth) UnbindAccount(param model.IAuth, account *model.Account) *errs.
 	if err != nil {
 		return err
 	} else if exist == nil {
-		return errs.Match2("未绑定账号")
+		return errs.Match2("认证不存在")
 	}
 
 	// 检查账号是否已绑定 TODO:GG 如果不是强一致性，则查多对多表
-	existBind := exist.GetAccount(account.OwnKind, account.OwnID)
-	if existBind == nil {
+	if exist.GetAccount(account.OwnKind, account.OwnID) == nil {
 		return errs.Match2("未绑定账号")
 	}
 
@@ -126,10 +131,11 @@ func (svc *Auth) UnbindAccount(param model.IAuth, account *model.Account) *errs.
 	delete(account.Auths, exist.GetKind())
 
 	// 更新auth的状态
-	return svc.checkActive(exist)
+	return svc.tryStatusActive(exist)
 }
 
-func (svc *Auth) checkActive(exist model.IAuth) *errs.CodeErrs {
+// tryStatusActive 尝试修改成激活状态
+func (svc *Auth) tryStatusActive(exist model.IAuth) *errs.CodeErrs {
 	// 检查是否满足更新条件
 	update := false
 	if exist.IsEnabled() && !exist.IsActive() {
@@ -157,9 +163,10 @@ func (svc *Auth) checkActive(exist model.IAuth) *errs.CodeErrs {
 	return nil
 }
 
-func (svc *Auth) checkBind(exist model.IAuth) *errs.CodeErrs {
+// tryStatusBind 尝试修改成绑定状态
+func (svc *Auth) tryStatusBind(exist model.IAuth) *errs.CodeErrs {
 	// 先检查是否active
-	err := svc.checkActive(exist)
+	err := svc.tryStatusActive(exist)
 	if err != nil {
 		return err
 	}
@@ -181,10 +188,3 @@ func (svc *Auth) checkBind(exist model.IAuth) *errs.CodeErrs {
 	}
 	return nil
 }
-
-//case AuthKindPassword:
-// TODO:GG 在auth里检查?
-// TODO: 比较 hashedPassword 和 a.Password
-// 实际场景中应该使用安全的密码哈希比较
-// 例如: hashedPassword := HashPassword(cred.Password, salt)
-//salt, _ := a.GetPasswordSalt()
