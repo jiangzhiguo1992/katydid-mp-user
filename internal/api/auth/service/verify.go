@@ -33,14 +33,16 @@ func NewVerify(
 
 // Add 添加验证码
 func (svc *Verify) Add(param *model.Verify) *errs.CodeErrs {
+	entity := param.Wash()
+
 	// TODO:GG 检查ownId是否存在
 
 	// 生成验证码
-	err := svc.generateBody(param)
+	err := svc.generateBody(entity)
 	if err != nil {
 		return err
 	}
-	return svc.addWithCheck(param)
+	return svc.addWithCheck(entity)
 }
 
 func (svc *Verify) Del(param *model.Verify) *errs.CodeErrs {
@@ -49,14 +51,14 @@ func (svc *Verify) Del(param *model.Verify) *errs.CodeErrs {
 }
 
 // OnSendOk 发送验证码成功
-func (svc *Verify) OnSendOk(entity *model.Verify) *errs.CodeErrs {
+func (svc *Verify) OnSendOk(exist *model.Verify) *errs.CodeErrs {
 	// 不检查ownerID了
-	entity.SetPending()
-	return svc.db.Update(entity)
+	exist.SetPending()
+	return svc.db.Update(exist)
 }
 
 // OnSendFail 发送验证码失败
-func (svc *Verify) OnSendFail(entity *model.Verify) *errs.CodeErrs {
+func (svc *Verify) OnSendFail(exist *model.Verify) *errs.CodeErrs {
 	// 不检查ownerID了
 	return nil
 }
@@ -114,29 +116,29 @@ func (svc *Verify) Valid(param *model.Verify) *errs.CodeErrs {
 }
 
 // generateBody 生成验证码
-func (svc *Verify) generateBody(param *model.Verify) *errs.CodeErrs {
-	limit := svc.GetLimitVerify(int16(param.OwnKind), param.OwnID)
-	bodyLen := limit.BodyLen[int16(param.AuthKind)]
+func (svc *Verify) generateBody(entity *model.Verify) *errs.CodeErrs {
+	limit := svc.GetLimitVerify(int16(entity.OwnKind), entity.OwnID)
+	bodyLen := limit.BodyLen[int16(entity.AuthKind)]
 
 	body := ""
-	switch param.AuthKind {
+	switch entity.AuthKind {
 	case model.AuthKindCellphone:
 		body = num.Random(bodyLen)
 	case model.AuthKindEmail: // TODO:GG 也可以是链接？
 		body = num.Random(bodyLen)
 	default:
-		return errs.Match2(fmt.Sprintf("不支持的验证类型 kind: %svc", strconv.Itoa(int(param.AuthKind))))
+		return errs.Match2(fmt.Sprintf("不支持的验证类型 kind: %svc", strconv.Itoa(int(entity.AuthKind))))
 	}
-	param.SetBody(&body)
+	entity.SetBody(&body)
 	return nil
 }
 
 // addWithCheck 添加验证码
-func (svc *Verify) addWithCheck(param *model.Verify) *errs.CodeErrs {
-	limit := svc.GetLimitVerify(int16(param.OwnKind), param.OwnID)
+func (svc *Verify) addWithCheck(entity *model.Verify) *errs.CodeErrs {
+	limit := svc.GetLimitVerify(int16(entity.OwnKind), entity.OwnID)
 
 	// 检查添加间隔时间
-	exist, err := svc.db.Select(param) // TODO:GG 根据 OwnKind + OwnID + AuthKind + Apply + Target 查找最近的
+	exist, err := svc.db.Select(entity) // TODO:GG 根据 OwnKind + OwnID + AuthKind + Apply + Target 查找最近的
 	if err != nil {
 		return err
 	} else if exist != nil {
@@ -149,7 +151,7 @@ func (svc *Verify) addWithCheck(param *model.Verify) *errs.CodeErrs {
 
 	// 检查添加次数
 	_ = time.Now().UnixMilli() - (limit.InsertDuration * 1000)
-	count, err := svc.db.SelectCount(param) // TODO:GG 根据 OwnKind + OwnID + AuthKind + Apply + Target + startAt(上面) 查找最近的
+	count, err := svc.db.SelectCount(entity) // TODO:GG 根据 OwnKind + OwnID + AuthKind + Apply + Target + time(上面) 查找最近的
 	if err != nil {
 		return err
 	} else if count >= limit.InsertMaxTimes {
@@ -157,7 +159,7 @@ func (svc *Verify) addWithCheck(param *model.Verify) *errs.CodeErrs {
 	}
 
 	// 添加数据库
-	return svc.db.Insert(param)
+	return svc.db.Insert(entity)
 }
 
 // checkExist 检查验证码是否存在

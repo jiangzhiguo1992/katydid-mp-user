@@ -31,16 +31,13 @@ func NewVerifyEmpty() *Verify {
 	return &Verify{Base: model.NewBaseEmpty()}
 }
 
-func NewVerify(
-	ownKind OwnKind, ownID uint64, authKind AuthKind, apply VerifyApply, target []string,
-) *Verify {
-	base := model.NewBase(make(data.KSMap))
-	base.Status = VerifyStatusInit
-	return &Verify{
-		Base:    base,
-		OwnKind: ownKind, OwnID: ownID, AuthKind: authKind, Apply: apply, Target: target,
-		SendAt: nil, ValidAt: nil, ValidTimes: 0,
-	}
+func (v *Verify) Wash() *Verify {
+	v.Base = model.NewBase(make(data.KSMap))
+	v.Status = VerifyStatusInit
+	v.SendAt = nil
+	v.ValidAt = nil
+	v.ValidTimes = 0
+	return v
 }
 
 func (v *Verify) ValidFieldRules() valid.FieldValidRules {
