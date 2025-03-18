@@ -31,6 +31,7 @@ func NewAccount(
 }
 
 // Register 注册账号 TODO:GG 上层已经验证了verify + 检查ownId是否存在
+// TODO:GG 上层生成token并返回 (即使Token生成失败也不要紧，已经注册成功了，直接登录即可)
 func (svc *Account) Register(param *model.Account) *errs.CodeErrs {
 	// auths检查 (有且仅有一个)
 	iAuth := param.FirstAuth()
@@ -42,10 +43,14 @@ func (svc *Account) Register(param *model.Account) *errs.CodeErrs {
 	entity := param.Wash()
 	iAuth = iAuth.Wash()
 
-	// TODO:GG number生成
+	// number生成
+	err := svc.generateNumber(entity)
+	if err != nil {
+		return err
+	}
 
 	// nickname检查
-	err := svc.checkNickname(entity)
+	err = svc.checkNickname(entity)
 	if err != nil {
 		return err
 	}
@@ -55,10 +60,43 @@ func (svc *Account) Register(param *model.Account) *errs.CodeErrs {
 	if err != nil {
 		return err
 	}
-
-	// TODO:GG 上层生成token并返回 (即使Token生成失败也不要紧，已经注册成功了，直接登录即可)
 	return nil
 }
+
+// UnRegister 注销账号
+func (svc *Account) UnRegister(exist *model.Account) *errs.CodeErrs {
+	// TODO:GG 需要解绑各种auths吗？
+	// TODO:GG 解绑了的话，就找不回来了！除非有password
+	// TODO:GG 不解绑的话，auth就不能注册新账号
+	return nil
+}
+
+// Login 登录账号
+func (svc *Account) Login(param *model.Account) *errs.CodeErrs {
+	limit := svc.GetLimitAccount(int16(param.OwnKind), param.OwnID)
+	_ = limit.AuthLogins
+	_ = limit.AuthRequires
+	_ = limit.UserIDCardRequire
+	_ = limit.UserInfoRequire
+	_ = limit.UserBioRequire
+
+	_ = svc.checkActionLogin(param)
+
+	if param.Status == model.AccountStatusLocked {
+		// TODO:GG 解锁
+	}
+
+	_ = param.GetAuthKinds()
+
+	return nil
+}
+
+//case AuthKindPassword:
+// TODO:GG 在auth里检查?
+// TODO: 比较 hashedPassword 和 a.Password
+// 实际场景中应该使用安全的密码哈希比较
+// 例如: hashedPassword := HashPassword(cred.Password, salt)
+//salt, _ := a.GetPasswordSalt()
 
 // checkNickname 检查昵称
 func (svc *Account) checkNickname(entity *model.Account) *errs.CodeErrs {
@@ -80,6 +118,12 @@ func (svc *Account) checkNickname(entity *model.Account) *errs.CodeErrs {
 	} else if exist != nil {
 		return errs.Match2("昵称已存在")
 	}
+	return nil
+}
+
+// generateNumber 生成账号标识
+func (svc *Account) generateNumber(entity *model.Account) *errs.CodeErrs {
+	// TODO:GG 生成账号标识
 	return nil
 }
 
@@ -190,11 +234,6 @@ func (svc *Account) checkAuth(entity *model.Account, iAuth model.IAuth) *errs.Co
 	return nil
 }
 
-// UnRegister 注销账号
-func (svc *Account) UnRegister(exist *model.Account) {
-	// TODO:GG 解绑各种auths
-}
-
 // isAuthKindRequire 检查是否是必要的AuthKind
 func (svc *Account) isAuthKindRequire(param *model.Account, authKind model.AuthKind) bool {
 	limit := svc.GetLimitAccount(int16(param.OwnKind), param.OwnID)
@@ -233,8 +272,8 @@ func (svc *Account) isAuthKindLogin(param *model.Account, authKind model.AuthKin
 	return false
 }
 
-// CheckActionLogin 检查登录行为合法性
-func (svc *Account) CheckActionLogin(exist *model.Account) *errs.CodeErrs {
+// checkActionLogin 检查登录行为合法性
+func (svc *Account) checkActionLogin(exist *model.Account) *errs.CodeErrs {
 	if exist.CanLogin() {
 		return nil
 	}
@@ -248,50 +287,3 @@ func (svc *Account) CheckActionLogin(exist *model.Account) *errs.CodeErrs {
 		return errs.Match2("账号暂时被锁定")
 	}
 }
-
-func (svc *Account) Login(param *model.Account) {
-	limit := svc.GetLimitAccount(int16(param.OwnKind), param.OwnID)
-	_ = limit.AuthLogins
-	_ = limit.AuthRequires
-	_ = limit.UserIDCardRequire
-	_ = limit.UserInfoRequire
-	_ = limit.UserBioRequire
-
-	_ = param.GetAuthKinds()
-
-}
-
-//case AuthKindPassword:
-// TODO:GG 在auth里检查?
-// TODO: 比较 hashedPassword 和 a.Password
-// 实际场景中应该使用安全的密码哈希比较
-// 例如: hashedPassword := HashPassword(cred.Password, salt)
-//salt, _ := a.GetPasswordSalt()
-
-//func (as *AccountService) DelAccount(instance *model.Account) *errs.CodeErrs {
-//
-//}
-//
-//func (as *AccountService) UpdAccountNickName(instance *model.Account) *errs.CodeErrs {
-//
-//}
-//
-//func (as *AccountService) UpdateAccountTokens(instance *model.Account) *errs.CodeErrs {
-//
-//}
-//
-//func (as *AccountService) UpdAccountAuthAdd(instance *model.Account, auth *model.Auth) *errs.CodeErrs {
-//
-//}
-//
-//func (as *AccountService) UpdAccountAuthDel(instance *model.Account, auth *model.Auth) *errs.CodeErrs {
-//
-//}
-//
-//func (as *AccountService) UpdAccountAuthUpd(instance *model.Account, auth *model.Auth) *errs.CodeErrs {
-//
-//}
-//
-//func (as *AccountService) GetAccount(id uint64) (*model.Account, *errs.CodeErrs) {
-//
-//}

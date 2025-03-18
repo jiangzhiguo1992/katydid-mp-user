@@ -98,9 +98,10 @@ func (a *Account) ValidLocalizeRules() valid.LocalizeValidRules {
 }
 
 const (
-	AccountStatusBanned     model.Status = -3 // 封禁 (不能获取到，不能访问任何api，包括注销/注册)
-	AccountStatusUnRegister model.Status = -2 // 注销 (不能获取到，可以重新注册)
-	AccountStatusLocked     model.Status = -1 // 锁定 (能获取到，暂时锁定，不能登录)
+	AccountStatusBanned     model.Status = -4 // 封禁 (不能获取到，不能访问任何api，包括注销/注册)
+	AccountStatusUnRegister model.Status = -3 // 注销 (不能获取到，可以重新注册)
+	AccountStatusBlocked    model.Status = -2 // 锁定 (能获取到，暂时锁定，管理员解锁)
+	AccountStatusLocked     model.Status = -1 // 锁定 (能获取到，暂时锁定，登录解锁)
 	AccountStatusInit       model.Status = 0  // 初始 (未激活状态)
 	AccountStatusActive     model.Status = 1  // 激活 (能访问api，必须有附带requires认证才能创建)
 )
@@ -117,7 +118,7 @@ func (a *Account) IsUnRegister() bool {
 
 // CanLogin 可否登录
 func (a *Account) CanLogin() bool {
-	return a.Status > AccountStatusLocked
+	return a.Status > AccountStatusBlocked
 }
 
 // IsNeedAuth 是否需要认证

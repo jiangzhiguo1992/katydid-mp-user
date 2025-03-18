@@ -21,7 +21,7 @@ type (
 		AccountID uint64  `json:"accountId" validate:"required"`         // 账号ID
 
 		UserID *uint64 `json:"userId"` // 用户ID auths传过来的
-		RoleID *uint64 `json:"roleId"` // 角色ID TODO:GG user传过来的? 还是account传过来的? 可以传到token里面
+		RoleID *uint64 `json:"roleId"` // 角色ID TODO:GG account传过来的，可以传到token里面
 		// TODO:GG 很多ID都要绑定token，方便获取，记得更新也要关联
 
 		AccessExpireAt  int64  `json:"accessExpireAt"`  // 访问token过期时间
