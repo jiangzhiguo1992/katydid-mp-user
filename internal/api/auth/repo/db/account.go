@@ -20,29 +20,29 @@ func NewAccount() *Account {
 	}
 }
 
-func (sql *Account) Insert(bean *model.Account) *errs.CodeErrs {
+func (dbs *Account) Insert(bean *model.Account) *errs.CodeErrs {
 	// TODO:GG 雪花ID 10+9 or 分布ID 5+14
-	//sql.W.Create(&Account{})
+	//dbs.W.Create(&Account{})
 	log.Debug("DB_添加账号", log.FAny("account", bean))
 	return nil
 }
 
-func (sql *Account) Delete(id uint64, deleteBy *uint64) *errs.CodeErrs {
+func (dbs *Account) Delete(id uint64, deleteBy *uint64) *errs.CodeErrs {
 	return nil
 }
 
-func (sql *Account) Update(bean *model.Account) *errs.CodeErrs {
+func (dbs *Account) Update(bean *model.Account) *errs.CodeErrs {
 	return nil
 }
 
-func (sql *Account) Select(bean *model.Account) (*model.Account, *errs.CodeErrs) {
+func (dbs *Account) Select(bean *model.Account) (*model.Account, *errs.CodeErrs) {
 	return nil, nil
 }
 
-func (sql *Account) Selects(bean *model.Account) ([]*model.Account, *errs.CodeErrs) {
+func (dbs *Account) Selects(bean *model.Account) ([]*model.Account, *errs.CodeErrs) {
 	return nil, nil
 }
 
-func (sql *Account) SelectCount(bean *model.Account) (int, *errs.CodeErrs) {
+func (dbs *Account) SelectCount(bean *model.Account) (int, *errs.CodeErrs) {
 	return 1, nil
 }

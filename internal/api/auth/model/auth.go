@@ -15,6 +15,8 @@ var _ IAuth = (*AuthEmail)(nil)
 type (
 	// IAuth 认证接口
 	IAuth interface {
+		Wash() IAuth // 清洗数据
+
 		SetStatus(model.Status) // 设置认证状态
 		IsBlocked() bool        // 检查认证方式是否被封禁
 		IsEnabled() bool        // 检查认证方式是否启用
@@ -143,6 +145,31 @@ func NewAuthEmail(
 		Username: username, Domain: domain,
 		Entity: nil, TLD: nil,
 	}
+}
+
+func (a *Auth) Wash() IAuth {
+	a.Base = model.NewBaseEmpty()
+	a.Status = AuthStatusInit
+	a.UserID = nil
+	a.Accounts = nil
+	return a
+}
+
+func (a *AuthPassword) Wash() IAuth {
+	return a.Auth.Wash()
+}
+
+func (a *AuthCellphone) Wash() IAuth {
+	a.Auth.Wash()
+	a.Operator = nil
+	return a
+}
+
+func (a *AuthEmail) Wash() IAuth {
+	a.Auth.Wash()
+	a.Entity = nil
+	a.TLD = nil
+	return a
 }
 
 func (a *AuthPassword) ValidFieldRules() valid.FieldValidRules {
