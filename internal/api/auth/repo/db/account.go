@@ -1,8 +1,10 @@
 package db
 
 import (
+	"katydid-mp-user/internal/api/auth/model"
 	"katydid-mp-user/internal/pkg/db"
 	"katydid-mp-user/pkg/errs"
+	"katydid-mp-user/pkg/log"
 )
 
 type (
@@ -18,21 +20,29 @@ func NewAccount() *Account {
 	}
 }
 
-func (a *Account) Insert() {
-	// TODO:GG 雪花ID 10+9
-	// TODO:GG 分布ID 5+14
-	//a.W.Create(&Account{})
+func (sql *Account) Insert(bean *model.Account) *errs.CodeErrs {
+	// TODO:GG 雪花ID 10+9 or 分布ID 5+14
+	//sql.W.Create(&Account{})
+	log.Debug("DB_添加账号", log.FAny("account", bean))
+	return nil
 }
 
-func (a *Account) Delete() {
+func (sql *Account) Delete(id uint64, deleteBy *uint64) *errs.CodeErrs {
+	return nil
 }
 
-func (a *Account) Update() {
+func (sql *Account) Update(bean *model.Account) *errs.CodeErrs {
+	return nil
 }
 
-func (a *Account) Select() {
+func (sql *Account) Select(bean *model.Account) (*model.Account, *errs.CodeErrs) {
+	return nil, nil
 }
 
-func (a *Account) SelectCount() (int, *errs.CodeErrs) {
+func (sql *Account) Selects(bean *model.Account) ([]*model.Account, *errs.CodeErrs) {
+	return nil, nil
+}
+
+func (sql *Account) SelectCount(bean *model.Account) (int, *errs.CodeErrs) {
 	return 1, nil
 }
