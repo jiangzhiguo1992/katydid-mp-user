@@ -28,7 +28,7 @@ type (
 		GetKind() AuthKind // 获取认证类型
 
 		SetAccount(*Account)                             // 关联账号信息
-		DelAccount(*Account)                             // 删除关联账号信息
+		DelAccount(OwnKind, uint64)                      // 删除关联账号信息
 		GetAccAccounts() map[OwnKind]map[uint64]*Account // 获取关联的账号ID
 		GetAccount(OwnKind, uint64) *Account             // 获取关联的账号ID
 
@@ -419,11 +419,11 @@ func (a *Auth) SetAccount(account *Account) {
 	a.Accounts[account.OwnKind][account.OwnID] = account
 }
 
-func (a *Auth) DelAccount(account *Account) {
-	if owns, ok := a.Accounts[account.OwnKind]; ok {
-		delete(owns, account.OwnID)
+func (a *Auth) DelAccount(ownKind OwnKind, ownID uint64) {
+	if owns, ok := a.Accounts[ownKind]; ok {
+		delete(owns, ownID)
 		if len(owns) == 0 {
-			delete(a.Accounts, account.OwnKind)
+			delete(a.Accounts, ownKind)
 		}
 	}
 }

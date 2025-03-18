@@ -16,8 +16,8 @@ type (
 	// Verify 验证码服务
 	Verify struct {
 		*service.Base
-		db     *db.Verify
-		dbAuth *db.Auth
+		dbs     *db.Verify
+		dbsAuth *db.Auth
 		//cache *cache.Verify
 	}
 )
@@ -27,7 +27,7 @@ func NewVerify(
 ) *Verify {
 	return &Verify{
 		Base: service.NewBase(nil),
-		db:   db, // cache: cache,
+		dbs:  db, // cache: cache,
 	}
 }
 
@@ -54,7 +54,7 @@ func (svc *Verify) Del(param *model.Verify) *errs.CodeErrs {
 func (svc *Verify) OnSendOk(exist *model.Verify) *errs.CodeErrs {
 	// 不检查ownerID了
 	exist.SetPending()
-	return svc.db.Update(exist)
+	return svc.dbs.Update(exist)
 }
 
 // OnSendFail 发送验证码失败
@@ -91,7 +91,7 @@ func (svc *Verify) Valid(param *model.Verify) *errs.CodeErrs {
 	} else {
 		exist.SetReject()
 	}
-	err = svc.db.Update(exist)
+	err = svc.dbs.Update(exist)
 	if err != nil {
 		return err
 	}
@@ -104,13 +104,13 @@ func (svc *Verify) Valid(param *model.Verify) *errs.CodeErrs {
 	}
 
 	// 检查auth是否存在
-	existAuth, err := svc.dbAuth.Select(nil) // TODO:GG 根据 AuthKind + Target 查找Auth
+	existAuth, err := svc.dbsAuth.Select(nil) // TODO:GG 根据 AuthKind + Target 查找Auth
 	if (err != nil) || (existAuth == nil) {
 		return nil
 	}
 	// 更新auth的状态
 	if existAuth.TryActive() {
-		_ = svc.dbAuth.Update(nil) // TODO:GG 更新auth的status
+		_ = svc.dbsAuth.Update(nil) // TODO:GG 更新auth的status
 	}
 	return nil
 }
@@ -138,7 +138,7 @@ func (svc *Verify) addWithCheck(entity *model.Verify) *errs.CodeErrs {
 	limit := svc.GetLimitVerify(int16(entity.OwnKind), entity.OwnID)
 
 	// 检查添加间隔时间
-	exist, err := svc.db.Select(entity) // TODO:GG 根据 OwnKind + OwnID + AuthKind + Apply + Target 查找最近的
+	exist, err := svc.dbs.Select(entity) // TODO:GG 根据 OwnKind + OwnID + AuthKind + Apply + Target 查找最近的
 	if err != nil {
 		return err
 	} else if exist != nil {
@@ -151,7 +151,7 @@ func (svc *Verify) addWithCheck(entity *model.Verify) *errs.CodeErrs {
 
 	// 检查添加次数
 	_ = time.Now().UnixMilli() - (limit.InsertDuration * 1000)
-	count, err := svc.db.SelectCount(entity) // TODO:GG 根据 OwnKind + OwnID + AuthKind + Apply + Target + time(上面) 查找最近的
+	count, err := svc.dbs.SelectCount(entity) // TODO:GG 根据 OwnKind + OwnID + AuthKind + Apply + Target + time(上面) 查找最近的
 	if err != nil {
 		return err
 	} else if count >= limit.InsertMaxTimes {
@@ -159,13 +159,13 @@ func (svc *Verify) addWithCheck(entity *model.Verify) *errs.CodeErrs {
 	}
 
 	// 添加数据库
-	return svc.db.Insert(entity)
+	return svc.dbs.Insert(entity)
 }
 
 // checkExist 检查验证码是否存在
 func (svc *Verify) checkExist(param *model.Verify) (*model.Verify, *errs.CodeErrs) {
 	// 查找验证码
-	exist, err := svc.db.Select(param) // TODO:GG 根据 OwnKind + OwnID + AuthKind + Apply + Target 查找最近的
+	exist, err := svc.dbs.Select(param) // TODO:GG 根据 OwnKind + OwnID + AuthKind + Apply + Target 查找最近的
 	if err != nil {
 		return nil, err
 	} else if exist == nil {
