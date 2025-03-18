@@ -18,8 +18,8 @@ type (
 	}
 )
 
-// AddWithBindAccounts 添加认证并绑定账号
-func (svc *Auth) AddWithBindAccounts(param model.IAuth) *errs.CodeErrs {
+// BindAccounts 添加认证并绑定账号
+func (svc *Auth) BindAccounts(param model.IAuth) *errs.CodeErrs {
 	// 记录+清洗数据
 	accounts := param.GetAccAccounts() // TODO:GG token里的的account(exist)填充到auth里
 	entity := param.Wash()
@@ -44,13 +44,18 @@ func (svc *Auth) AddWithBindAccounts(param model.IAuth) *errs.CodeErrs {
 		}
 	}
 
+	// 检查状态
+	if !exist.IsEnabled() {
+		return errs.Match2("认证不可用")
+	}
+
 	// 绑定账号
 	if len(accounts) < 0 {
 		return errs.Match2("账号不能为空")
 	}
 	for _, owns := range accounts {
 		for _, acc := range owns {
-			err = svc.BindAccount(exist, acc)
+			err = svc.bindAccount(exist, acc)
 			if err != nil {
 				return err
 			}
@@ -60,7 +65,7 @@ func (svc *Auth) AddWithBindAccounts(param model.IAuth) *errs.CodeErrs {
 }
 
 // BindAccount 绑定账号
-func (svc *Auth) BindAccount(exist model.IAuth, account *model.Account) *errs.CodeErrs {
+func (svc *Auth) bindAccount(exist model.IAuth, account *model.Account) *errs.CodeErrs {
 	// 检查账号是否已绑定 TODO:GG 如果不是强一致性，则查多对多表
 	oldBindAccount := exist.GetAccount(account.OwnKind, account.OwnID)
 	if oldBindAccount != nil {
@@ -95,6 +100,8 @@ func (svc *Auth) UnbindAccount(param model.IAuth, account *model.Account) *errs.
 		return err
 	} else if exist == nil {
 		return errs.Match2("认证不存在")
+	} else if !exist.IsEnabled() {
+		return errs.Match2("认证不可用")
 	}
 
 	// 检查账号是否已绑定 TODO:GG 如果不是强一致性，则查多对多表
