@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"katydid-mp-user/internal/api/auth/model"
 	"katydid-mp-user/internal/api/auth/repo/db"
-	model2 "katydid-mp-user/internal/pkg/model"
 	"katydid-mp-user/internal/pkg/service"
 	"katydid-mp-user/pkg/errs"
 	"katydid-mp-user/pkg/log"
@@ -52,13 +51,7 @@ func (svc *Verify) Del(param *model.Verify) *errs.CodeErrs {
 // OnSendOk 发送验证码成功
 func (svc *Verify) OnSendOk(param *model.Verify) *errs.CodeErrs {
 	// 不检查ownerID了
-	param.Status = model.VerifyStatusPending
-	nowUnix := time.Now().Unix()
-	if (param.SendAt == nil) || (*param.SendAt > nowUnix) {
-		param.SendAt = &nowUnix
-	}
-	param.ValidAt = nil  // reset TODO:GG DB里做?
-	param.ValidTimes = 0 // reset TODO:GG DB里做?
+	param.SetPending()
 	return svc.db.Update(param)
 }
 
@@ -92,13 +85,10 @@ func (svc *Verify) Valid(param *model.Verify) *errs.CodeErrs {
 
 	// 更新验证结果
 	if validOk {
-		exist.Status = model.VerifyStatusSuccess
+		exist.SetSuccess()
 	} else {
-		exist.Status = model.VerifyStatusReject
+		exist.SetReject()
 	}
-	now := time.Now().Unix()
-	exist.ValidAt = &now
-	exist.ValidTimes++
 	err = svc.db.Update(exist)
 	if err != nil {
 		return err
@@ -117,8 +107,7 @@ func (svc *Verify) Valid(param *model.Verify) *errs.CodeErrs {
 		return nil
 	}
 	// 更新auth的状态
-	if existAuth.IsEnabled() && !existAuth.IsActive() {
-		existAuth.SetStatus(model2.StatusWhite)
+	if existAuth.TryActive() {
 		_ = svc.dbAuth.Update(nil) // TODO:GG 更新auth的status
 	}
 	return nil

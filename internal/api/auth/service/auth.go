@@ -2,152 +2,166 @@ package service
 
 import (
 	"katydid-mp-user/internal/api/auth/model"
+	"katydid-mp-user/internal/api/auth/repo/db"
 	"katydid-mp-user/internal/pkg/service"
-	"katydid-mp-user/pkg/data"
 	"katydid-mp-user/pkg/errs"
-	"katydid-mp-user/pkg/log"
 )
 
 type (
 	// Auth 认证服务
 	Auth struct {
 		*service.Base
+
+		db        *db.Auth
+		dbAccount *db.Account
 	}
 )
 
-func (a *Auth) Add(auth model.IAuth) (model.IAuth, *errs.CodeErrs) {
-	added := auth
-	switch auth.GetKind() {
-	case model.AuthKindPassword:
-		if _, ok := auth.(*model.AuthPassword); !ok {
-			return nil, errs.Match2("认证：密码类型错误！")
-		}
-		added = auth.(*model.AuthPassword)
-		log.Debug("DB_添加认证1", log.FAny("auth", added))
-	case model.AuthKindPhone:
-		if _, ok := auth.(*model.AuthPhone); !ok {
-			return nil, errs.Match2("认证：手机号类型错误！")
-		}
-		added = auth.(*model.AuthPhone)
-		log.Debug("DB_添加认证2", log.FAny("auth", added))
-	case model.AuthKindEmail:
-		if _, ok := auth.(*model.AuthEmail); !ok {
-			return nil, errs.Match2("认证：邮箱类型错误！")
-		}
-		added = auth.(*model.AuthEmail)
-		log.Debug("DB_添加认证3", log.FAny("auth", added))
-	case model.AuthKindBiometric:
-		if _, ok := auth.(*model.AuthBiometric); !ok {
-			return nil, errs.Match2("认证：生物特征类型错误！")
-		}
-		added = auth.(*model.AuthBiometric)
-		log.Debug("DB_添加认证4", log.FAny("auth", added))
-	case model.AuthKindThirdParty:
-		if _, ok := auth.(*model.AuthThirdParty); !ok {
-			return nil, errs.Match2("认证：第三方类型错误！")
-		}
-		added = auth.(*model.AuthThirdParty)
-		log.Debug("DB_添加认证5", log.FAny("auth", added))
-	default:
-		return nil, errs.Match2("认证：未知类型错误！")
+// Add 添加认证
+func (svc *Auth) Add(param model.IAuth) *errs.CodeErrs {
+	// 查重
+	exist, err := svc.db.Selects(param) // TODO:GG 根据 AuthKind + Target 查找Auth
+	if err != nil {
+		return err
+	} else if exist != nil {
+		return errs.Match2("认证：已存在！")
 	}
-	return added, nil
+
+	// 记录+清洗数据
+	accounts := param.GetAccAccounts()
+	for _, owns := range accounts {
+		for _, acc := range owns {
+			param.DelAccount(acc)
+		}
+	}
+	userID := param.GetUserID()
+	param.SetUserID(nil)
+
+	// 数据库添加 (后面的关联是多对多，需要先insertAuth)
+	err = svc.db.Insert(param)
+	if err != nil {
+		return err
+	}
+
+	// 检查状态
+	err = svc.checkStatus(param)
+	if err != nil {
+		return err
+	}
+
+	// 绑定账号
+	for _, owns := range accounts {
+		for _, acc := range owns {
+			err = svc.BindAccountID(param, acc.ID, true)
+			if err != nil {
+				return err
+			}
+		}
+	}
+
+	// 绑定用户
+	if userID != nil {
+		err = svc.BindUserID(param, *userID, true)
+	}
+	return err
 }
 
-func (a *Auth) Del(instance *model.Auth) *errs.CodeErrs {
+// BindAccountID 绑定账号ID
+func (svc *Auth) BindAccountID(param model.IAuth, accountID uint64, force bool) *errs.CodeErrs {
+	account, err := svc.dbAccount.Select(nil) // TODO:GG 根据ID查找account
+	if err != nil {
+		return err
+	} else if account == nil {
+		return errs.Match2("账号不存在")
+	}
+	return svc.BindAccount(param, account, force)
+}
+
+// BindAccount 绑定账号 TODO:GG 外部需要 account.AddAuth(a)
+func (svc *Auth) BindAccount(param model.IAuth, account *model.Account, force bool) *errs.CodeErrs {
+	// 检查账号是否已绑定
+	oldBind := param.GetAccount(account.OwnKind, account.OwnID)
+	if (oldBind != nil) && !force {
+		return errs.Match2("已绑定账号")
+	}
+
+	// 更新auth下的account关联 (多对多表修改)
+	// TODO:GG 更新外表accountID，新旧都会改，需要在这里更新吗？
+	// TODO:GG 被绑定的account也需要修改auth，auth只同时bind一个(当前own下)账号
+	param.SetAccount(account)
+
+	// 更新auth的状态
+	if param.IsActive() && !param.IsBind() {
+		param.SetStatus(model.AuthStatusBind)
+		err := svc.db.Update(param) // TODO:GG 更新status
+		if err != nil {
+			return err
+		}
+	}
 	return nil
 }
 
-func (a *Auth) Upd(instance *model.Auth) *errs.CodeErrs {
+// UnbindAccountID 解绑账号ID
+func (svc *Auth) UnbindAccountID(param model.IAuth, accountID uint64) *errs.CodeErrs {
+	account, err := svc.dbAccount.Select(nil) // TODO:GG 根据ID查找account
+	if err != nil {
+		return err
+	} else if account == nil {
+		return errs.Match2("账号不存在")
+	}
+	return svc.UnbindAccount(param, account)
+}
+
+// UnbindAccount 解绑账号 TODO:GG 外部需要 account.DelAuth(a)
+func (svc *Auth) UnbindAccount(param model.IAuth, account *model.Account) *errs.CodeErrs {
+	// 检查账号是否已绑定
+	oldBind := param.GetAccount(account.OwnKind, account.OwnID)
+	if oldBind == nil {
+		return errs.Match2("未绑定账号")
+	}
+
+	// 更新auth下的account关联 (多对多表修改)
+	// TODO:GG 更新外表accountID，新旧都会改，需要在这里更新吗？
+	// TODO:GG 被绑定的account也需要修改auth，auth只同时bind一个(当前own下)账号
+	param.DelAccount(account)
+
+	// 更新auth的状态
+	if param.IsBind() && len(param.GetAccAccounts()) == 0 {
+		param.SetStatus(model.AuthStatusActive)
+		err := svc.db.Update(param) // TODO:GG 更新status
+		if err != nil {
+			return err
+		}
+	}
 	return nil
 }
 
-func (a *Auth) Get(kind uint16, maps data.KSMap) (model.IAuth, *errs.CodeErrs) {
-	//	switch kind {
-	//	case model.AuthKindPwd:
-	//		if username, ok := maps.GetString("username"); ok {
-	//			// TODO:GG DB获取
-	//			return &model.UsernamePwd{
-	//				Auth:     &model.Auth{},
-	//				Username: username,
-	//			}, nil
-	//		}
-	//		return nil, errs.MatchByMessage("认证：没有账号！")
-	//	case model.AuthKindPhone:
-	//		if areaCode, ok := maps.GetString("areaCode"); ok {
-	//			if number, okk := maps.GetString("number"); okk {
-	//				// TODO:GG DB获取
-	//				return &model.PhoneNumber{
-	//					Auth:     &model.Auth{},
-	//					AreaCode: areaCode,
-	//					Number:   number,
-	//				}, nil
-	//			} else {
-	//				return nil, errs.MatchByMessage("认证：没有手机号！")
-	//			}
-	//		}
-	//		return nil, errs.MatchByMessage("认证：没有区号！")
-	//	case model.AuthKindEmail:
-	//		if username, ok := maps.GetString("username"); ok {
-	//			if domain, okk := maps.GetString("domain"); okk {
-	//				// TODO:GG DB获取
-	//				return &model.EmailAddress{
-	//					Auth:     &model.Auth{},
-	//					Username: username,
-	//					Domain:   domain,
-	//				}, nil
-	//			} else {
-	//				return nil, errs.MatchByMessage("认证：没有域名！")
-	//			}
-	//		}
-	//		return nil, errs.MatchByMessage("认证：没有用户名！")
-	//	case model.AuthKindBio:
-	//		return nil, errs.NewErr(errs.MatchByMessage("生物特征认证未实现！"))
-	//	case model.AuthKindThird:
-	//		return nil, errs.NewErr(errs.MatchByMessage("第三方认证未实现！"))
-	//	}
-	//	return nil, errs.NewErr(errs.MatchByMessage("未知认证类型！"))
-	//}
-	//
-	//func AuthCheck(instance model.IAuth, kind int16, maps utils.KSMap) *errs.CodeErrs {
-	//	switch kind {
-	//	case model.VerifyKindPwd:
-	//		auth := (instance).(*model.UsernamePwd)
-	//		// 账号不是必选项
-	//		if username, ok := maps.GetString("username"); ok {
-	//			if username != auth.Username {
-	//				return errs.NewErr(errs.MatchByMessage("认证：账号错误！"))
-	//			}
-	//		}
-	//		// 密码是必选项
-	//		password, ok := maps.GetString("password")
-	//		if !ok {
-	//			return errs.NewErr(errs.MatchByMessage("认证：没有密码！"))
-	//		} else if password != auth.Password {
-	//			return errs.NewErr(errs.MatchByMessage("认证：密码错误！"))
-	//		}
-	//	case model.VerifyKindPhone:
-	//		auth := (instance).(*model.PhoneNumber)
-	//		code, ok := maps.GetString("code")
-	//		if !ok {
-	//			return errs.NewErr(errs.MatchByMessage("认证：没有验证码！"))
-	//		}
-	//		clientId, ok := maps.GetUint64("clientId")
-	//		if !ok {
-	//			return errs.NewErr(errs.MatchByMessage("认证：未知客户端！"))
-	//		}
-	//		verify := model.NewVerifyInfoDef(clientId, auth.AccountId, kind)
-	//		if verify.GetCode() != code {
-	//			return errs.NewErr(errs.MatchByMessage("认证：验证码错误！"))
-	//		}
-	//	case model.VerifyKindEmail:
-	//
-	//	case model.VerifyKindBio:
-	//
-	//	case model.VerifyKindThird:
-	//
-	//	default:
-	//
-	//	}
-	return nil, nil
+// BindUserID 绑定用户ID
+func (svc *Auth) BindUserID(param model.IAuth, userID uint64, force bool) *errs.CodeErrs {
+	user, err := svc.dbAccount.Select(nil) // TODO:GG 根据ID查找user
+	if err != nil {
+		return errs.Match2("用户不存在")
+	} else if user == nil {
+		return errs.Match2("用户不存在")
+	}
+	return svc.BindUser(param, user, force)
 }
+
+// BindUser 绑定用户
+func (svc *Auth) BindUser(param model.IAuth, user any, force bool) *errs.CodeErrs {
+	limit := svc.GetLimitAuth(int16(account.OwnKind), account.OwnID)
+
+	// TODO:GG
+	return nil
+}
+
+func (svc *Auth) checkStatus(param model.IAuth) *errs.CodeErrs {
+
+}
+
+//case AuthKindPassword:
+// TODO:GG 在auth里检查?
+// TODO: 比较 hashedPassword 和 a.Password
+// 实际场景中应该使用安全的密码哈希比较
+// 例如: hashedPassword := HashPassword(cred.Password, salt)
+//salt, _ := a.GetPasswordSalt()

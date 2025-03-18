@@ -198,6 +198,30 @@ func (v *Verify) IsVerified() bool {
 	return v.Status == VerifyStatusSuccess && v.ValidAt != nil
 }
 
+func (v *Verify) SetPending() {
+	v.Status = VerifyStatusPending
+	nowUnix := time.Now().Unix()
+	if (v.SendAt == nil) || (*v.SendAt > nowUnix) {
+		v.SendAt = &nowUnix
+	}
+	v.ValidAt = nil  // reset
+	v.ValidTimes = 0 // reset
+}
+
+func (v *Verify) SetSuccess() {
+	v.Status = VerifyStatusSuccess
+	nowUnix := time.Now().Unix()
+	v.ValidAt = &nowUnix
+	v.ValidTimes++
+}
+
+func (v *Verify) SetReject() {
+	v.Status = VerifyStatusReject
+	nowUnix := time.Now().Unix()
+	v.ValidAt = &nowUnix
+	v.ValidTimes++
+}
+
 // CanValid 检查是否可以验证
 func (v *Verify) CanValid(expireSec int64, maxValidTimes int) bool {
 	if v.Status < VerifyStatusPending || v.Status >= VerifyStatusSuccess {

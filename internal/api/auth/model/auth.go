@@ -20,8 +20,12 @@ type (
 		IsEnabled() bool        // 检查认证方式是否启用
 		IsActive() bool         // 检查认证方式是否已激活过
 		IsBind() bool           // 检查认证方式是否已绑定账号
+		TryActive() bool        // 尝试激活认证方式 (如果未激活过，则激活)
+		TryBind() bool          // 尝试绑定认证方式 (如果未绑定过，则绑定)
 
-		GetKind() AuthKind  // 获取认证类型
+		GetKind() AuthKind // 获取认证类型
+
+		SetUserID(*uint64)  // 设置认证用户Id
 		GetUserID() *uint64 // 认证用户Id
 
 		SetAccount(*Account)                             // 关联账号信息
@@ -41,7 +45,8 @@ type (
 		// implements
 
 		Accounts map[OwnKind]map[uint64]*Account `json:"-"` // 账户Id (多对多表)
-		Verifies map[VerifyApply]*Verify         `json:"-"` // 认证信息
+
+		Verifies map[VerifyApply]*Verify `json:"-"` // 认证信息
 	}
 
 	// AuthPassword 用户名+密码
@@ -366,8 +371,28 @@ func (a *Auth) IsBind() bool {
 	return a.Status >= AuthStatusBind
 }
 
+func (a *Auth) TryActive() bool {
+	if (a.Status >= AuthStatusInit) && (a.Status != AuthStatusActive) {
+		a.Status = AuthStatusActive
+		return true
+	}
+	return false
+}
+
+func (a *Auth) TryBind() bool {
+	if (a.Status >= AuthStatusActive) && (a.Status != AuthStatusBind) {
+		a.Status = AuthStatusBind
+		return true
+	}
+	return false
+}
+
 func (a *Auth) GetKind() AuthKind {
 	return a.Kind
+}
+
+func (a *Auth) SetUserID(userID *uint64) {
+	a.UserID = userID
 }
 
 func (a *Auth) GetUserID() *uint64 {
