@@ -153,6 +153,12 @@ func (svc *Auth) UnbindAccount(param model.IAuth, account *model.Account) *errs.
 	return svc.tryStatusActive(exist)
 }
 
+// ResetPassword 修改密码
+func (svc *Auth) ResetPassword(param *model.AuthPassword) *errs.CodeErrs {
+	// TODO:GG 修改密码
+	return nil
+}
+
 // tryStatusActive 尝试修改成激活状态
 func (svc *Auth) tryStatusActive(exist model.IAuth) *errs.CodeErrs {
 	// 检查是否满足更新条件

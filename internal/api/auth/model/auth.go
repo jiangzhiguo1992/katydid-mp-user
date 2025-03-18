@@ -42,8 +42,6 @@ type (
 		// implements
 
 		Accounts map[OwnKind]map[uint64]*Account `json:"-"` // 账户Id (多对多表)
-
-		Verifies map[VerifyApply]*Verify `json:"-"` // 认证信息
 	}
 
 	// AuthPassword 用户名+密码

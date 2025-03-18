@@ -98,6 +98,12 @@ func (svc *Account) Login(param *model.Account) *errs.CodeErrs {
 // 例如: hashedPassword := HashPassword(cred.Password, salt)
 //salt, _ := a.GetPasswordSalt()
 
+// ResetNickname 重置昵称
+func (svc *Account) ResetNickname(exist *model.Account) *errs.CodeErrs {
+	// TODO:GG 重置昵称
+	return nil
+}
+
 // checkNickname 检查昵称
 func (svc *Account) checkNickname(entity *model.Account) *errs.CodeErrs {
 	limit := svc.GetLimitAccount(int16(entity.OwnKind), entity.OwnID)
