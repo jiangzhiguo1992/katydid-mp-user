@@ -2,7 +2,6 @@ package model
 
 import (
 	"katydid-mp-user/internal/pkg/model"
-	"katydid-mp-user/pkg/data"
 	"katydid-mp-user/pkg/valid"
 	"reflect"
 )
@@ -33,23 +32,11 @@ func NewAccountEmpty() *Account {
 	}
 }
 
-func NewAccount(
-	ownKind OwnKind, ownID uint64,
-	userID *uint64, number *uint64, nickname *string,
-) *Account {
-	base := model.NewBase(make(data.KSMap))
-	base.Status = AccountStatusInit
-	return &Account{
-		Base:    base,
-		OwnKind: ownKind, OwnID: ownID, Number: number, Nickname: nickname,
-		Auths: make(map[AuthKind]IAuth),
-	}
-}
-
 func (a *Account) Wash() *Account {
 	a.Base = a.Base.Wash(AccountStatusInit)
 	a.UserID = nil
 	a.Number = nil
+	a.Auths = make(map[AuthKind]IAuth)
 	a.LoginHistory = nil
 	a.EntryHistory = nil
 	a.AccessHistory = nil
@@ -144,30 +131,37 @@ func (a *Account) CanAccess() bool {
 }
 
 // AddAuth 添加认证方式
-func (a *Account) AddAuth(auth IAuth) {
+func (a *Account) AddAuth(auth IAuth) bool {
 	if a.Auths == nil {
 		a.Auths = make(map[AuthKind]IAuth)
 	}
+
 	a.Auths[auth.GetKind()] = auth
+	auth.SetAccount(a)
+
 	if (a.Status >= AccountStatusInit) && (a.Status < AccountStatusActive) {
 		a.Status = AccountStatusActive
+		return true
 	}
-	a.Auths[auth.GetKind()].SetAccount(a)
+	return false
 }
 
 // DelAuth 删除认证方式
-func (a *Account) DelAuth(auth IAuth) {
+func (a *Account) DelAuth(auth IAuth) bool {
 	if a.Auths == nil {
-		return
+		return a.Status > AccountStatusInit
 	}
+
 	if _, ok := a.Auths[auth.GetKind()]; ok {
-		a.Auths[auth.GetKind()].DelAccount(a)
+		auth.DelAccount(a.OwnKind, a.OwnID)
 		delete(a.Auths, auth.GetKind())
 	}
+
 	if (len(a.Auths) == 0) && (a.Status >= AccountStatusActive) {
 		a.Status = AccountStatusInit
+		return true
 	}
-	a.Auths[auth.GetKind()].DelAccount(a)
+	return false
 }
 
 // GetAuthKinds 获取认证方式种类列表
@@ -180,6 +174,19 @@ func (a *Account) GetAuthKinds() []AuthKind {
 		}
 	}
 	return kinds
+}
+
+// HasAuthKind 检查是否拥有指定的认证方式
+func (a *Account) HasAuthKind(authKind AuthKind) bool {
+	if a.Auths == nil {
+		return false
+	}
+	for kind := range a.Auths {
+		if kind == authKind {
+			return true
+		}
+	}
+	return false
 }
 
 // AddRole 添加角色 TODO:GG 在这里?

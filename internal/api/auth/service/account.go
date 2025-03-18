@@ -62,11 +62,7 @@ func (svc *Account) Register(param *model.Account) *errs.CodeErrs {
 		return err
 	}
 
-	// 生成token并返回 (即使Token生成失败也不要紧，已经注册成功了，直接登录即可)
-	err = svc.RefreshTokens(entity)
-	if err != nil {
-		return err
-	}
+	// TODO:GG 上层生成token并返回 (即使Token生成失败也不要紧，已经注册成功了，直接登录即可)
 	return nil
 }
 
@@ -107,7 +103,9 @@ func (svc *Account) checkAuth(entity *model.Account, iAuth model.IAuth) *errs.Co
 	if err != nil {
 		return err
 	} else if exist != nil {
-		return errs.Match2("账号已存在")
+		if !exist.IsUnRegister() || !exist.CanRegister() {
+			return errs.Match2("账号已存在")
+		}
 	}
 
 	// 根据authKind来检查
@@ -122,18 +120,31 @@ func (svc *Account) checkAuth(entity *model.Account, iAuth model.IAuth) *errs.Co
 			return errs.Match2("用户名已存在")
 		}
 
-		// 添加账号
-		err = svc.dbs.Insert(entity)
+		// 添加/重新注册账号
+		if exist == nil {
+			err = svc.dbs.Insert(entity)
+			exist = entity
+		} else {
+			err = svc.dbs.Update(exist)
+		}
 		if err != nil {
 			return err
 		}
 
 		// 添加关联的auth
-		iAuth.SetAccount(entity)
-		err = svc.dbsAuth.Insert(iAuth) // TODO:GG (别忘了多对多表)
+		err = svc.dbsAuth.Insert(iAuth) // TODO:GG 这里是多对多表的修改
 		if err != nil {
 			return err
 		}
+
+		// 修改实体类 + 账号状态
+		if exist.AddAuth(iAuth) {
+			err = svc.dbs.Update(exist) // TODO:GG 更新账号状态
+			if err != nil {
+				return err
+			}
+		}
+
 	case model.AuthKindCellphone,
 		model.AuthKindEmail:
 		// TODO:GG 上层进行过auth的verify认证了 (如果limit.VerifyRegister=true的话)
@@ -141,34 +152,61 @@ func (svc *Account) checkAuth(entity *model.Account, iAuth model.IAuth) *errs.Co
 		existAuth, err := svc.dbsAuth.Select(iAuth) // TODO:GG 根据 number/email/openID/... 查找auth
 		if err != nil {
 			return err
+		} else if (existAuth != nil) && !existAuth.IsEnabled() {
+			return errs.Match2("认证不可用")
 		}
 
-		// 添加账号
-		err = svc.dbs.Insert(entity)
+		// 添加/重新注册账号
+		if exist == nil {
+			err = svc.dbs.Insert(entity)
+		} else {
+			err = svc.dbs.Update(exist)
+		}
 		if err != nil {
 			return err
 		}
 
 		// auth的是否首次注册
 		if existAuth == nil {
-			iAuth.SetAccount(entity)
 			// 添加关联的auth
-			err = svc.dbsAuth.Insert(iAuth) // TODO:GG (别忘了多对多表)
+			err = svc.dbsAuth.Insert(iAuth) // TODO:GG 这里是多对多表的修改
 			if err != nil {
 				return err
 			}
 		} else {
-			existAuth.SetAccount(entity)
 			// 更新关联auth
-			err = svc.dbsAuth.Update(existAuth) // TODO:GG 更新accountID (别忘了多对多表)
+			err = svc.dbsAuth.Update(existAuth) // TODO:GG 更新accountID 这里是多对多表的修改
 			if err != nil {
 				return err
 			}
 		}
+
+		// 修改实体类
+		if exist == nil {
+			entity.Auths[iAuth.GetKind()] = iAuth
+			if existAuth == nil {
+				iAuth.SetAccount(entity)
+			} else {
+				existAuth.SetAccount(entity)
+			}
+		} else {
+			exist.Auths[iAuth.GetKind()] = iAuth
+			if existAuth == nil {
+				iAuth.SetAccount(exist)
+			} else {
+				existAuth.SetAccount(exist)
+			}
+		}
+
 	default:
 		return errs.Match2(fmt.Sprintf("不支持的认证方式 kind: %svc", strconv.Itoa(int(authKind))))
 	}
 	return nil
+}
+
+// UnRegister 注销账号
+func (svc *Account) UnRegister(exist *model.Account) {
+	// TODO:GG 解绑各种auths
 }
 
 // isAuthKindRequire 检查是否是必要的AuthKind
@@ -209,40 +247,13 @@ func (svc *Account) isAuthKindLogin(param *model.Account, authKind model.AuthKin
 	return false
 }
 
-func (svc *Account) GetOrSetTokens(account *model.Account) *errs.CodeErrs {
-	//// 检查账号状态 TODO:GG 移到service?
-	//if !a.CanAccess() {
-	//	return nil, false
-	//}
-	return nil
-}
-
-func (svc *Account) RefreshTokens(account *model.Account) *errs.CodeErrs {
-	// 检查账号状态
-	err := svc.CheckActionLogin(account)
-	if err != nil {
-		return err
-	}
-	limit := svc.GetLimitAccount(int16(account.OwnKind), account.OwnID)
-	limitOrg := svc.GetLimitOrg(int16(account.OwnKind), account.OwnID)
-	limitClient := svc.GetLimitClient(int16(account.OwnKind), account.OwnID)
-	// TODO:GG 如果开启信任的设备，每次登录都会重新验证？登录的expire未-1?
-	// 生成token
-	account.GenerateTokens(
-		account.OwnKind, account.OwnID,
-		limitOrg.Issuer, limitClient.JwtSecret,
-		limit.AccessTokenExpires, limit.RefreshTokenExpires,
-	)
-	return nil
-}
-
 // CheckActionLogin 检查登录行为合法性
-func (svc *Account) CheckActionLogin(account *model.Account) *errs.CodeErrs {
-	if account.CanLogin() {
+func (svc *Account) CheckActionLogin(exist *model.Account) *errs.CodeErrs {
+	if exist.CanLogin() {
 		return nil
 	}
-	if account.IsUnRegister() {
-		if account.CanRegister() {
+	if exist.IsUnRegister() {
+		if exist.CanRegister() {
 			return errs.Match2("账号不存在")
 		} else {
 			return errs.Match2("账号被拉黑")
@@ -252,46 +263,16 @@ func (svc *Account) CheckActionLogin(account *model.Account) *errs.CodeErrs {
 	}
 }
 
-func (svc *Account) UnRegister() {
-	// TODO:GG 解绑各种auths
-}
-
-func (svc *Account) BindUser(account *model.Account) {
-	limit := svc.GetLimitAccount(int16(account.OwnKind), account.OwnID)
-	_ = limit.MaxPerUser      // TODO:GG 检查
-	_ = limit.MaxPerUserShare // TODO:GG 检查
-
-}
-
-// BindUserID 绑定用户ID
-func (svc *Auth) BindUserID(param model.IAuth, userID uint64, force bool) *errs.CodeErrs {
-	user, err := svc.dbsAccount.Select(nil) // TODO:GG 根据ID查找user
-	if err != nil {
-		return err
-	} else if user == nil {
-		return errs.Match2("用户不存在")
-	}
-	return svc.BindUser(exist, user, force)
-}
-
-// BindUser 绑定用户
-func (svc *Auth) BindUser(entity model.IAuth, user any, force bool) *errs.CodeErrs {
-	limit := svc.GetLimitAuth(int16(account.OwnKind), account.OwnID)
-
-	// TODO:GG 如果已经被绑定，则需要认证(人脸)或者旧账号解绑
-
-	// TODO:GG 如果没有绑定过，需要看limit里是都需要人脸等验证来绑定user
-
-	return nil
-}
-
-func (svc *Auth) Login() {
-	limit := svc.GetLimitAccount(int16(account.OwnKind), account.OwnID)
+func (svc *Account) Login(param *model.Account) {
+	limit := svc.GetLimitAccount(int16(param.OwnKind), param.OwnID)
 	_ = limit.AuthLogins
 	_ = limit.AuthRequires
 	_ = limit.UserIDCardRequire
 	_ = limit.UserInfoRequire
 	_ = limit.UserBioRequire
+
+	_ = param.GetAuthKinds()
+
 }
 
 //case AuthKindPassword:

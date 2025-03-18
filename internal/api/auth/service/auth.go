@@ -80,14 +80,21 @@ func (svc *Auth) bindAccount(exist model.IAuth, account *model.Account) *errs.Co
 	// 更新auth下的account关联 (多对多表修改)
 	// TODO:GG 更新外表accountID，新旧都会改，需要在这里更新吗？
 	// TODO:GG 被绑定的account也需要修改auth，auth只同时bind一个(当前own下)账号
+
+	// 修改实体类绑定
 	if oldBindAccount != nil {
 		delete(oldBindAccount.Auths, exist.GetKind())
 	}
 	if oldBindAuth := account.Auths[exist.GetKind()]; oldBindAuth != nil {
 		delete(account.Auths, oldBindAuth.GetKind())
 	}
-	exist.SetAccount(account)
-	account.Auths[exist.GetKind()] = exist
+	if account.AddAuth(exist) {
+		// 修改account状态
+		err := svc.dbsAccount.Update(account) // TODO:GG 更新账号状态
+		if err != nil {
+			return err
+		}
+	}
 
 	// 更新auth的状态
 	return svc.tryStatusBind(exist)
@@ -120,10 +127,8 @@ func (svc *Auth) UnbindAccount(param model.IAuth, account *model.Account) *errs.
 	if isLoginAUth {
 		existLoginAuth := 0
 		for _, loginKind := range limit.AuthLogins {
-			for _, auth := range account.Auths {
-				if int16(auth.GetKind()) == loginKind {
-					existLoginAuth++
-				}
+			if account.HasAuthKind(model.AuthKind(loginKind)) {
+				existLoginAuth++
 			}
 		}
 		if existLoginAuth <= 1 {
@@ -134,8 +139,15 @@ func (svc *Auth) UnbindAccount(param model.IAuth, account *model.Account) *errs.
 	// 更新auth下的account关联 (多对多表修改)
 	// TODO:GG 更新外表accountID，新旧都会改，需要在这里更新吗？
 	// TODO:GG 被绑定的account也需要修改auth，auth只同时bind一个(当前own下)账号(limit固定1)
-	exist.DelAccount(account.OwnKind, account.OwnID)
-	delete(account.Auths, exist.GetKind())
+
+	// 修改实体类绑定
+	if account.DelAuth(exist) {
+		// 修改account状态
+		err := svc.dbsAccount.Update(account) // TODO:GG 更新账号状态
+		if err != nil {
+			return err
+		}
+	}
 
 	// 更新auth的状态
 	return svc.tryStatusActive(exist)
