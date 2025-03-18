@@ -33,13 +33,7 @@ func NewAccount(
 // Register 注册账号 TODO:GG 上层已经验证了verify + 检查ownId是否存在
 func (svc *Account) Register(param *model.Account) *errs.CodeErrs {
 	// auths检查 (有且仅有一个)
-	var iAuth model.IAuth
-	for _, auth := range param.Auths {
-		if auth != nil {
-			iAuth = auth
-			break
-		}
-	}
+	iAuth := param.FirstAuth()
 	if iAuth == nil {
 		return errs.Match2("注册时，认证不能为空")
 	}
@@ -137,8 +131,9 @@ func (svc *Account) checkAuth(entity *model.Account, iAuth model.IAuth) *errs.Co
 			return err
 		}
 
-		// 修改实体类 + 账号状态
+		// 修改实体类绑定
 		if exist.AddAuth(iAuth) {
+			// 修改account状态
 			err = svc.dbs.Update(exist) // TODO:GG 更新账号状态
 			if err != nil {
 				return err
@@ -159,6 +154,7 @@ func (svc *Account) checkAuth(entity *model.Account, iAuth model.IAuth) *errs.Co
 		// 添加/重新注册账号
 		if exist == nil {
 			err = svc.dbs.Insert(entity)
+			exist = entity
 		} else {
 			err = svc.dbs.Update(exist)
 		}
@@ -170,31 +166,21 @@ func (svc *Account) checkAuth(entity *model.Account, iAuth model.IAuth) *errs.Co
 		if existAuth == nil {
 			// 添加关联的auth
 			err = svc.dbsAuth.Insert(iAuth) // TODO:GG 这里是多对多表的修改
-			if err != nil {
-				return err
-			}
+			existAuth = iAuth
 		} else {
 			// 更新关联auth
 			err = svc.dbsAuth.Update(existAuth) // TODO:GG 更新accountID 这里是多对多表的修改
-			if err != nil {
-				return err
-			}
+		}
+		if err != nil {
+			return err
 		}
 
-		// 修改实体类
-		if exist == nil {
-			entity.Auths[iAuth.GetKind()] = iAuth
-			if existAuth == nil {
-				iAuth.SetAccount(entity)
-			} else {
-				existAuth.SetAccount(entity)
-			}
-		} else {
-			exist.Auths[iAuth.GetKind()] = iAuth
-			if existAuth == nil {
-				iAuth.SetAccount(exist)
-			} else {
-				existAuth.SetAccount(exist)
+		// 修改实体类绑定
+		if exist.AddAuth(existAuth) {
+			// 修改account状态
+			err = svc.dbs.Update(exist) // TODO:GG 更新账号状态
+			if err != nil {
+				return err
 			}
 		}
 

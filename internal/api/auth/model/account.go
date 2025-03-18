@@ -189,6 +189,19 @@ func (a *Account) HasAuthKind(authKind AuthKind) bool {
 	return false
 }
 
+// FirstAuth 获取第一个认证方式
+func (a *Account) FirstAuth() IAuth {
+	if a.Auths == nil {
+		return nil
+	}
+	for _, au := range a.Auths {
+		if au != nil {
+			return au
+		}
+	}
+	return nil
+}
+
 // AddRole 添加角色 TODO:GG 在这里?
 func (a *Account) AddRole(role string) {
 	roles, ok := a.GetRoles()
