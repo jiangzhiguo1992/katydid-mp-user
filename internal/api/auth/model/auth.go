@@ -28,6 +28,7 @@ type (
 		GetKind() AuthKind // 获取认证类型
 
 		SetAccount(*Account)                             // 关联账号信息
+		SetAccounts(map[OwnKind]map[uint64]*Account)     // 关联账号信息
 		DelAccount(OwnKind, uint64)                      // 删除关联账号信息
 		GetAccAccounts() map[OwnKind]map[uint64]*Account // 获取关联的账号ID
 		GetAccount(OwnKind, uint64) *Account             // 获取关联的账号ID
@@ -145,7 +146,7 @@ func NewAuthEmail(
 
 func (a *Auth) Wash() IAuth {
 	a.Base = a.Base.Wash(AuthStatusInit)
-	a.Accounts = nil
+	a.Accounts = make(map[OwnKind]map[uint64]*Account)
 	return a
 }
 
@@ -417,6 +418,23 @@ func (a *Auth) SetAccount(account *Account) {
 		a.Accounts[account.OwnKind] = make(map[uint64]*Account)
 	}
 	a.Accounts[account.OwnKind][account.OwnID] = account
+}
+
+func (a *Auth) SetAccounts(accounts map[OwnKind]map[uint64]*Account) {
+	if a.Accounts == nil {
+		a.Accounts = make(map[OwnKind]map[uint64]*Account)
+	}
+	if accounts == nil {
+		return
+	}
+	for ownKind, ownIDs := range accounts {
+		if _, ok := a.Accounts[ownKind]; !ok {
+			a.Accounts[ownKind] = make(map[uint64]*Account)
+		}
+		for ownID, account := range ownIDs {
+			a.Accounts[ownKind][ownID] = account
+		}
+	}
 }
 
 func (a *Auth) DelAccount(ownKind OwnKind, ownID uint64) {
