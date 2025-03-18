@@ -32,8 +32,6 @@ type (
 		DelAccount(OwnKind, uint64)                      // 删除关联账号信息
 		GetAccAccounts() map[OwnKind]map[uint64]*Account // 获取关联的账号ID
 		GetAccount(OwnKind, uint64) *Account             // 获取关联的账号ID
-
-		//GetVerify(VerifyApply) *Verify // 获取认证信息
 	}
 
 	// Auth 可验证账号基础
@@ -103,44 +101,6 @@ func NewAuthCellphoneEmpty() *AuthCellphone {
 func NewAuthEmailEmpty() *AuthEmail {
 	return &AuthEmail{
 		Auth: NewAuthEmpty(),
-	}
-}
-
-func NewAuth(kind AuthKind) *Auth {
-	base := model.NewBase(make(data.KSMap))
-	base.Status = AuthStatusInit
-	return &Auth{
-		Base: base,
-		Kind: kind,
-	}
-}
-
-func NewAuthPassword(
-	username *string, passwordMD5 string,
-) *AuthPassword {
-	return &AuthPassword{
-		Auth:     NewAuth(AuthKindPassword),
-		Username: username, PasswordMD5: passwordMD5,
-	}
-}
-
-func NewAuthCellphone(
-	code, number string,
-) *AuthCellphone {
-	return &AuthCellphone{
-		Auth: NewAuth(AuthKindCellphone),
-		Code: code, Number: number,
-		Operator: nil,
-	}
-}
-
-func NewAuthEmail(
-	username, domain string,
-) *AuthEmail {
-	return &AuthEmail{
-		Auth:     NewAuth(AuthKindEmail),
-		Username: username, Domain: domain,
-		Entity: nil, TLD: nil,
 	}
 }
 
@@ -458,13 +418,6 @@ func (a *Auth) GetAccount(ownKind OwnKind, ownID uint64) *Account {
 	}
 	return nil
 }
-
-//func (a *Auth) GetVerify(apply VerifyApply) *Verify {
-//	if verify, ok := a.Verifies[apply]; ok {
-//		return verify
-//	}
-//	return nil
-//}
 
 // FullNumber 返回完整的手机号
 func (a *AuthCellphone) FullNumber() string {

@@ -31,11 +31,9 @@ func NewVerify(
 	}
 }
 
-// Add 添加验证码
+// Add 添加验证码 TODO:GG 上层检查ownId是否存在
 func (svc *Verify) Add(param *model.Verify) *errs.CodeErrs {
 	entity := param.Wash()
-
-	// TODO:GG 检查ownId是否存在
 
 	// 生成验证码
 	err := svc.generateBody(entity)
@@ -63,10 +61,8 @@ func (svc *Verify) OnSendFail(exist *model.Verify) *errs.CodeErrs {
 	return nil
 }
 
-// Valid 验证验证码
+// Valid 验证验证码 TODO:GG 上层检查ownId是否存在
 func (svc *Verify) Valid(param *model.Verify) *errs.CodeErrs {
-	// TODO:GG 检查ownId是否存在
-
 	// 检查传进来的参数
 	body, ok := param.GetBody()
 	if !ok {
