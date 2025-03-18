@@ -27,22 +27,18 @@ type (
 
 		GetKind() AuthKind // 获取认证类型
 
-		SetUserID(*uint64)  // 设置认证用户Id
-		GetUserID() *uint64 // 认证用户Id
-
 		SetAccount(*Account)                             // 关联账号信息
 		DelAccount(*Account)                             // 删除关联账号信息
 		GetAccAccounts() map[OwnKind]map[uint64]*Account // 获取关联的账号ID
 		GetAccount(OwnKind, uint64) *Account             // 获取关联的账号ID
 
-		GetVerify(VerifyApply) *Verify // 获取认证信息
+		//GetVerify(VerifyApply) *Verify // 获取认证信息
 	}
 
 	// Auth 可验证账号基础
 	Auth struct {
 		*model.Base
-		Kind   AuthKind `json:"kind" validate:"required,check-kind"` // 认证类型
-		UserID *uint64  `json:"userId"`                              // 认证用户Id (有些org/app不填user，这里是第一绑定)
+		Kind AuthKind `json:"kind" validate:"required,check-kind"` // 认证类型
 
 		// implements
 
@@ -148,9 +144,7 @@ func NewAuthEmail(
 }
 
 func (a *Auth) Wash() IAuth {
-	a.Base = model.NewBaseEmpty()
-	a.Status = AuthStatusInit
-	a.UserID = nil
+	a.Base = a.Base.Wash(AuthStatusInit)
 	a.Accounts = nil
 	return a
 }
@@ -418,14 +412,6 @@ func (a *Auth) GetKind() AuthKind {
 	return a.Kind
 }
 
-func (a *Auth) SetUserID(userID *uint64) {
-	a.UserID = userID
-}
-
-func (a *Auth) GetUserID() *uint64 {
-	return a.UserID
-}
-
 func (a *Auth) SetAccount(account *Account) {
 	if _, ok := a.Accounts[account.OwnKind]; !ok {
 		a.Accounts[account.OwnKind] = make(map[uint64]*Account)
@@ -455,12 +441,12 @@ func (a *Auth) GetAccount(ownKind OwnKind, ownID uint64) *Account {
 	return nil
 }
 
-func (a *Auth) GetVerify(apply VerifyApply) *Verify {
-	if verify, ok := a.Verifies[apply]; ok {
-		return verify
-	}
-	return nil
-}
+//func (a *Auth) GetVerify(apply VerifyApply) *Verify {
+//	if verify, ok := a.Verifies[apply]; ok {
+//		return verify
+//	}
+//	return nil
+//}
 
 // FullNumber 返回完整的手机号
 func (a *AuthCellphone) FullNumber() string {

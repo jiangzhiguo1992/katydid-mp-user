@@ -54,6 +54,17 @@ func NewBase(extra data.KSMap) *Base {
 	}
 }
 
+func (b *Base) Wash(status Status) *Base {
+	b.ID = 0
+	b.Status = status
+	b.CreateAt = 0
+	b.UpdateAt = 0
+	b.DeleteBy = 0
+	b.DeleteAt = nil
+	b.Extra = make(data.KSMap)
+	return b
+}
+
 func (b *Base) ValidFieldRules() valid.FieldValidRules {
 	return valid.FieldValidRules{
 		valid.SceneAll:        valid.FieldValidRule{},

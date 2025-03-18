@@ -11,10 +11,12 @@ type (
 	// Account 账号结构
 	Account struct {
 		*model.Base
-		OwnKind  OwnKind `json:"ownKind" validate:"required,range-own"` // 账号拥有者类型(注册的)
-		OwnID    uint64  `json:"ownId" validate:"required"`             // 账号拥有者ID(注册的)
-		Number   *uint64 `json:"number" validate:"format-number"`       // 账号标识 (自定义数字，防止暴露ID)
-		Nickname *string `json:"nickname" validate:"format-nickname"`   // 昵称 (没有user的app/org会用这个，放外面是方便搜索)
+		OwnKind OwnKind `json:"ownKind" validate:"required,range-own"` // 账号拥有者类型(注册的)
+		OwnID   uint64  `json:"ownId" validate:"required"`             // 账号拥有者ID(注册的)
+
+		UserID   *uint64 `json:"userId"`                              // 认证用户Id (有些org/app不填user，这里是第一绑定)
+		Number   *uint64 `json:"number" validate:"format-number"`     // 账号标识 (自定义数字，防止暴露ID)
+		Nickname *string `json:"nickname" validate:"format-nickname"` // 昵称 (没有user的app/org会用这个，放外面是方便搜索)
 
 		Auths map[AuthKind]IAuth `json:"auths,omitempty"` // 认证方式列表 (多对多)
 
@@ -32,7 +34,8 @@ func NewAccountEmpty() *Account {
 }
 
 func NewAccount(
-	ownKind OwnKind, ownID uint64, number *uint64, nickname *string,
+	ownKind OwnKind, ownID uint64,
+	userID *uint64, number *uint64, nickname *string,
 ) *Account {
 	base := model.NewBase(make(data.KSMap))
 	base.Status = AccountStatusInit
@@ -41,6 +44,16 @@ func NewAccount(
 		OwnKind: ownKind, OwnID: ownID, Number: number, Nickname: nickname,
 		Auths: make(map[AuthKind]IAuth),
 	}
+}
+
+func (a *Account) Wash() *Account {
+	a.Base = a.Base.Wash(AccountStatusInit)
+	a.UserID = nil
+	a.Number = nil
+	a.LoginHistory = nil
+	a.EntryHistory = nil
+	a.AccessHistory = nil
+	return a
 }
 
 func (a *Account) ValidFieldRules() valid.FieldValidRules {

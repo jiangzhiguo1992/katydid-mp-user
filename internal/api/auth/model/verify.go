@@ -32,8 +32,7 @@ func NewVerifyEmpty() *Verify {
 }
 
 func (v *Verify) Wash() *Verify {
-	v.Base = model.NewBase(make(data.KSMap))
-	v.Status = VerifyStatusInit
+	v.Base = v.Base.Wash(VerifyStatusInit)
 	v.SendAt = nil
 	v.ValidAt = nil
 	v.ValidTimes = 0
