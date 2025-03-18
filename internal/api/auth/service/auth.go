@@ -14,13 +14,14 @@ type (
 
 		db        *db.Auth
 		dbAccount *db.Account
+		dbVerify  *db.Verify
 	}
 )
 
 // Add 添加认证
 func (svc *Auth) Add(param model.IAuth) *errs.CodeErrs {
 	// 查重
-	exist, err := svc.db.Selects(param) // TODO:GG 根据 AuthKind + Target 查找Auth
+	exist, err := svc.db.Select(param) // TODO:GG 根据 AuthKind + Target 查找Auth
 	if err != nil {
 		return err
 	} else if exist != nil {
@@ -42,9 +43,10 @@ func (svc *Auth) Add(param model.IAuth) *errs.CodeErrs {
 	if err != nil {
 		return err
 	}
+	exist = param
 
 	// 检查状态
-	err = svc.checkStatus(param)
+	err = svc.checkActive(exist)
 	if err != nil {
 		return err
 	}
@@ -52,7 +54,7 @@ func (svc *Auth) Add(param model.IAuth) *errs.CodeErrs {
 	// 绑定账号
 	for _, owns := range accounts {
 		for _, acc := range owns {
-			err = svc.BindAccountID(param, acc.ID, true)
+			err = svc.BindAccountID(exist, acc.ID, true)
 			if err != nil {
 				return err
 			}
@@ -61,7 +63,7 @@ func (svc *Auth) Add(param model.IAuth) *errs.CodeErrs {
 
 	// 绑定用户
 	if userID != nil {
-		err = svc.BindUserID(param, *userID, true)
+		err = svc.BindUserID(exist, *userID, true)
 	}
 	return err
 }
@@ -74,13 +76,13 @@ func (svc *Auth) BindAccountID(param model.IAuth, accountID uint64, force bool) 
 	} else if account == nil {
 		return errs.Match2("账号不存在")
 	}
-	return svc.BindAccount(param, account, force)
+	return svc.BindAccount(exist, account, force)
 }
 
 // BindAccount 绑定账号 TODO:GG 外部需要 account.AddAuth(a)
-func (svc *Auth) BindAccount(param model.IAuth, account *model.Account, force bool) *errs.CodeErrs {
+func (svc *Auth) BindAccount(entity model.IAuth, account *model.Account, force bool) *errs.CodeErrs {
 	// 检查账号是否已绑定
-	oldBind := param.GetAccount(account.OwnKind, account.OwnID)
+	oldBind := entity.GetAccount(account.OwnKind, account.OwnID)
 	if (oldBind != nil) && !force {
 		return errs.Match2("已绑定账号")
 	}
@@ -88,17 +90,10 @@ func (svc *Auth) BindAccount(param model.IAuth, account *model.Account, force bo
 	// 更新auth下的account关联 (多对多表修改)
 	// TODO:GG 更新外表accountID，新旧都会改，需要在这里更新吗？
 	// TODO:GG 被绑定的account也需要修改auth，auth只同时bind一个(当前own下)账号
-	param.SetAccount(account)
+	entity.SetAccount(account)
 
 	// 更新auth的状态
-	if param.IsActive() && !param.IsBind() {
-		param.SetStatus(model.AuthStatusBind)
-		err := svc.db.Update(param) // TODO:GG 更新status
-		if err != nil {
-			return err
-		}
-	}
-	return nil
+	return svc.checkBind(entity)
 }
 
 // UnbindAccountID 解绑账号ID
@@ -109,13 +104,13 @@ func (svc *Auth) UnbindAccountID(param model.IAuth, accountID uint64) *errs.Code
 	} else if account == nil {
 		return errs.Match2("账号不存在")
 	}
-	return svc.UnbindAccount(param, account)
+	return svc.UnbindAccount(exist, account)
 }
 
 // UnbindAccount 解绑账号 TODO:GG 外部需要 account.DelAuth(a)
-func (svc *Auth) UnbindAccount(param model.IAuth, account *model.Account) *errs.CodeErrs {
+func (svc *Auth) UnbindAccount(entity model.IAuth, account *model.Account) *errs.CodeErrs {
 	// 检查账号是否已绑定
-	oldBind := param.GetAccount(account.OwnKind, account.OwnID)
+	oldBind := entity.GetAccount(account.OwnKind, account.OwnID)
 	if oldBind == nil {
 		return errs.Match2("未绑定账号")
 	}
@@ -123,12 +118,51 @@ func (svc *Auth) UnbindAccount(param model.IAuth, account *model.Account) *errs.
 	// 更新auth下的account关联 (多对多表修改)
 	// TODO:GG 更新外表accountID，新旧都会改，需要在这里更新吗？
 	// TODO:GG 被绑定的account也需要修改auth，auth只同时bind一个(当前own下)账号
-	param.DelAccount(account)
+	entity.DelAccount(account)
 
 	// 更新auth的状态
-	if param.IsBind() && len(param.GetAccAccounts()) == 0 {
-		param.SetStatus(model.AuthStatusActive)
-		err := svc.db.Update(param) // TODO:GG 更新status
+	return svc.checkActive(entity)
+}
+
+// BindUserID 绑定用户ID
+func (svc *Auth) BindUserID(param model.IAuth, userID uint64, force bool) *errs.CodeErrs {
+	user, err := svc.dbAccount.Select(nil) // TODO:GG 根据ID查找user
+	if err != nil {
+		return err
+	} else if user == nil {
+		return errs.Match2("用户不存在")
+	}
+	return svc.BindUser(exist, user, force)
+}
+
+// BindUser 绑定用户
+func (svc *Auth) BindUser(entity model.IAuth, user any, force bool) *errs.CodeErrs {
+	limit := svc.GetLimitAuth(int16(account.OwnKind), account.OwnID)
+
+	// TODO:GG
+	return nil
+}
+
+func (svc *Auth) checkActive(entity model.IAuth) *errs.CodeErrs {
+	// 检查是否满足更新条件
+	update := false
+	if entity.IsEnabled() && !entity.IsActive() {
+		existVerify, err := svc.dbVerify.Select(nil) // TODO:GG 根据 StatusSuccess + AuthKind + Target 查找最近的
+		if err != nil {
+			return err
+		} else if existVerify == nil {
+			return nil
+		}
+		update = true
+	} else if entity.IsBind() && len(entity.GetAccAccounts()) == 0 {
+		update = true
+	}
+	// active不会回溯，除非拉黑
+
+	// 更新auth的状态
+	if update {
+		entity.SetStatus(model.AuthStatusActive)
+		err := svc.db.Update(entity) // TODO:GG 更新status
 		if err != nil {
 			return err
 		}
@@ -136,27 +170,28 @@ func (svc *Auth) UnbindAccount(param model.IAuth, account *model.Account) *errs.
 	return nil
 }
 
-// BindUserID 绑定用户ID
-func (svc *Auth) BindUserID(param model.IAuth, userID uint64, force bool) *errs.CodeErrs {
-	user, err := svc.dbAccount.Select(nil) // TODO:GG 根据ID查找user
+func (svc *Auth) checkBind(entity model.IAuth) *errs.CodeErrs {
+	// 先检查是否active
+	err := svc.checkActive(entity)
 	if err != nil {
-		return errs.Match2("用户不存在")
-	} else if user == nil {
-		return errs.Match2("用户不存在")
+		return err
 	}
-	return svc.BindUser(param, user, force)
-}
 
-// BindUser 绑定用户
-func (svc *Auth) BindUser(param model.IAuth, user any, force bool) *errs.CodeErrs {
-	limit := svc.GetLimitAuth(int16(account.OwnKind), account.OwnID)
+	// 检查是否满足更新条件
+	update := false
+	if entity.IsActive() && !entity.IsBind() && (len(entity.GetAccAccounts()) > 0) {
+		update = true
+	}
 
-	// TODO:GG
+	// 更新auth的状态
+	if update {
+		entity.SetStatus(model.AuthStatusBind)
+		err := svc.db.Update(entity) // TODO:GG 更新status
+		if err != nil {
+			return err
+		}
+	}
 	return nil
-}
-
-func (svc *Auth) checkStatus(param model.IAuth) *errs.CodeErrs {
-
 }
 
 //case AuthKindPassword:

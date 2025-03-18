@@ -49,14 +49,14 @@ func (svc *Verify) Del(param *model.Verify) *errs.CodeErrs {
 }
 
 // OnSendOk 发送验证码成功
-func (svc *Verify) OnSendOk(param *model.Verify) *errs.CodeErrs {
+func (svc *Verify) OnSendOk(entity *model.Verify) *errs.CodeErrs {
 	// 不检查ownerID了
-	param.SetPending()
-	return svc.db.Update(param)
+	entity.SetPending()
+	return svc.db.Update(entity)
 }
 
 // OnSendFail 发送验证码失败
-func (svc *Verify) OnSendFail(verify *model.Verify) *errs.CodeErrs {
+func (svc *Verify) OnSendFail(entity *model.Verify) *errs.CodeErrs {
 	// 不检查ownerID了
 	return nil
 }
@@ -148,7 +148,7 @@ func (svc *Verify) addWithCheck(param *model.Verify) *errs.CodeErrs {
 	}
 
 	// 检查添加次数
-	_ = param.CreateAt - (limit.InsertDuration * 1000)
+	_ = time.Now().UnixMilli() - (limit.InsertDuration * 1000)
 	count, err := svc.db.SelectCount(param) // TODO:GG 根据 OwnKind + OwnID + AuthKind + Apply + Target + startAt(上面) 查找最近的
 	if err != nil {
 		return err
