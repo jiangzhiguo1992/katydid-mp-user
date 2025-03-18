@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"katydid-mp-user/internal/api/auth/model"
 	"katydid-mp-user/internal/api/auth/repo/db"
+	model2 "katydid-mp-user/internal/pkg/model"
 	"katydid-mp-user/internal/pkg/service"
 	"katydid-mp-user/pkg/errs"
 	"katydid-mp-user/pkg/log"
@@ -31,25 +32,16 @@ func NewVerify(
 	}
 }
 
+// Add 添加验证码
 func (svc *Verify) Add(param *model.Verify) *errs.CodeErrs {
-
 	// TODO:GG 检查ownId是否存在
 
-	// 检查auth是否存在
-	existAuth, err := svc.dbAuth.Select(nil) // TODO:GG 根据 AuthKind + Target 查找Auth
-	if err != nil {
-		return err
-	} else if existAuth == nil {
-		return errs.Match2(fmt.Sprintf("没有找到对应的auth %d", param.AuthKind))
-	}
-
 	// 生成验证码
-	err = svc.generateBody(param)
+	err := svc.generateBody(param)
 	if err != nil {
 		return err
 	}
-
-	return svc.addVerify(param)
+	return svc.addWithCheck(param)
 }
 
 func (svc *Verify) Del(param *model.Verify) *errs.CodeErrs {
@@ -57,8 +49,9 @@ func (svc *Verify) Del(param *model.Verify) *errs.CodeErrs {
 	return nil
 }
 
+// OnSendOk 发送验证码成功
 func (svc *Verify) OnSendOk(param *model.Verify) *errs.CodeErrs {
-	// 不检查ownerID和authID了
+	// 不检查ownerID了
 	param.Status = model.VerifyStatusPending
 	nowUnix := time.Now().Unix()
 	if (param.SendAt == nil) || (*param.SendAt > nowUnix) {
@@ -69,28 +62,22 @@ func (svc *Verify) OnSendOk(param *model.Verify) *errs.CodeErrs {
 	return svc.db.Update(param)
 }
 
+// OnSendFail 发送验证码失败
 func (svc *Verify) OnSendFail(verify *model.Verify) *errs.CodeErrs {
-	// 不检查ownerID和authID了
+	// 不检查ownerID了
 	return nil
 }
 
+// Valid 验证验证码
 func (svc *Verify) Valid(param *model.Verify) *errs.CodeErrs {
+	// TODO:GG 检查ownId是否存在
+
 	// 检查传进来的参数
 	body, ok := param.GetBody()
 	if !ok {
 		return errs.Match2("验证：没有验证码！")
 	} else if len(body) <= 0 {
 		return errs.Match2("验证：验证码不能为空！")
-	}
-
-	// TODO:GG 检查ownId是否存在
-
-	// 检查auth是否存在
-	existAuth, err := svc.dbAuth.Select(nil) // TODO:GG 根据 AuthKind + Target 查找Auth
-	if err != nil {
-		return err
-	} else if existAuth == nil {
-		return errs.Match2(fmt.Sprintf("没有找到对应的auth %d", param.AuthKind))
 	}
 
 	// 检查已存在验证码的合法性
@@ -103,9 +90,20 @@ func (svc *Verify) Valid(param *model.Verify) *errs.CodeErrs {
 	// 验证内容体
 	validOk := exist.Valid(body)
 
-	// 更新验证状态
-	if !validOk {
+	// 更新验证结果
+	if validOk {
+		exist.Status = model.VerifyStatusSuccess
+	} else {
 		exist.Status = model.VerifyStatusReject
+	}
+	now := time.Now().Unix()
+	exist.ValidAt = &now
+	exist.ValidTimes++
+	err = svc.db.Update(exist)
+	if err != nil {
+		return err
+	}
+	if !validOk {
 		log.Debug("认证失败",
 			log.FString("needCode", existBody),
 			log.FString("requestCode", body),
@@ -113,24 +111,27 @@ func (svc *Verify) Valid(param *model.Verify) *errs.CodeErrs {
 		return errs.Match2("验证码错误")
 	}
 
-	exist.Status = model.VerifyStatusSuccess
-	log.Debug("认证成功",
-		log.FString("needCode", existBody),
-		log.FString("requestCode", body),
-	)
-	now := time.Now().Unix()
-	exist.ValidAt = &now
-	exist.ValidTimes++
-	return svc.db.Update(exist)
+	// 检查auth是否存在
+	existAuth, err := svc.dbAuth.Select(nil) // TODO:GG 根据 AuthKind + Target 查找Auth
+	if (err != nil) || (existAuth == nil) {
+		return nil
+	}
+	// 更新auth的状态
+	if existAuth.IsEnabled() && !existAuth.IsActive() {
+		existAuth.SetStatus(model2.StatusWhite)
+		_ = svc.dbAuth.Update(nil) // TODO:GG 更新auth的status
+	}
+	return nil
 }
 
 // generateBody 生成验证码
 func (svc *Verify) generateBody(param *model.Verify) *errs.CodeErrs {
 	limit := svc.GetLimitVerify(int16(param.OwnKind), param.OwnID)
 	bodyLen := limit.BodyLen[int16(param.AuthKind)]
+
 	body := ""
 	switch param.AuthKind {
-	case model.AuthKindCellphone: // TODO:GG 也可以是链接？
+	case model.AuthKindCellphone:
 		body = num.Random(bodyLen)
 	case model.AuthKindEmail: // TODO:GG 也可以是链接？
 		body = num.Random(bodyLen)
@@ -141,8 +142,8 @@ func (svc *Verify) generateBody(param *model.Verify) *errs.CodeErrs {
 	return nil
 }
 
-// addVerify 添加验证码
-func (svc *Verify) addVerify(param *model.Verify) *errs.CodeErrs {
+// addWithCheck 添加验证码
+func (svc *Verify) addWithCheck(param *model.Verify) *errs.CodeErrs {
 	limit := svc.GetLimitVerify(int16(param.OwnKind), param.OwnID)
 
 	// 检查添加间隔时间
@@ -172,16 +173,21 @@ func (svc *Verify) addVerify(param *model.Verify) *errs.CodeErrs {
 
 // checkExist 检查验证码是否存在
 func (svc *Verify) checkExist(param *model.Verify) (*model.Verify, *errs.CodeErrs) {
+	// 查找验证码
 	exist, err := svc.db.Select(param) // TODO:GG 根据 OwnKind + OwnID + AuthKind + Apply + Target 查找最近的
 	if err != nil {
 		return nil, err
 	} else if exist == nil {
 		return nil, errs.Match2(fmt.Sprintf("没有找到对应的验证码 %d", param.AuthKind))
 	}
+
+	// 检查验证码是否有效
 	limit := svc.GetLimitVerify(int16(exist.OwnKind), exist.OwnID)
 	if !exist.CanValid(limit.Expires, limit.VerifyMaxTimes) {
 		return nil, errs.Match2("失效的验证码")
 	}
+
+	// 检查验证内容
 	existBody, ok := exist.GetBody()
 	if !ok {
 		return nil, errs.Match2("验证：没有验证码！")
