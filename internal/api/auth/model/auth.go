@@ -15,9 +15,12 @@ var _ IAuth = (*AuthEmail)(nil)
 type (
 	// IAuth 认证接口
 	IAuth interface {
-		IsBlocked() bool    // 检查认证方式是否被封禁
-		IsEnabled() bool    // 检查认证方式是否启用
-		IsActive() bool     // 检查认证方式是否已激活过
+		SetStatus(model.Status) // 设置认证状态
+		IsBlocked() bool        // 检查认证方式是否被封禁
+		IsEnabled() bool        // 检查认证方式是否启用
+		IsActive() bool         // 检查认证方式是否已激活过
+		IsBind() bool           // 检查认证方式是否已绑定账号
+
 		GetKind() AuthKind  // 获取认证类型
 		GetUserID() *uint64 // 认证用户Id
 
@@ -101,7 +104,7 @@ func NewAuthEmailEmpty() *AuthEmail {
 
 func NewAuth(kind AuthKind) *Auth {
 	base := model.NewBase(make(data.KSMap))
-	base.Status = model.StatusInit
+	base.Status = AuthStatusInit
 	return &Auth{
 		Base: base,
 		Kind: kind,
@@ -317,6 +320,11 @@ func (a *AuthEmail) ValidLocalizeRules() valid.LocalizeValidRules {
 }
 
 const (
+	AuthStatusBlock  model.Status = -1 // 封禁状态
+	AuthStatusInit   model.Status = 0  // 初始状态
+	AuthStatusActive model.Status = 1  // 激活状态
+	AuthStatusBind   model.Status = 2  // 绑定状态
+
 	OwnKindOrg    OwnKind = 10 // 组织
 	OwnKindRole   OwnKind = 11 // 角色
 	OwnKindApp    OwnKind = 20 // 应用
@@ -338,16 +346,24 @@ const (
 	AuthKindThirdFB     AuthKind = 105 // 三方平台-Facebook
 )
 
+func (a *Auth) SetStatus(status model.Status) {
+	a.Status = status
+}
+
 func (a *Auth) IsBlocked() bool {
-	return a.IsBlack()
+	return a.Status <= AuthStatusBlock
 }
 
 func (a *Auth) IsEnabled() bool {
-	return a.Status >= model.StatusInit
+	return a.Status >= AuthStatusInit
 }
 
 func (a *Auth) IsActive() bool {
-	return a.IsWhite()
+	return a.Status >= AuthStatusActive
+}
+
+func (a *Auth) IsBind() bool {
+	return a.Status >= AuthStatusBind
 }
 
 func (a *Auth) GetKind() AuthKind {
@@ -362,27 +378,15 @@ func (a *Auth) SetAccount(account *Account) {
 	if _, ok := a.Accounts[account.OwnKind]; !ok {
 		a.Accounts[account.OwnKind] = make(map[uint64]*Account)
 	}
-	a.Accounts[account.OwnKind][account.ID] = account
-	if (a.Status >= model.StatusInit) && (a.Status < model.StatusWhite) {
-		a.Status = model.StatusWhite
-	}
-	if account.Auths[a.Kind] == nil {
-		account.AddAuth(a)
-	}
+	a.Accounts[account.OwnKind][account.OwnID] = account
 }
 
 func (a *Auth) DelAccount(account *Account) {
 	if owns, ok := a.Accounts[account.OwnKind]; ok {
-		delete(owns, account.ID)
+		delete(owns, account.OwnID)
 		if len(owns) == 0 {
 			delete(a.Accounts, account.OwnKind)
 		}
-	}
-	if (a.Status >= model.StatusWhite) && (len(a.Accounts) == 0) {
-		a.Status = model.StatusInit
-	}
-	if account.Auths[a.Kind] != nil {
-		account.DelAuth(a)
 	}
 }
 
