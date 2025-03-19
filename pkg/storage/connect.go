@@ -34,6 +34,7 @@ type (
 		User     string // 用户名
 		Password string // 密码
 		DBName   string // 数据库名称
+
 		SSLMode  string // SSL模式
 		TimeZone string // 时区
 
@@ -47,18 +48,11 @@ type (
 
 		LogLevel logger.LogLevel
 		Debug    bool // 是否开启调试模式
-
 	}
 
 	// DBType 数据库类型
 	DBType string
 )
-
-func GetDefaultDBConfig(tp DBType) DBConfig {
-	return DBConfig{
-		Type: tp,
-	}
-}
 
 // InitConnect 初始化数据库连接
 func InitConnect(name string, config DBConfig) (*gorm.DB, error) {
