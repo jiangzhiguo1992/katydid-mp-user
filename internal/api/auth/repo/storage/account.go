@@ -1,8 +1,8 @@
-package db
+package storage
 
 import (
 	"katydid-mp-user/internal/api/auth/model"
-	"katydid-mp-user/internal/pkg/db"
+	"katydid-mp-user/internal/pkg/storage"
 	"katydid-mp-user/pkg/errs"
 	"katydid-mp-user/pkg/log"
 )
@@ -10,13 +10,13 @@ import (
 type (
 	// Account 账号仓储
 	Account struct {
-		*db.Base
+		*storage.Base
 	}
 )
 
 func NewAccount() *Account {
 	return &Account{
-		Base: db.NewBase(),
+		Base: storage.NewBase(),
 	}
 }
 

@@ -1,21 +1,21 @@
-package db
+package storage
 
 import (
 	"katydid-mp-user/internal/api/auth/model"
-	"katydid-mp-user/internal/pkg/db"
+	"katydid-mp-user/internal/pkg/storage"
 	"katydid-mp-user/pkg/errs"
 )
 
 type (
 	// Auth 认证仓储
 	Token struct {
-		*db.Base
+		*storage.Base
 	}
 )
 
 func NewToken() *Token {
 	return &Token{
-		Base: db.NewBase(),
+		Base: storage.NewBase(),
 	}
 }
 

@@ -2,7 +2,7 @@ package service
 
 import (
 	"katydid-mp-user/internal/api/auth/model"
-	"katydid-mp-user/internal/api/auth/repo/db"
+	"katydid-mp-user/internal/api/auth/repo/storage"
 	"katydid-mp-user/internal/pkg/service"
 	"katydid-mp-user/pkg/errs"
 )
@@ -12,9 +12,9 @@ type (
 	Auth struct {
 		*service.Base
 
-		dbs        *db.Auth
-		dbsAccount *db.Account
-		dbsVerify  *db.Verify
+		dbs        *storage.Auth
+		dbsAccount *storage.Account
+		dbsVerify  *storage.Verify
 	}
 )
 

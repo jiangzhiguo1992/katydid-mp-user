@@ -3,7 +3,7 @@ package service
 import (
 	"fmt"
 	"katydid-mp-user/internal/api/auth/model"
-	"katydid-mp-user/internal/api/auth/repo/db"
+	"katydid-mp-user/internal/api/auth/repo/storage"
 	"katydid-mp-user/internal/pkg/service"
 	"katydid-mp-user/pkg/errs"
 	"katydid-mp-user/pkg/log"
@@ -16,14 +16,14 @@ type (
 	// Verify 验证码服务
 	Verify struct {
 		*service.Base
-		dbs     *db.Verify
-		dbsAuth *db.Auth
+		dbs     *storage.Verify
+		dbsAuth *storage.Auth
 		//cache *cache.Verify
 	}
 )
 
 func NewVerify(
-	db *db.Verify, // cache *cache.Account,
+	db *storage.Verify, // cache *cache.Account,
 ) *Verify {
 	return &Verify{
 		Base: service.NewBase(nil),

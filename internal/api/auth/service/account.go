@@ -3,7 +3,7 @@ package service
 import (
 	"fmt"
 	"katydid-mp-user/internal/api/auth/model"
-	"katydid-mp-user/internal/api/auth/repo/db"
+	"katydid-mp-user/internal/api/auth/repo/storage"
 	"katydid-mp-user/internal/pkg/service"
 	"katydid-mp-user/pkg/errs"
 	"strconv"
@@ -14,15 +14,15 @@ type (
 	Account struct {
 		*service.Base
 
-		dbs     *db.Account
-		dbsAuth *db.Auth
+		dbs     *storage.Account
+		dbsAuth *storage.Auth
 
 		//cache *cache.Account
 	}
 )
 
 func NewAccount(
-	db *db.Account, //cache *cache.Account,
+	db *storage.Account, //cache *cache.Account,
 ) *Account {
 	return &Account{
 		Base: service.NewBase(nil),
@@ -71,7 +71,7 @@ func (svc *Account) UnRegister(exist *model.Account) *errs.CodeErrs {
 	return nil
 }
 
-// Login 登录账号
+// Login 登录账号 TODO:GG 移到token里面?
 func (svc *Account) Login(param *model.Account) *errs.CodeErrs {
 	limit := svc.GetLimitAccount(int16(param.OwnKind), param.OwnID)
 	_ = limit.AuthLogins
@@ -85,6 +85,8 @@ func (svc *Account) Login(param *model.Account) *errs.CodeErrs {
 	if param.Status == model.AccountStatusLocked {
 		// TODO:GG 解锁
 	}
+
+	// TODO:GG 如果没有则注册?
 
 	_ = param.GetAuthKinds()
 
