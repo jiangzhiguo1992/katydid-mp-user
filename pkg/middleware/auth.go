@@ -2,6 +2,7 @@ package middleware
 
 import (
 	"katydid-mp-user/pkg/auth"
+	"regexp"
 	"strings"
 	"sync"
 	"time"
@@ -24,12 +25,15 @@ const (
 
 // AuthConfig 认证中间件配置
 type AuthConfig struct {
-	JwtSecret          string        // JWT密钥
-	EnableTokenCaching bool          // 是否启用token缓存
-	CacheExpiration    time.Duration // 缓存过期时间
-	CacheCleanupTime   time.Duration // 缓存清理时间间隔
-	IgnorePaths        []string      // 忽略认证的路径
-	SkipExpireCheck    bool          // 是否跳过过期检查(开发环境可用)
+	JwtSecret          string                     // JWT密钥
+	EnableTokenCaching bool                       // 是否启用token缓存
+	CacheExpiration    time.Duration              // 缓存过期时间
+	CacheCleanupTime   time.Duration              // 缓存清理时间间隔
+	BlacklistTTL       time.Duration              // 黑名单项过期时间
+	BlacklistCleanup   time.Duration              // 黑名单清理间隔
+	IgnorePaths        []string                   // 忽略认证的路径
+	SkipExpireCheck    bool                       // 是否跳过过期检查(开发环境可用)
+	ErrorResponse      func(*gin.Context, string) // 自定义错误响应
 }
 
 // DefaultAuthConfig 返回默认配置
@@ -39,36 +43,49 @@ func DefaultAuthConfig(secret string) AuthConfig {
 		EnableTokenCaching: true,
 		CacheExpiration:    time.Minute * 10,
 		CacheCleanupTime:   time.Minute * 30,
+		BlacklistTTL:       time.Hour * 24,
+		BlacklistCleanup:   time.Hour,
 		IgnorePaths:        []string{"/health", "/metrics"},
 		SkipExpireCheck:    false,
+		ErrorResponse:      defaultErrorResponse,
 	}
 }
 
+// 默认错误响应处理
+func defaultErrorResponse(c *gin.Context, msg string) {
+	ResponseData(c, http.StatusUnauthorized, gin.H{"msg": msg})
+}
+
 var (
-	config     AuthConfig
-	tokenCache *cache.Cache // token缓存
-	blacklist  = sync.Map{} // 黑名单
+	authConfig AuthConfig
+
+	authTokenCache *cache.Cache // token缓存
+	authBlacklist  *cache.Cache // 黑名单
+
+	authRegexps    = make(map[string]*regexp.Regexp) // 正则表达式缓存
+	authRegexMutex sync.RWMutex                      // 正则表达式缓存的锁
 )
 
 // BlacklistToken 使token失效(加入黑名单)
 func BlacklistToken(c *gin.Context) {
 	token := c.GetHeader(AuthHeaderToken)
 	token = strings.TrimPrefix(token, AuthHeaderPrefix)
-	// 加入黑名单
-	blacklist.Store(token, time.Now())
+	// 加入黑名单，设置过期时间
+	authBlacklist.Set(token, time.Now(), authConfig.BlacklistTTL)
 	// 从缓存中移除
-	tokenCache.Delete(token)
+	authTokenCache.Delete(token)
 }
 
 // Auth 认证中间件
 func Auth(config AuthConfig) gin.HandlerFunc {
-	tokenCache = cache.New(config.CacheExpiration, config.CacheCleanupTime)
+	authTokenCache = cache.New(config.CacheExpiration, config.CacheCleanupTime)
+	authBlacklist = cache.New(config.BlacklistTTL, config.BlacklistCleanup)
 
 	return func(c *gin.Context) {
 		// 检查是否为忽略路径
 		path := c.Request.URL.Path
 		for _, ignorePath := range config.IgnorePaths {
-			if strings.HasPrefix(path, ignorePath) {
+			if authMatchRegex(path, ignorePath) {
 				c.Next()
 				return
 			}
@@ -77,14 +94,14 @@ func Auth(config AuthConfig) gin.HandlerFunc {
 		authStr := c.GetHeader(AuthHeaderToken)
 		// 检查Authorization头是否存在
 		if authStr == "" {
-			c.JSON(http.StatusUnauthorized, gin.H{"msg": "no_login"})
+			config.ErrorResponse(c, "no_login")
 			c.Abort()
 			return
 		}
 
 		// 检查Authorization格式是否正确
 		if !strings.HasPrefix(authStr, AuthHeaderPrefix) {
-			c.JSON(http.StatusUnauthorized, gin.H{"msg": "invalid_token_header"})
+			config.ErrorResponse(c, "invalid_token_header")
 			c.Abort()
 			return
 		}
@@ -92,14 +109,14 @@ func Auth(config AuthConfig) gin.HandlerFunc {
 		// 提取token
 		tokenStr := strings.TrimPrefix(authStr, AuthHeaderPrefix)
 		if !auth.IsTokenFormat(tokenStr) {
-			c.JSON(http.StatusUnauthorized, gin.H{"msg": "invalid_token_struct"})
+			config.ErrorResponse(c, "invalid_token_struct")
 			c.Abort()
 			return
 		}
 
 		// 检查黑名单
-		if _, exists := blacklist.Load(tokenStr); exists {
-			c.JSON(http.StatusUnauthorized, gin.H{"msg": "token_is_black_list"})
+		if _, exists := authBlacklist.Get(tokenStr); exists {
+			config.ErrorResponse(c, "token_is_black_list")
 			c.Abort()
 			return
 		}
@@ -107,7 +124,7 @@ func Auth(config AuthConfig) gin.HandlerFunc {
 		// 验证并解析token
 		claims, err := validateAndParseToken(tokenStr)
 		if err != nil {
-			c.JSON(http.StatusUnauthorized, gin.H{"msg": err.Error()})
+			config.ErrorResponse(c, err.Error())
 			c.Abort()
 			return
 		}
@@ -126,19 +143,48 @@ func Auth(config AuthConfig) gin.HandlerFunc {
 // validateAndParseToken 验证并解析token
 func validateAndParseToken(tokenStr string) (*auth.TokenClaims, error) {
 	// 检查缓存
-	if config.EnableTokenCaching {
-		if claims, found := tokenCache.Get(tokenStr); found {
+	if authConfig.EnableTokenCaching {
+		if claims, found := authTokenCache.Get(tokenStr); found {
 			return claims.(*auth.TokenClaims), nil
 		}
 	}
 
-	claims, err := auth.ParseJWT(tokenStr, config.JwtSecret, config.SkipExpireCheck)
-
-	// 存入缓存
+	// 解析并验证token
+	claims, err := auth.ParseJWT(tokenStr, authConfig.JwtSecret, authConfig.SkipExpireCheck)
 	if err != nil {
-		if config.EnableTokenCaching {
-			tokenCache.Set(tokenStr, claims, config.CacheExpiration)
-		}
+		return nil, err
+	}
+
+	// 只有成功，才存入缓存
+	if authConfig.EnableTokenCaching {
+		authTokenCache.Set(tokenStr, claims, authConfig.CacheExpiration)
 	}
 	return claims, err
+}
+
+// authMatchRegex 判断路径是否匹配正则表达式
+func authMatchRegex(path string, pattern string) bool {
+	// 如果不是正则表达式，直接前缀匹配
+	if !strings.HasPrefix(pattern, "^") && !strings.HasSuffix(pattern, "$") {
+		return strings.HasPrefix(path, pattern)
+	}
+
+	// 使用正则表达式匹配
+	authRegexMutex.RLock()
+	re, exists := authRegexps[pattern]
+	authRegexMutex.RUnlock()
+
+	// 如果不存在，则编译正则表达式并缓存
+	if !exists {
+		authRegexMutex.Lock()
+		var err error
+		re, err = regexp.Compile(pattern)
+		if err != nil {
+			authRegexMutex.Unlock()
+			return false
+		}
+		authRegexps[pattern] = re
+		authRegexMutex.Unlock()
+	}
+	return re.MatchString(path)
 }

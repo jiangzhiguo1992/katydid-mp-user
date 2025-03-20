@@ -13,6 +13,12 @@ const (
 
 func ResponseData(c *gin.Context, code int, obj any) {
 	accept := c.GetHeader("Accept")
+	if accept == "" || strings.Contains(accept, "*/*") || strings.Contains(accept, "application/*") {
+		accept = binding.MIMEJSON
+	} else if strings.Contains(accept, "msg/*") {
+		accept = binding.MIMEXML
+	}
+
 	switch {
 	case strings.Contains(accept, binding.MIMEPROTOBUF):
 		c.ProtoBuf(code, obj)
