@@ -18,6 +18,12 @@ import (
 	"github.com/patrickmn/go-cache"
 )
 
+const (
+	CacheHeaderHit = "X-Cache"
+	CacheHit       = "HIT"
+	CacheMiss      = "MISS"
+)
+
 // CacheConfig 缓存中间件配置
 type CacheConfig struct {
 	DefaultExpiration time.Duration             // 默认缓存过期时间
@@ -40,18 +46,13 @@ type CacheStats struct {
 	Items     map[string]int // 按路径统计的缓存项数量
 }
 
-const (
-	CacheHeaderHit = "X-Cache"
-	CacheHit       = "HIT"
-	CacheMiss      = "MISS"
-)
-
 var (
-	store *cache.Cache // 缓存存储go-cache
+	cacheStore *cache.Cache // 缓存存储go-cache
 
-	regexps    = make(map[string]*regexp.Regexp) // 正则表达式缓存
-	regexMutex sync.RWMutex                      // 正则表达式缓存的锁
-	statsMutex sync.RWMutex                      // 统计信息的锁
+	cacheRegexps    = make(map[string]*regexp.Regexp) // 正则表达式缓存
+	cacheRegexMutex sync.RWMutex                      // 正则表达式缓存的锁
+	cacheStatsMutex sync.RWMutex                      // 统计信息的锁
+
 	cacheStats = CacheStats{Items: make(map[string]int)}
 )
 
@@ -72,8 +73,8 @@ func DefaultCacheConfig() CacheConfig {
 
 // GetCacheStats 获取缓存统计信息
 func GetCacheStats() CacheStats {
-	statsMutex.RLock()
-	defer statsMutex.RUnlock()
+	cacheStatsMutex.RLock()
+	defer cacheStatsMutex.RUnlock()
 
 	refreshStats()
 	return cacheStats
@@ -81,27 +82,27 @@ func GetCacheStats() CacheStats {
 
 // ClearCache 清空缓存
 func ClearCache() {
-	store.Flush()
+	cacheStore.Flush()
 
-	statsMutex.Lock()
+	cacheStatsMutex.Lock()
 	cacheStats.Hits = 0
 	cacheStats.Misses = 0
 	cacheStats.ItemCount = 0
 	cacheStats.Size = 0
 	cacheStats.Items = make(map[string]int)
-	statsMutex.Unlock()
+	cacheStatsMutex.Unlock()
 }
 
 // refreshStats 刷新缓存统计信息
 func refreshStats() {
-	statsMutex.Lock()
-	defer statsMutex.Unlock()
+	cacheStatsMutex.Lock()
+	defer cacheStatsMutex.Unlock()
 
-	cacheStats.ItemCount = store.ItemCount()
+	cacheStats.ItemCount = cacheStore.ItemCount()
 	cacheStats.Items = make(map[string]int)
 
 	var totalSize int64
-	for k, item := range store.Items() {
+	for k, item := range cacheStore.Items() {
 		if resp, ok := item.Object.(map[string]interface{}); ok {
 			if body, ok := resp["body"].([]byte); ok {
 				totalSize += int64(len(body))
@@ -124,9 +125,9 @@ func refreshStats() {
 // DeleteCacheByPattern 删除符合模式的缓存
 func DeleteCacheByPattern(pattern string) int {
 	var count int
-	for k := range store.Items() {
+	for k := range cacheStore.Items() {
 		if strings.Contains(k, pattern) {
-			store.Delete(k)
+			cacheStore.Delete(k)
 			count++
 		}
 	}
@@ -135,11 +136,11 @@ func DeleteCacheByPattern(pattern string) int {
 
 // Cache 缓存中间件
 func Cache(config CacheConfig) gin.HandlerFunc {
-	store = cache.New(config.DefaultExpiration, config.CleanupInterval)
+	cacheStore = cache.New(config.DefaultExpiration, config.CleanupInterval)
 
 	// 如果没有设置键生成器，使用默认的
 	if config.KeyGenerator == nil {
-		config.KeyGenerator = defaultKeyGenerator(config.IgnoreQueryParams, config.WithHeaders)
+		config.KeyGenerator = defaultCacheKeyGenerator(config.IgnoreQueryParams, config.WithHeaders)
 	}
 
 	return func(c *gin.Context) {
@@ -153,7 +154,7 @@ func Cache(config CacheConfig) gin.HandlerFunc {
 		shouldCachePath := false
 		path := c.Request.URL.Path
 		for _, cachePath := range config.CachePaths {
-			if matchRegex(path, cachePath) {
+			if cacheMatchRegex(path, cachePath) {
 				shouldCachePath = true
 				break
 			}
@@ -174,7 +175,7 @@ func Cache(config CacheConfig) gin.HandlerFunc {
 		cacheKey := config.KeyGenerator(c)
 
 		// 尝试从缓存获取
-		if response, found := store.Get(cacheKey); found {
+		if response, found := cacheStore.Get(cacheKey); found {
 			cachedResponse := response.(map[string]interface{})
 
 			// 恢复状态码和头信息
@@ -245,13 +246,13 @@ func Cache(config CacheConfig) gin.HandlerFunc {
 			}
 
 			// 存入缓存
-			store.Set(cacheKey, response, config.DefaultExpiration)
+			cacheStore.Set(cacheKey, response, config.DefaultExpiration)
 		}
 	}
 }
 
-// defaultKeyGenerator 默认缓存键生成器
-func defaultKeyGenerator(ignoreParams []string, withHeaders []string) func(*gin.Context) string {
+// defaultCacheKeyGenerator 默认缓存键生成器
+func defaultCacheKeyGenerator(ignoreParams []string, withHeaders []string) func(*gin.Context) string {
 	return func(c *gin.Context) string {
 		var keyParts []string
 
@@ -305,28 +306,28 @@ func defaultKeyGenerator(ignoreParams []string, withHeaders []string) func(*gin.
 	}
 }
 
-// matchRegex 判断路径是否匹配正则表达式
-func matchRegex(path string, pattern string) bool {
+// cacheMatchRegex 判断路径是否匹配正则表达式
+func cacheMatchRegex(path string, pattern string) bool {
 	// 如果不是正则表达式，直接前��匹配
 	if !strings.HasPrefix(pattern, "^") && !strings.HasSuffix(pattern, "$") {
 		return strings.HasPrefix(path, pattern)
 	}
 
 	// 使用正则表达式匹配
-	regexMutex.RLock()
-	re, exists := regexps[pattern]
-	regexMutex.RUnlock()
+	cacheRegexMutex.RLock()
+	re, exists := cacheRegexps[pattern]
+	cacheRegexMutex.RUnlock()
 
 	if !exists {
-		regexMutex.Lock()
+		cacheRegexMutex.Lock()
 		var err error
 		re, err = regexp.Compile(pattern)
 		if err != nil {
-			regexMutex.Unlock()
+			cacheRegexMutex.Unlock()
 			return false
 		}
-		regexps[pattern] = re
-		regexMutex.Unlock()
+		cacheRegexps[pattern] = re
+		cacheRegexMutex.Unlock()
 	}
 	return re.MatchString(path)
 }
