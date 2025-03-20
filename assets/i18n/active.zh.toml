@@ -4,6 +4,7 @@ hellos = "app, 你好s {{.Name}}, {{.Count}}"
 # ....
 unknown_err = "未知异常"
 unknown_validator_err = "未知验证异常"
+invalid_object_validation = "错误的对象验证"
 
 err_db_add_nil = "数据库错误，插入对象为空"
 err_db_del_nil = "数据库错误，删除对象为空"

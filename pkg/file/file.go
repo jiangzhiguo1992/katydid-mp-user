@@ -10,7 +10,7 @@ import (
 // DirCreate 创建目录
 func DirCreate(path string) error {
 	if err := os.MkdirAll(path, os.ModePerm); err != nil {
-		return errors.New(fmt.Sprintf("failed to create dir %s: %s", path, err))
+		return fmt.Errorf("failed to create dir %s: %s", path, err)
 	}
 	return nil
 }
@@ -25,7 +25,7 @@ func FileCreate(path string) (*os.File, error) {
 	// file
 	file, err := os.OpenFile(path, os.O_CREATE|os.O_APPEND|os.O_WRONLY, os.ModePerm)
 	if err != nil {
-		return nil, errors.New(fmt.Sprintf("failed to open file %s: %s", path, err))
+		return nil, fmt.Errorf("failed to open file %s: %s", path, err)
 	}
 	return file, nil
 }

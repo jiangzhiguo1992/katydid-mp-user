@@ -35,9 +35,9 @@ type (
 		regLocs  *sync.Map // 本地化文本缓存
 	}
 
-	Scene     uint16
-	Tag       string
-	FieldName string
+	Scene     uint16 // 验证场景
+	Tag       string // 字段标签
+	FieldName string // 字段名称
 
 	// FieldValidRules 定义字段验证规则
 	FieldValidRules  = map[Scene]FieldValidRule
@@ -119,7 +119,7 @@ func Check(obj any, scene Scene) []*MsgErr {
 	v := Get()
 	typ := reflect.TypeOf(obj)
 
-	// -- 注册验证 --
+	// -- 注册验证(设置缓存) --
 	if _, ok := v.regTypes.Load(typ); !ok {
 		if e := v.registerValidations(obj, scene); e != nil {
 			return []*MsgErr{{Err: e}}
@@ -127,7 +127,7 @@ func Check(obj any, scene Scene) []*MsgErr {
 		v.regTypes.Store(typ, true)
 	}
 
-	// -- 执行验证 --
+	// -- 执行验证(有缓存) --
 	if e := v.validate.Struct(obj); e != nil {
 		return v.handleValidationError(obj, typ, scene, e)
 	}

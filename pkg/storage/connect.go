@@ -2,10 +2,11 @@ package storage
 
 import (
 	"context"
-	"errors"
+	"database/sql"
 	"fmt"
 	"gorm.io/driver/mysql"
 	"gorm.io/driver/postgres"
+	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
 	"gorm.io/gorm/logger"
 	"sync"
@@ -14,8 +15,9 @@ import (
 
 // 数据库类型常量
 const (
-	DBTypePgSQL DBType = "pgsql"
-	DBTypeMySQL DBType = "mysql"
+	DBKindPgSQL  DBKind = "pgsql"
+	DBKindMySQL  DBKind = "mysql"
+	DBKindSQLite DBKind = "sqlite"
 )
 
 // 全局连接池，可以支持多个数据库实例
@@ -25,9 +27,13 @@ var (
 )
 
 type (
+	// DBKind 数据库类型
+	DBKind string
+
 	// DBConfig 数据库配置结构
 	DBConfig struct {
-		Type DBType // 数据库类型
+		Kind   DBKind // 数据库类型
+		Logger logger.Interface
 
 		Host     string // 主机地址
 		Port     int    // 端口号
@@ -35,23 +41,18 @@ type (
 		Password string // 密码
 		DBName   string // 数据库名称
 
-		SSLMode  string // SSL模式
-		TimeZone string // 时区
-
 		MaxRetries int // 重试次数
 		RetryDelay int // 重试间隔，单位秒
 
-		MaxIdle     int           // 最大空闲连接数，默认1000
-		MaxOpen     int           // 最大连接数，默认10000
-		MaxLifeTime time.Duration // 连接最大存活时间，默认-1
-		MaxIdleTime time.Duration // 空闲连接最大存活时间，默认3m
+		MaxOpen     int           // 最大连接数，默认1000 (看数据库性能)
+		MaxIdle     int           // 最大空闲连接数，默认=Open
+		MaxLifeTime time.Duration // 连接最大存活时间，默认3m
+		MaxIdleTime time.Duration // 空闲连接最大存活时间，默认1m
 
-		LogLevel logger.LogLevel
-		Debug    bool // 是否开启调试模式
+		PgsqlSSLMode  string // SSL模式
+		PgsqlTimeZone string // 时区
+		SQLiteFile    string // SQLite文件路径 (file::memory:?cache=shared，是内存sqlite的意思)
 	}
-
-	// DBType 数据库类型
-	DBType string
 )
 
 // InitConnect 初始化数据库连接
@@ -60,50 +61,74 @@ func InitConnect(name string, config DBConfig) (*gorm.DB, error) {
 	defer dbMutex.Unlock()
 
 	if _, exists := dbInstances[name]; exists {
-		return nil, errors.New("数据库连接已存在")
+		return nil, fmt.Errorf("■ ■ connect ■ ■ 数据库连接已存在: %s", name)
 	}
 
 	var dialector gorm.Dialector
-	switch config.Type {
-	case DBTypeMySQL:
+	switch config.Kind {
+	case DBKindMySQL:
 		dsn := fmt.Sprintf(
 			"%s:%s@tcp(%s:%d)/%s?charset=utf8mb4&parseTime=True&loc=Local",
 			config.User, config.Password, config.Host, config.Port, config.DBName,
 		)
 		dialector = mysql.New(mysql.Config{
-			DSN: dsn,
+			DSN:                       dsn,
+			SkipInitializeWithVersion: false, // 自动适配 MySQL 版本特性
+			DisableWithReturning:      false, // 保留RETURNING子句以提高效率
+			DisableDatetimePrecision:  false, // 自动解析时间
+			//DefaultStringSize:         256,   // 默认值
+			//DisableDatetimePrecision:  true,  // 如果使用 MySQL 5.6 及以下版本
+			//DontSupportRenameIndex:    true,  // 如果使用 MySQL 5.7 及以下版本
+			//DontSupportRenameColumn:   true,  // 如果使用 MySQL 8.0 以下版本
 		})
-	case DBTypePgSQL:
+	case DBKindPgSQL:
 		dsn := fmt.Sprintf(
 			"host=%s port=%d user=%s password=%s dbname=%s",
 			config.Host, config.Port, config.User, config.Password, config.DBName,
 		)
-		if len(config.SSLMode) > 0 {
-			dsn += fmt.Sprintf(" sslmode=%s", config.SSLMode)
+		if len(config.PgsqlSSLMode) > 0 {
+			dsn += fmt.Sprintf(" sslmode=%s", config.PgsqlSSLMode)
 		}
-		if len(config.TimeZone) > 0 {
-			dsn += fmt.Sprintf(" TimeZone=%s", config.TimeZone)
+		if len(config.PgsqlTimeZone) > 0 {
+			dsn += fmt.Sprintf(" TimeZone=%s", config.PgsqlTimeZone)
 		}
 		dialector = postgres.New(postgres.Config{
 			DSN:                  dsn,
-			PreferSimpleProtocol: false,
-			// TODO:GG 看看gorm的文档
+			PreferSimpleProtocol: false, // 保持为false以获得更好的预处理语句性能
+			WithoutReturning:     false, // 保留RETURNING子句以提高效率
+			//WithoutQuotingCheck:  false, // 需要手动处理标识符时设为true
+			// DriverName:        "pgx",  // 高性能场景可考虑使用pgx驱动
 		})
+	case DBKindSQLite:
+		if len(config.SQLiteFile) == 0 {
+			return nil, fmt.Errorf("■ ■ connect ■ ■ SQLite数据库文件路径不能为空")
+		}
+		dialector = sqlite.Open(config.SQLiteFile)
 	default:
-		return nil, fmt.Errorf("不支持的数据库类型: %s", config.Type)
+		return nil, fmt.Errorf("■ ■ connect ■ ■ 不支持的数据库类型: %s", config.Kind)
 	}
 
-	// TODO:GG zap 所有的日志都zap?
-	logMode := config.LogLevel
-	if config.Debug {
-		logMode = logger.Info
+	if config.Logger == nil {
+		config.Logger = logger.Default.LogMode(logger.Warn)
 	}
 
 	gormConfig := &gorm.Config{
-		Logger:                 logger.Default.LogMode(logMode),
-		PrepareStmt:            true, // 缓存预编译语句以提高性能
-		SkipDefaultTransaction: true, // 跳过默认事务，提升性能
-		// TODO:GG 配置 连接池，超时时间等，看看gorm的文档
+		Logger:                   config.Logger,
+		DisableAutomaticPing:     false, // 初始化后，自动ping数据库
+		SkipDefaultTransaction:   true,  // 跳过默认事务，提升性能
+		DisableNestedTransaction: false, // 打开嵌套事务
+		AllowGlobalUpdate:        false, // 不允许进行全局update/delete
+		PrepareStmt:              true,  // 缓存预编译语句以提高性能
+		QueryFields:              false, // 允许 SELECT *
+		NowFunc: func() time.Time {
+			return time.Now().Local()
+		},
+		DisableForeignKeyConstraintWhenMigrating: true, // (自动迁移/创建表)不要自动创建外键
+		IgnoreRelationshipsWhenMigrating:         true, // (自动迁移/创建表)忽略关系
+		//DryRun: false, // 是否启用干运行模式
+		//NamingStrategy: schema.NamingStrategy{},
+		//FullSaveAssociations
+		//PropagateUnscoped:
 	}
 
 	// 重试连接逻辑
@@ -130,9 +155,9 @@ func InitConnect(name string, config DBConfig) (*gorm.DB, error) {
 		}
 	}
 	if err != nil {
-		return nil, fmt.Errorf("数据库连接失败: %w", err)
+		return nil, fmt.Errorf("■ ■ connect ■ ■ 数据库连接失败: %s, %w", name, err)
 	} else if db == nil {
-		return nil, fmt.Errorf("数据库连接为空")
+		return nil, fmt.Errorf("■ ■ connect ■ ■ 数据库连接为空: %s", name)
 	}
 
 	sqlDB, err := db.DB()
@@ -141,14 +166,13 @@ func InitConnect(name string, config DBConfig) (*gorm.DB, error) {
 	}
 
 	// 设置连接池参数
-	sqlDB.SetMaxIdleConns(config.MaxIdle)
 	sqlDB.SetMaxOpenConns(config.MaxOpen)
+	sqlDB.SetMaxIdleConns(config.MaxIdle)
 	sqlDB.SetConnMaxLifetime(config.MaxLifeTime)
 	sqlDB.SetConnMaxIdleTime(config.MaxIdleTime)
 
 	// 保存到实例map中
 	dbInstances[name] = db
-
 	return db, nil
 }
 
@@ -171,7 +195,7 @@ func CloseDB(name string) error {
 
 	db, exists := dbInstances[name]
 	if !exists || db == nil {
-		return errors.New("未找到指定的数据库连接")
+		return fmt.Errorf("■ ■ connect ■ ■ 关闭: 未找到指定的数据库连接:%s", name)
 	}
 
 	sqlDB, err := db.DB()
@@ -184,32 +208,35 @@ func CloseDB(name string) error {
 }
 
 // CloseAllDBs 关闭所有数据库连接
-func CloseAllDBs() error {
+func CloseAllDBs() []error {
 	dbMutex.Lock()
 	defer dbMutex.Unlock()
 
-	var lastErr error
+	var errs []error
 	for name, db := range dbInstances {
+		if db == nil {
+			errs = append(errs, fmt.Errorf("■ ■ connect ■ ■ 关闭: 未找到指定的数据库连接:%s", name))
+			continue
+		}
 		sqlDB, err := db.DB()
 		if err != nil {
-			lastErr = err
+			errs = append(errs, err)
 			continue
 		}
 
 		if err = sqlDB.Close(); err != nil {
-			lastErr = err
+			errs = append(errs, err)
 		}
 		delete(dbInstances, name)
 	}
-
-	return lastErr
+	return errs
 }
 
 // Ping 检查数据库连接状态
 func Ping(name string) error {
 	db := GetDB(name)
 	if db == nil {
-		return errors.New("未找到指定的数据库连接")
+		return fmt.Errorf("■ ■ connect ■ ■ Ping: 未找到指定的数据库连接:%s", name)
 	}
 
 	sqlDB, err := db.DB()
@@ -220,15 +247,15 @@ func Ping(name string) error {
 }
 
 // Stats 获取数据库连接池统计信息
-func Stats(name string) (interface{}, error) {
+func Stats(name string) (sql.DBStats, error) {
 	db := GetDB(name)
 	if db == nil {
-		return nil, errors.New("未找到指定的数据库连接")
+		return sql.DBStats{}, fmt.Errorf("■ ■ connect ■ ■ Stats: 未找到指定的数据库连接:%s", name)
 	}
 
 	sqlDB, err := db.DB()
 	if err != nil {
-		return nil, err
+		return sql.DBStats{}, err
 	}
 	return sqlDB.Stats(), nil
 }
