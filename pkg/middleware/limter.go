@@ -182,15 +182,15 @@ func (l *Limiter) initStorage() {
 			l.storage = &RedisStorage{client: l.options.RedisClient}
 		} else {
 			l.options.LogFunc("■ ■ connect ■ ■ Limiter: Redis客户端未配置，使用内存存储")
-			l.storage = NewMemoryStorage(l.options.ShardCount)
+			l.storage = newMemoryStorage(l.options.ShardCount)
 		}
 	default:
-		l.storage = NewMemoryStorage(l.options.ShardCount)
+		l.storage = newMemoryStorage(l.options.ShardCount)
 	}
 }
 
-// NewMemoryStorage 创建内存存储
-func NewMemoryStorage(shardCount int) *MemoryStorage {
+// newMemoryStorage 创建内存存储
+func newMemoryStorage(shardCount int) *MemoryStorage {
 	// 确保分片数是2的幂
 	n := 1
 	for n < shardCount {
