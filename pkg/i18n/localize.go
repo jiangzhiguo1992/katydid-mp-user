@@ -183,8 +183,11 @@ func (m *Manager) getLocalizers(lang string) []*i18n.Localizer {
 	}
 
 	// 添加基本语言标签（如 "en" 从 "en-US"）
-	if base := strings.Split(lang, "-")[0]; (base != lang) && HasLang(base) {
-		tags = append(tags, base)
+	if parts := strings.Split(lang, "-"); len(parts) > 1 {
+		base := parts[0]
+		if (base != lang) && HasLang(base) {
+			tags = append(tags, base)
+		}
 	}
 
 	// 添加默认语言
