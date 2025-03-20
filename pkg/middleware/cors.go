@@ -2,8 +2,8 @@ package middleware
 
 import (
 	"fmt"
+	"log/slog"
 	"net/http"
-	"path"
 	"regexp"
 	"strings"
 
@@ -25,6 +25,12 @@ type CorsOptions struct {
 	AllowCredentials bool
 	// MaxAge 预检请求结果缓存时间(秒)
 	MaxAge int
+	// Debug 是否启用调试日志
+	Debug bool
+
+	// 内部使用，预编译的正则表达式
+	regexPatterns    []*regexp.Regexp
+	wildcardPatterns []*regexp.Regexp
 }
 
 // DefaultCorsOptions 默认 CORS 配置
@@ -36,115 +42,128 @@ func DefaultCorsOptions() *CorsOptions {
 		ExposeHeaders:    []string{"Content-Length", "Content-Type", "X-Request-Id"},
 		AllowCredentials: false,
 		MaxAge:           86400,
+		Debug:            false,
 	}
 }
 
 // Cors 返回 CORS 中间件处理函数
 func Cors(options ...*CorsOptions) gin.HandlerFunc {
 	// 使用默认配置或用户提供的配置
-	opts := DefaultCorsOptions()
+	var opts *CorsOptions
 	if len(options) > 0 && options[0] != nil {
 		opts = options[0]
+	} else {
+		opts = DefaultCorsOptions()
 	}
 
-	// 预编译正则表达式以提高性能
-	regexps := compileRegexPatterns(opts.AllowOrigins)
+	// 初始化并预编译所有正则表达式
+	opts.compilePatterns()
 
-	// 检查是否允许所有源
-	allowAll := contains(opts.AllowOrigins, "*")
-
-	return func(c *gin.Context) {
-		origin := c.Request.Header.Get("Origin")
-
-		// 处理 Origin
-		if origin != "" {
-			allowed := false
-
-			if allowAll {
-				allowed = true
-			} else {
-				allowed = isOriginAllowed(origin, opts.AllowOrigins, regexps)
-			}
-
-			if allowed {
-				c.Header("Access-Control-Allow-Origin", origin)
-			}
-		}
-
-		// 设置其他 CORS 头
-		c.Header("Access-Control-Allow-Methods", strings.Join(opts.AllowMethods, ", "))
-		c.Header("Access-Control-Allow-Headers", strings.Join(opts.AllowHeaders, ", "))
-		c.Header("Access-Control-Expose-Headers", strings.Join(opts.ExposeHeaders, ", "))
-		c.Header("Access-Control-Max-Age", fmt.Sprintf("%d", opts.MaxAge))
-
-		// 设置安全相关头部
-		c.Header("Vary", "Origin")
-
-		if opts.AllowCredentials {
-			c.Header("Access-Control-Allow-Credentials", "true")
-		}
-
-		// 处理预检请求
-		if c.Request.Method == http.MethodOptions {
-			c.AbortWithStatus(http.StatusNoContent)
-			return
-		}
-
-		// 继续处理其他请求
-		c.Next()
-	}
+	return opts.handleRequest
 }
 
-// 编译正则表达式模式
-func compileRegexPatterns(origins []string) map[string]*regexp.Regexp {
-	regexps := make(map[string]*regexp.Regexp)
+// 编译所有正则表达式模式
+func (opts *CorsOptions) compilePatterns() {
+	opts.regexPatterns = make([]*regexp.Regexp, 0)
+	opts.wildcardPatterns = make([]*regexp.Regexp, 0)
 
-	for _, origin := range origins {
+	for _, origin := range opts.AllowOrigins {
+		// 处理正则模式
 		if strings.HasPrefix(origin, "regex:") {
 			pattern := strings.TrimPrefix(origin, "regex:")
 			if re, err := regexp.Compile(pattern); err == nil {
-				regexps[origin] = re
+				opts.regexPatterns = append(opts.regexPatterns, re)
+				if opts.Debug {
+					slog.Info("■ ■ cors ■ ■ 编译正则表达式: %s", pattern)
+				}
+			} else if opts.Debug {
+				slog.Error("■ ■ cors ■ ■ 无法编译正则表达式 %s: %v", pattern, err)
+			}
+		} else if strings.Contains(origin, "*") {
+			// 处理通配符模式
+			pattern := strings.Replace(origin, ".", "\\.", -1)
+			pattern = strings.Replace(pattern, "*", ".*", -1)
+			pattern = "^" + pattern + "$"
+			if re, err := regexp.Compile(pattern); err == nil {
+				opts.wildcardPatterns = append(opts.wildcardPatterns, re)
+				if opts.Debug {
+					slog.Info("■ ■ cors ■ ■ 编译通配符模式: %s -> %s", origin, pattern)
+				}
 			}
 		}
 	}
+}
 
-	return regexps
+// 处理 CORS 请求
+func (opts *CorsOptions) handleRequest(c *gin.Context) {
+	origin := c.Request.Header.Get("Origin")
+
+	// 如果没有 Origin 头，可能不是跨域请求
+	if origin == "" {
+		c.Next()
+		return
+	}
+
+	// 检查是否允许该源
+	if !opts.isOriginAllowed(origin) {
+		if opts.Debug {
+			slog.Warn("■ ■ cors ■ ■ 拒绝源: %s", origin)
+		}
+		c.Next()
+		return
+	}
+
+	if opts.Debug {
+		slog.Info("■ ■ cors ■ ■ 接受源: %s", origin)
+	}
+
+	// 设置 CORS 头
+	c.Header("Access-Control-Allow-Origin", origin)
+	c.Header("Access-Control-Allow-Methods", strings.Join(opts.AllowMethods, ", "))
+	c.Header("Access-Control-Allow-Headers", strings.Join(opts.AllowHeaders, ", "))
+	c.Header("Access-Control-Expose-Headers", strings.Join(opts.ExposeHeaders, ", "))
+	c.Header("Access-Control-Max-Age", fmt.Sprintf("%d", opts.MaxAge))
+	c.Header("Vary", "Origin")
+
+	// 处理认证信息
+	if opts.AllowCredentials {
+		c.Header("Access-Control-Allow-Credentials", "true")
+	}
+
+	// 处理预检请求
+	if c.Request.Method == http.MethodOptions {
+		c.AbortWithStatus(http.StatusNoContent)
+		return
+	}
+
+	c.Next()
 }
 
 // 检查源是否被允许
-func isOriginAllowed(origin string, allowedOrigins []string, regexps map[string]*regexp.Regexp) bool {
-	// 直接匹配
-	if contains(allowedOrigins, origin) {
+func (opts *CorsOptions) isOriginAllowed(origin string) bool {
+	// 允许所有源
+	if contains(opts.AllowOrigins, "*") {
 		return true
 	}
 
-	// 通配符匹配
-	for _, allowed := range allowedOrigins {
-		// 处理通配符情况
-		if strings.Contains(allowed, "*") {
-			pattern := strings.Replace(allowed, ".", "\\.", -1)
-			pattern = strings.Replace(pattern, "*", ".*", -1)
-			pattern = "^" + pattern + "$"
-			if matched, _ := regexp.MatchString(pattern, origin); matched {
-				return true
-			}
-			continue
-		}
+	// 直接匹配
+	if contains(opts.AllowOrigins, origin) {
+		return true
+	}
 
-		// 处理正则情况
-		if strings.HasPrefix(allowed, "regex:") {
-			if re, exists := regexps[allowed]; exists && re.MatchString(origin) {
-				return true
-			}
-			continue
-		}
-
-		// 处理子域名情况
-		if strings.HasPrefix(origin, allowed) || path.Dir(origin) == allowed {
+	// 正则表达式匹配
+	for _, re := range opts.regexPatterns {
+		if re.MatchString(origin) {
 			return true
 		}
 	}
 
+	// 通配符匹配
+	for _, re := range opts.wildcardPatterns {
+		if re.MatchString(origin) {
+			return true
+		}
+	}
 	return false
 }
 
