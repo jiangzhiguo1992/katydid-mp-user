@@ -280,7 +280,7 @@ func (l *Limiter) Middleware() gin.HandlerFunc {
 			// 记录限流日志
 			l.options.LogFunc("■ ■ connect ■ ■ 请求被限流: IP=%s, 路径=%s, 方法=%s", key, c.FullPath(), c.Request.Method)
 
-			c.JSON(http.StatusTooManyRequests, gin.H{
+			ResponseData(c, http.StatusTooManyRequests, gin.H{
 				"code": l.options.Code,
 				"msg":  l.options.Message,
 			})

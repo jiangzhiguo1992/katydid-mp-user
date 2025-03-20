@@ -318,6 +318,7 @@ func cacheMatchRegex(path string, pattern string) bool {
 	re, exists := cacheRegexps[pattern]
 	cacheRegexMutex.RUnlock()
 
+	// 如果不存在，则编译正则表达式并缓存
 	if !exists {
 		cacheRegexMutex.Lock()
 		var err error

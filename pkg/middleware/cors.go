@@ -109,7 +109,7 @@ func (opts *CorsOptions) handleRequest(c *gin.Context) {
 		if opts.Debug {
 			slog.Warn("■ ■ cors ■ ■ 拒绝源: %s", origin)
 		}
-		c.Next()
+		c.AbortWithStatus(http.StatusForbidden)
 		return
 	}
 
