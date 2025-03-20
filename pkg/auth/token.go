@@ -41,7 +41,7 @@ type (
 		OwnID     uint64  `json:"ownId,omitempty"`     // 令牌拥有者ID
 		AccountID uint64  `json:"accountId,omitempty"` // 账号ID
 		UserID    *uint64 `json:"userId,omitempty"`    // 用户ID
-		// TODO:GG roles
+		// TODO:GG roles (记得加到middleware里)
 
 		jwt.RegisteredClaims `json:"-"` // 注册声明(不序列化)
 	}
@@ -164,7 +164,7 @@ func ParseJWT(tokenStr string, secret string, checkExpire bool) (*TokenClaims, e
 	}
 
 	if claims, ok := token.Claims.(*TokenClaims); ok && token.Valid {
-		// 检查是否过期
+		// 检查是否过期 (只是token自带的过期，外部应该还会检查，灵活机制)
 		if checkExpire && (claims.ExpiresAt != nil) {
 			if time.Now().After(claims.ExpiresAt.Time) {
 				return nil, fmt.Errorf("token_is_expire")

@@ -47,24 +47,16 @@ const (
 )
 
 var (
-	store      *cache.Cache              // 缓存存储go-cache
-	regexps    map[string]*regexp.Regexp // 正则表达式缓存
-	regexMutex sync.RWMutex              // 正则表达式缓存的锁
-	statsMutex sync.RWMutex              // 统计信息的锁
+	store *cache.Cache // 缓存存储go-cache
+
+	regexps    = make(map[string]*regexp.Regexp) // 正则表达式缓存
+	regexMutex sync.RWMutex                      // 正则表达式缓存的锁
+	statsMutex sync.RWMutex                      // 统计信息的锁
 	cacheStats = CacheStats{Items: make(map[string]int)}
 )
 
-// Init 初始化缓存
-func Init() {
-	if store == nil {
-		store = cache.New(5*time.Minute, 10*time.Minute)
-		regexps = make(map[string]*regexp.Regexp)
-	}
-}
-
 // DefaultCacheConfig 返回默认配置
 func DefaultCacheConfig() CacheConfig {
-	Init()
 	return CacheConfig{
 		DefaultExpiration: 5 * time.Minute,
 		CleanupInterval:   10 * time.Minute,
@@ -143,7 +135,7 @@ func DeleteCacheByPattern(pattern string) int {
 
 // Cache 缓存中间件
 func Cache(config CacheConfig) gin.HandlerFunc {
-	Init()
+	store = cache.New(config.DefaultExpiration, config.CleanupInterval)
 
 	// 如果没有设置键生成器，使用默认的
 	if config.KeyGenerator == nil {
@@ -364,7 +356,7 @@ func (w *responseWriter) WriteHeader(code int) {
 	w.ResponseWriter.WriteHeader(code)
 }
 
-// ReadFrom 实现io.ReaderFrom接��，提高大文件处理效率
+// ReadFrom 实现io.ReaderFrom接口，提高大文件处理效率
 func (w *responseWriter) ReadFrom(reader io.Reader) (n int64, err error) {
 	// 同时写入缓冲区和原始ResponseWriter
 	buf := &bytes.Buffer{}

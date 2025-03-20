@@ -6,10 +6,14 @@ unknown_err = "未知异常"
 unknown_validator_err = "未知验证异常"
 invalid_object_validation = "错误的对象验证"
 
+no_login = "请先登录"
+
 invalid_token_struct = "无效的令牌结构"
 invalid_token_sign_method = "无效的令牌签名方法"
+invalid_token_header = "无效的令牌头格式"
 token_is_expire = "令牌已过期"
 token_too_short = "令牌长度过短"
+token_is_black_list = "令牌已被拉黑"
 
 err_db_add_nil = "数据库错误，插入对象为空"
 err_db_del_nil = "数据库错误，删除对象为空"
