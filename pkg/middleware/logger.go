@@ -42,7 +42,7 @@ type LoggerConfig struct {
 	LogHeaders     bool          // 是否记录请求头
 	LogBody        bool          // 是否记录请求体
 	MaxBodySize    int           // 记录的最大请求体大小
-	BodyTypes      []string      // 要记录的请求体内容类型
+	BodyTypes      []string      // 要记录的请求体内容类型(为空时记录所有)
 	HeaderFilter   []string      // 要记录的请求头字段(为空时记录所有)
 	TraceIDFunc    func() string // 自定义跟踪ID生成函数
 }
@@ -57,8 +57,8 @@ func DefaultLoggerConfig() LoggerConfig {
 		LogHeaders:     true,
 		LogBody:        true,
 		MaxBodySize:    maxBodyLogSize,
-		BodyTypes:      []string{"application/json", "application/xml", "application/x-www-form-urlencoded", "multipart/form-data"},
-		HeaderFilter:   []string{"Content-Type", "User-Agent", "Referer", "Origin", "Authorization"},
+		BodyTypes:      []string{}, //[]string{"application/json", "application/xml", "application/x-www-form-urlencoded", "multipart/form-data"},
+		HeaderFilter:   []string{}, //[]string{"Content-Type", "User-Agent", "Referer", "Origin", "Authorization"},
 		TraceIDFunc:    func() string { return uuid.New().String() },
 	}
 }
@@ -143,7 +143,6 @@ func shouldSkipPath(path string, config LoggerConfig) bool {
 			}
 		}
 	}
-
 	return false
 }
 
@@ -366,7 +365,6 @@ func collectRequestParams(c *gin.Context) map[string]any {
 			params[param.Key] = param.Value
 		}
 	}
-
 	return params
 }
 
@@ -398,7 +396,6 @@ func collectRequestHeaders(c *gin.Context, filter []string) map[string]string {
 			}
 		}
 	}
-
 	return headers
 }
 
@@ -406,6 +403,8 @@ func collectRequestHeaders(c *gin.Context, filter []string) map[string]string {
 func shouldLogRequestBody(contentType string, allowedTypes []string) bool {
 	if contentType == "" {
 		return false
+	} else if len(allowedTypes) <= 0 {
+		return true
 	}
 
 	contentType = strings.ToLower(contentType)
@@ -414,6 +413,5 @@ func shouldLogRequestBody(contentType string, allowedTypes []string) bool {
 			return true
 		}
 	}
-
 	return false
 }

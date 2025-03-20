@@ -13,6 +13,9 @@ import (
 	"time"
 )
 
+// DBKind 数据库类型
+type DBKind string
+
 // 数据库类型常量
 const (
 	DBKindPgSQL  DBKind = "pgsql"
@@ -27,9 +30,6 @@ var (
 )
 
 type (
-	// DBKind 数据库类型
-	DBKind string
-
 	// DBConfig 数据库配置结构
 	DBConfig struct {
 		Kind   DBKind // 数据库类型
