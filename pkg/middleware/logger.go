@@ -15,8 +15,8 @@ import (
 )
 
 const (
-	RequestIDKey     = "RequestID"
-	XRequestIDHeader = "X-Request-ID"
+	RequestIDKey     = "RequestID"    // 本地获取的请求ID的上下文键
+	XRequestIDHeader = "X-Request-ID" // 网关生成并塞入的requestID
 	green            = "\033[97;42m"
 	white            = "\033[90;47m"
 	yellow           = "\033[90;43m"

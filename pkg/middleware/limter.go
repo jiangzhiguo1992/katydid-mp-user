@@ -117,6 +117,16 @@ func NewLimiter(limit int, duration time.Duration) *Limiter {
 	return limiter
 }
 
+// NewLimiterWithOptions 创建限流器并添加规则
+func NewLimiterWithOptions(options LimiterOptions, rules ...LimitRule) *Limiter {
+	limiter := NewLimiter(options.Limit, options.Duration)
+	limiter.WithOptions(options)
+	for _, rule := range rules {
+		limiter.AddRule(rule)
+	}
+	return limiter
+}
+
 // WithOptions 设置限流器选项
 func (l *Limiter) WithOptions(options LimiterOptions) *Limiter {
 	l.mu.Lock()
