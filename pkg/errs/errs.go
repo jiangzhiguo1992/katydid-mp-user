@@ -14,8 +14,8 @@ type (
 	}
 	localize struct {
 		localeId  string
-		template1 []any
-		template2 map[string]any
+		template1 []any          // 位置参数 %s
+		template2 map[string]any // 命名参数 {{s}}
 	}
 )
 
@@ -120,10 +120,26 @@ func (c *CodeErrs) Real() *CodeErrs {
 	return c
 }
 
+// HasErrors 检查是否包含错误
+func (c *CodeErrs) HasErrors() bool {
+	return len(c.errs) > 0
+}
+
+// HasLocales 检查是否包含本地化信息
+func (c *CodeErrs) HasLocales() bool {
+	return len(c.localizes) > 0
+}
+
 func (c *CodeErrs) ToLocales(fun func(string, []any, map[string]any) string) string {
 	if len(c.localizes) == 0 {
 		return fmt.Sprintf("%d: unknown error(localeIds)", c.code)
 	}
+
+	if len(c.localizes) == 1 {
+		v := c.localizes[0]
+		return fun(v.localeId, v.template1, v.template2)
+	}
+
 	var builder strings.Builder
 	for k, v := range c.localizes {
 		msg := fun(v.localeId, v.template1, v.template2)

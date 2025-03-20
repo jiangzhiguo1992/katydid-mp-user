@@ -17,7 +17,7 @@ type Matcher struct {
 	codeLocIds map[int][]string
 	patterns   map[string]string
 	onError    func(string)
-	mu         sync.RWMutex
+	mu         sync.RWMutex // 仅用于保护 codeLocIds 和 patterns 的并发读取
 
 	patternCache sync.Map // 缓存已匹配的错误信息和对应的locId
 	codeCache    sync.Map // 缓存locId和对应的code
@@ -42,8 +42,8 @@ func Init(codes map[int][]string, patterns map[string]string, onError func(strin
 	})
 }
 
-// Match 匹配错误
-func Match(err error) *CodeErrs {
+// MatchErr 匹配错误
+func MatchErr(err error) *CodeErrs {
 	if err == nil {
 		return nil
 	}
@@ -70,12 +70,14 @@ func Match(err error) *CodeErrs {
 	} else if !ok1 && matcher.onError != nil {
 		matcher.onError(fmt.Sprintf("■ ■ Err ■ ■ match pattern no code: %s", locId))
 	}
-	// 未匹配到，返回通用错误
+
+	// 未匹配到，返回通用错误，err不返回msg
 	return New(err).Real()
 }
 
-func Match2(msg string) *CodeErrs {
-	if msg == "" {
+// MatchMsg 匹配错误消息
+func MatchMsg(msg string) *CodeErrs {
+	if msg == "" || matcher == nil {
 		return nil
 	}
 
@@ -90,7 +92,8 @@ func Match2(msg string) *CodeErrs {
 	} else if !ok1 && matcher.onError != nil {
 		matcher.onError(fmt.Sprintf("■ ■ Err ■ ■ matchMsg pattern no code: %s", locId))
 	}
-	// 未匹配到，返回通用错误
+
+	// 未匹配到，返回通用错误，可以返回msg
 	return New().WrapLocalize(msg, nil, nil).Real()
 }
 
@@ -112,7 +115,6 @@ func (m *Matcher) findLocId(errMsg string) (string, bool) {
 			return msgID, true
 		}
 	}
-
 	return errMsg, false
 }
 
@@ -136,32 +138,5 @@ func (m *Matcher) findCode(locId string) (int, bool) {
 			}
 		}
 	}
-
 	return 0, false
 }
-
-//// createCodeError 创建错误对象
-//func (m *Matcher) createCodeError(origErr error, locId string, isCommon bool, hasCode bool, code int) *CodeErrs {
-//	// 对于常见错误模式，使用缓存减少对象创建
-//	if isCommon {
-//		cacheKey := fmt.Sprintf("%s:%d", locId, code)
-//		if cached, ok := m.commonErrorCache.Load(cacheKey); ok {
-//			// 返回缓存的副本以避免并发修改
-//			cachedErr := cached.(*CodeErrs)
-//			return New(origErr).WithCode(cachedErr.code).WrapLocalize(cachedErr.localizes[0].localeId, nil, nil)
-//		}
-//	}
-//
-//	codeErr := New(origErr).WrapLocalize(locId, nil, nil)
-//	if hasCode {
-//		_ = codeErr.WithCode(code)
-//	}
-//
-//	// 对于常见错误，缓存模式
-//	if isCommon {
-//		cacheKey := fmt.Sprintf("%s:%d", locId, code)
-//		m.commonErrorCache.Store(cacheKey, codeErr)
-//	}
-//
-//	return codeErr.Real()
-//}
