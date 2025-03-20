@@ -36,67 +36,36 @@ func Language() gin.HandlerFunc {
 		}
 
 		// 优先检查缓存
-		langCacheLock.RLock()
-		if cachedLang, exists := langCache[lang]; exists {
-			langCacheLock.RUnlock()
-			c.Set(LanguageKey, cachedLang)
+		resultLang := getCachedLanguage(lang)
+		if resultLang != "" {
+			c.Set(LanguageKey, resultLang)
 			c.Next()
 			return
 		}
-		langCacheLock.RUnlock()
 
-		// 解析所有语言偏好及其权重
+		// 解析所有语言偏好并按权重排序（从高到低）
 		preferences := parseLanguagePreferences(lang)
 
-		// 按权重排序语言偏好（从高到低）
-		sort.Slice(preferences, func(i, j int) bool {
-			return preferences[i].weight > preferences[j].weight
-		})
-
-		var resultLang string
-
-		// 按权重顺序检查每个语言偏好
-		for _, pref := range preferences {
-			cleanLang := pref.lang
-			// 检查完整语言代码
-			if i18n.HasLang(cleanLang) {
-				resultLang = cleanLang
-				break
-			}
-
-			// 分解语言标签（如 zh-CN -> zh, CN）
-			subParts := strings.Split(cleanLang, "-")
-			if len(subParts) > 1 {
-				// 检查主语言部分
-				if i18n.HasLang(subParts[0]) {
-					resultLang = subParts[0]
-					break
-				}
-
-				// 检查区域部分
-				if i18n.HasLang(subParts[1]) {
-					resultLang = subParts[1]
-					break
-				}
-			}
-		}
-
-		// 如果没有找到匹配的语言，使用默认语言
-		if resultLang == "" {
-			resultLang = i18n.DefLang()
-		}
+		// 查找最佳匹配语言
+		resultLang = findBestLanguageMatch(preferences)
 
 		// 更新缓存
-		langCacheLock.Lock()
-		if len(langCache) > 1000 { // 避免缓存无限增长
-			langCache = make(map[string]string)
-		}
-		langCache[lang] = resultLang
-		langCacheLock.Unlock()
+		updateLanguageCache(lang, resultLang)
 
 		c.Set(LanguageKey, resultLang)
 		c.Next()
 	}
+}
+
+// getCachedLanguage 从缓存中获取语言
+func getCachedLanguage(lang string) string {
+	langCacheLock.RLock()
+	defer langCacheLock.RUnlock()
+
+	if cachedLang, exists := langCache[lang]; exists {
+		return cachedLang
+	}
+	return ""
 }
 
 // parseLanguagePreferences 解析Accept-Language头部，返回按权重排序的语言偏好列表
@@ -122,5 +91,49 @@ func parseLanguagePreferences(header string) []languagePreference {
 		}
 		preferences = append(preferences, pref)
 	}
+
+	// 按权重排序语言偏好（从高到低）
+	sort.Slice(preferences, func(i, j int) bool {
+		return preferences[i].weight > preferences[j].weight
+	})
 	return preferences
+}
+
+// findBestLanguageMatch 找到最佳匹配的语言
+func findBestLanguageMatch(preferences []languagePreference) string {
+	for _, pref := range preferences {
+		cleanLang := pref.lang
+		// 检查完整语言代码
+		if i18n.HasLang(cleanLang) {
+			return cleanLang
+		}
+
+		// 分解语言标签（如 zh-CN -> zh, CN）
+		subParts := strings.Split(cleanLang, "-")
+		if len(subParts) > 1 {
+			// 先检查主语言部分
+			if i18n.HasLang(subParts[0]) {
+				return subParts[0]
+			}
+			// 再检查区域部分
+			if i18n.HasLang(subParts[1]) {
+				return subParts[1]
+			}
+		}
+	}
+
+	// 如果没有找到匹配的语言，使用默认语言
+	return i18n.DefLang()
+}
+
+// updateLanguageCache 更新语言缓存
+func updateLanguageCache(key, lang string) {
+	langCacheLock.Lock()
+	defer langCacheLock.Unlock()
+
+	// 缓存最大条目数，避免缓存无限增长
+	//if len(langCache) >= 10000 {
+	//	langCache = make(map[string]string)
+	//}
+	langCache[key] = lang
 }
