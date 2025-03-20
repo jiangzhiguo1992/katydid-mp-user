@@ -242,7 +242,7 @@ func (m *Manager) localize(lang, msgID string, data map[string]any, nilBackId bo
 
 	// error
 	if !nilBackId && (err != nil) && (m.config.OnErr != nil) {
-		m.config.OnErr("localize failed", map[string]any{
+		m.config.OnErr("■ ■ i18n ■ ■ 本地化失败: ", map[string]any{
 			"msgID": msgID, "lang": lang, "error": err,
 		})
 	}

@@ -145,7 +145,7 @@ func generateSecureRandomString(length int) (string, error) {
 	}
 	encoded := base64.URLEncoding.EncodeToString(bytes)
 	if len(encoded) < length {
-		return "", fmt.Errorf("token too short: %d", length)
+		return "", fmt.Errorf("token_too_short")
 	}
 	return encoded[:length], nil
 }
@@ -155,24 +155,24 @@ func ParseJWT(tokenStr string, secret string, checkExpire bool) (*TokenClaims, e
 	token, err := jwt.ParseWithClaims(tokenStr, &TokenClaims{}, func(token *jwt.Token) (any, error) {
 		// 确保token的签名方法是我们期望的
 		if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
-			return nil, fmt.Errorf("意外的签名方法: %v", token.Header["alg"])
+			return nil, fmt.Errorf("invalid_token_sign_method") // token.Header["alg"]
 		}
 		return []byte(secret), nil
 	})
 	if err != nil {
-		return nil, fmt.Errorf("无效的token: %w", err)
+		return nil, err // "无效的token: %w"
 	}
 
 	if claims, ok := token.Claims.(*TokenClaims); ok && token.Valid {
 		// 检查是否过期
 		if checkExpire && (claims.ExpiresAt != nil) {
 			if time.Now().After(claims.ExpiresAt.Time) {
-				return nil, fmt.Errorf("token已过期")
+				return nil, fmt.Errorf("token_is_expire")
 			}
 		}
 		return claims, nil
 	}
-	return nil, fmt.Errorf("无效的token结构")
+	return nil, fmt.Errorf("invalid_token_struct")
 }
 
 // IsTokenFormat 检查格式 (header.payload.signature)

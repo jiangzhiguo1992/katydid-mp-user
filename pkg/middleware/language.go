@@ -9,8 +9,12 @@ import (
 	"sync"
 )
 
-// LanguageKey 是上下文中存储语言信息的键
-const LanguageKey = "Use-Language"
+const (
+	// LanguageKey 是上下文中存储语言信息的键
+	LanguageKey = "Use-Language"
+
+	headerAcceptKey = "Accept-Language"
+)
 
 // 使用缓存减少重复计算
 var (
@@ -27,7 +31,7 @@ type languagePreference struct {
 // Language 创建处理请求语言的中间件
 func Language() gin.HandlerFunc {
 	return func(c *gin.Context) {
-		lang := c.GetHeader("Accept-Language")
+		lang := c.GetHeader(headerAcceptKey)
 		if lang == "" {
 			// 如果头部为空，直接使用默认语言
 			c.Set(LanguageKey, i18n.DefLang())
