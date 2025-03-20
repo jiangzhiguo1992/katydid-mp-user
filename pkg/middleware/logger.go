@@ -15,31 +15,29 @@ import (
 )
 
 const (
-	RequestIDKey     = "RequestID"    // 本地获取的请求ID的上下文键
-	XRequestIDHeader = "X-Request-ID" // 网关生成并塞入的requestID
-	green            = "\033[97;42m"
-	white            = "\033[90;47m"
-	yellow           = "\033[90;43m"
-	red              = "\033[97;41m"
-	blue             = "\033[97;44m"
-	reset            = "\033[0m"
-	maxBodyLogSize   = 4096 // 最大日志记录的请求体大小(字节)
+	logGreen       = "\033[97;42m"
+	logWhite       = "\033[90;47m"
+	logYellow      = "\033[90;43m"
+	logRed         = "\033[97;41m"
+	logBlue        = "\033[97;44m"
+	logReset       = "\033[0m"
+	maxBodyLogSize = 4096 // 最大日志记录的请求体大小(字节)
 )
 
 var (
 	// 缓存状态码和方法的颜色，避免重复计算
-	statusColorCache = make(map[int]string)
-	methodColorCache = make(map[string]string)
-	colorCacheMutex  sync.RWMutex
+	loggerStatusColorCache = make(map[int]string)
+	loggerMethodColorCache = make(map[string]string)
+	loggerColorCacheMutex  sync.RWMutex
 
 	// 使用对象池减少内存分配
-	paramsPool = sync.Pool{
+	loggerParamsPool = sync.Pool{
 		New: func() interface{} {
 			return make(map[string]any, 8)
 		},
 	}
 
-	headersPool = sync.Pool{
+	loggerHeadersPool = sync.Pool{
 		New: func() interface{} {
 			return make(map[string]string, 8)
 		},
@@ -82,11 +80,11 @@ func DefaultLoggerConfig() LoggerConfig {
 	}
 }
 
-// statusColor 根据HTTP状态码返回对应的颜色（带缓存）
-func statusColor(code int) string {
-	colorCacheMutex.RLock()
-	color, exists := statusColorCache[code]
-	colorCacheMutex.RUnlock()
+// loggerStatusColor 根据HTTP状态码返回对应的颜色（带缓存）
+func loggerStatusColor(code int) string {
+	loggerColorCacheMutex.RLock()
+	color, exists := loggerStatusColorCache[code]
+	loggerColorCacheMutex.RUnlock()
 
 	if exists {
 		return color
@@ -95,26 +93,26 @@ func statusColor(code int) string {
 	var newColor string
 	switch {
 	case code >= http.StatusOK && code < http.StatusMultipleChoices:
-		newColor = green
+		newColor = logGreen
 	case code >= http.StatusMultipleChoices && code < http.StatusBadRequest:
-		newColor = white
+		newColor = logWhite
 	case code >= http.StatusBadRequest && code < http.StatusInternalServerError:
-		newColor = yellow
+		newColor = logYellow
 	default:
-		newColor = red
+		newColor = logRed
 	}
 
-	colorCacheMutex.Lock()
-	statusColorCache[code] = newColor
-	colorCacheMutex.Unlock()
+	loggerColorCacheMutex.Lock()
+	loggerStatusColorCache[code] = newColor
+	loggerColorCacheMutex.Unlock()
 	return newColor
 }
 
-// methodColor 根据HTTP方法返回对应的颜色（带缓存）
-func methodColor(method string) string {
-	colorCacheMutex.RLock()
-	color, exists := methodColorCache[method]
-	colorCacheMutex.RUnlock()
+// loggerMethodColor 根据HTTP方法返回对应的颜色（带缓存）
+func loggerMethodColor(method string) string {
+	loggerColorCacheMutex.RLock()
+	color, exists := loggerMethodColorCache[method]
+	loggerColorCacheMutex.RUnlock()
 
 	if exists {
 		return color
@@ -123,20 +121,20 @@ func methodColor(method string) string {
 	var newColor string
 	switch method {
 	case http.MethodGet:
-		newColor = blue
+		newColor = logBlue
 	case http.MethodPost:
-		newColor = green
+		newColor = logGreen
 	case http.MethodPut:
-		newColor = yellow
+		newColor = logYellow
 	case http.MethodDelete:
-		newColor = red
+		newColor = logRed
 	default:
-		newColor = white
+		newColor = logWhite
 	}
 
-	colorCacheMutex.Lock()
-	methodColorCache[method] = newColor
-	colorCacheMutex.Unlock()
+	loggerColorCacheMutex.Lock()
+	loggerMethodColorCache[method] = newColor
+	loggerColorCacheMutex.Unlock()
 	return newColor
 }
 
@@ -252,13 +250,13 @@ func ZapLoggerWithConfig(config LoggerConfig) gin.HandlerFunc {
 			for k := range params {
 				delete(params, k)
 			}
-			paramsPool.Put(params)
+			loggerParamsPool.Put(params)
 		}
 		if config.LogHeaders && headers != nil {
 			for k := range headers {
 				delete(headers, k)
 			}
-			headersPool.Put(headers)
+			loggerHeadersPool.Put(headers)
 		}
 	}
 }
@@ -313,7 +311,7 @@ func buildFullPath(c *gin.Context) string {
 
 // collectRequestParams 收集请求参数
 func collectRequestParams(c *gin.Context) map[string]any {
-	params := paramsPool.Get().(map[string]any)
+	params := loggerParamsPool.Get().(map[string]any)
 
 	// URL查询参数
 	for k, v := range c.Request.URL.Query() {
@@ -348,7 +346,7 @@ func collectRequestParams(c *gin.Context) map[string]any {
 
 // 优化的收集请求头函数
 func collectRequestHeaders(c *gin.Context, config LoggerConfig) map[string]string {
-	headers := headersPool.Get().(map[string]string)
+	headers := loggerHeadersPool.Get().(map[string]string)
 
 	if len(config.HeaderFilter) == 0 {
 		// 记录所有请求头
@@ -420,8 +418,8 @@ func logHTTPRequest(
 	method := c.Request.Method
 
 	// 构建日志消息
-	statusCode := fmt.Sprintf("%s %3d %s", statusColor(status), status, reset)
-	methodFormatted := fmt.Sprintf("%s %-7s %s", methodColor(method), method, reset)
+	statusCode := fmt.Sprintf("%s %3d %s", loggerStatusColor(status), status, logReset)
+	methodFormatted := fmt.Sprintf("%s %-7s %s", loggerMethodColor(method), method, logReset)
 	msg := fmt.Sprintf("[GIN] %s | %s %s | %12v | %15s",
 		statusCode,
 		methodFormatted,

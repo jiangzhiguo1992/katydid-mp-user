@@ -13,12 +13,12 @@ import (
 	"github.com/redis/go-redis/v9"
 )
 
-// StorageType 存储类型
-type StorageType int
+// LimiterStorageType 存储类型
+type LimiterStorageType int
 
 const (
 	// Memory 内存存储
-	Memory StorageType = iota
+	Memory LimiterStorageType = iota
 	// Redis Redis存储
 	Redis
 )
@@ -29,7 +29,7 @@ type LimiterOptions struct {
 	Limit        int                       // 限制的请求数量
 	Duration     time.Duration             // 时间窗口
 	Message      string                    // 自定义错误信息
-	StorageType  StorageType               // 存储类型
+	StorageType  LimiterStorageType        // 存储类型
 	ShardCount   int                       // 分片数量，用于内存存储的分片锁
 	RedisClient  *redis.Client             // Redis客户端(当StorageType为Redis时使用)
 	WhitelistIPs []string                  // IP白名单
@@ -53,14 +53,14 @@ type LimitRule struct {
 	WhitelistFn func(*gin.Context) bool // 白名单判断函数
 }
 
-// Storage 存储接口
-type Storage interface {
+// LimiterStorage 存储接口
+type LimiterStorage interface {
 	Allow(key string, limit int, duration time.Duration) bool
 	Close() error
 }
 
-// MemoryStorage 内存存储实现
-type MemoryStorage struct {
+// LimiterMemoryStorage 内存存储实现
+type LimiterMemoryStorage struct {
 	shards       []*shard
 	shardMask    uint32 // 分片掩码
 	lastCleanup  int64  // 上次清理时间的原子访问
@@ -73,15 +73,15 @@ type shard struct {
 	timestamps map[string][]int64 // 时间戳列表(access)
 }
 
-// RedisStorage Redis存储实现
-type RedisStorage struct {
+// LimiterRedisStorage Redis存储实现
+type LimiterRedisStorage struct {
 	client *redis.Client
 }
 
 // Limiter 限流器
 type Limiter struct {
 	options     LimiterOptions
-	storage     Storage
+	storage     LimiterStorage
 	stats       LimiterStats
 	rules       []LimitRule
 	defaultRule LimitRule
@@ -189,7 +189,7 @@ func (l *Limiter) initStorage() {
 	switch l.options.StorageType {
 	case Redis:
 		if l.options.RedisClient != nil {
-			l.storage = &RedisStorage{client: l.options.RedisClient}
+			l.storage = &LimiterRedisStorage{client: l.options.RedisClient}
 		} else {
 			l.options.LogFunc("■ ■ connect ■ ■ Limiter: Redis客户端未配置，使用内存存储")
 			l.storage = newMemoryStorage(l.options.ShardCount)
@@ -200,14 +200,14 @@ func (l *Limiter) initStorage() {
 }
 
 // newMemoryStorage 创建内存存储
-func newMemoryStorage(shardCount int) *MemoryStorage {
+func newMemoryStorage(shardCount int) *LimiterMemoryStorage {
 	// 确保分片数是2的幂
 	n := 1
 	for n < shardCount {
 		n *= 2
 	}
 
-	ms := &MemoryStorage{
+	ms := &LimiterMemoryStorage{
 		shards:      make([]*shard, n),
 		shardMask:   uint32(n - 1),
 		lastCleanup: time.Now().Unix(),
@@ -222,7 +222,7 @@ func newMemoryStorage(shardCount int) *MemoryStorage {
 }
 
 // getShard 获取key对应的分片
-func (ms *MemoryStorage) getShard(key string) *shard {
+func (ms *LimiterMemoryStorage) getShard(key string) *shard {
 	h := fnv.New32()
 	_, _ = h.Write([]byte(key))
 	return ms.shards[h.Sum32()&ms.shardMask]
@@ -309,7 +309,7 @@ func (l *Limiter) isInWhitelist(key string, c *gin.Context, rule LimitRule) bool
 }
 
 // Allow 内存存储实现的限流检查
-func (ms *MemoryStorage) Allow(key string, limit int, duration time.Duration) bool {
+func (ms *LimiterMemoryStorage) Allow(key string, limit int, duration time.Duration) bool {
 	// 获取对应分片
 	s := ms.getShard(key)
 
@@ -389,7 +389,7 @@ func (ms *MemoryStorage) Allow(key string, limit int, duration time.Duration) bo
 }
 
 // cleanupExpired 清理所有分片中的过期记录
-func (ms *MemoryStorage) cleanupExpired(expiredTime int64) {
+func (ms *LimiterMemoryStorage) cleanupExpired(expiredTime int64) {
 	// 使用固定数量的goroutine并发清理各个分片，避免创建过多goroutine
 	const maxWorkers = 4
 	workers := min(maxWorkers, len(ms.shards))
@@ -427,7 +427,7 @@ func (ms *MemoryStorage) cleanupExpired(expiredTime int64) {
 }
 
 // cleanupShard 清理单个分片的过期记录
-func (ms *MemoryStorage) cleanupShard(s *shard, expiredTime int64) {
+func (ms *LimiterMemoryStorage) cleanupShard(s *shard, expiredTime int64) {
 	s.Lock()
 	defer s.Unlock()
 
@@ -461,7 +461,7 @@ func (ms *MemoryStorage) cleanupShard(s *shard, expiredTime int64) {
 }
 
 // Close 关闭内存存储
-func (ms *MemoryStorage) Close() error {
+func (ms *LimiterMemoryStorage) Close() error {
 	for _, s := range ms.shards {
 		s.Lock()
 		s.timestamps = make(map[string][]int64)
@@ -471,7 +471,7 @@ func (ms *MemoryStorage) Close() error {
 }
 
 // Allow Redis存储实现的限流检查
-func (rs *RedisStorage) Allow(key string, limit int, duration time.Duration) bool {
+func (rs *LimiterRedisStorage) Allow(key string, limit int, duration time.Duration) bool {
 	ctx := context.Background()
 	now := time.Now().UnixMilli()
 
@@ -495,7 +495,7 @@ func (rs *RedisStorage) Allow(key string, limit int, duration time.Duration) boo
 }
 
 // Close 关闭Redis存储
-func (rs *RedisStorage) Close() error {
+func (rs *LimiterRedisStorage) Close() error {
 	return nil // Redis客户端由外部管理，无需在此关闭
 }
 
