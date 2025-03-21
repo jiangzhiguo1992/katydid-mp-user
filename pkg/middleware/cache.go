@@ -30,7 +30,7 @@ type CacheConfig struct {
 	DefaultExpiration time.Duration             // 默认缓存过期时间
 	CleanupInterval   time.Duration             // 清理间隔
 	KeyGenerator      func(*gin.Context) string // 自定义缓存键生成函数
-	CachePaths        []string                  // 进行缓存的路径（支持前缀匹配）
+	CachePaths        map[string]*time.Duration // 进行缓存的路径（支持前缀匹配）
 	IgnoreQueryParams []string                  // 忽略的查询参数
 	StatusCodes       []int                     // 需要缓存的状态码，默认只缓存200
 	MaxItemSize       int                       // 最大缓存项大小(字节)，超过此大小的响应不缓存，0表示不限制
@@ -58,12 +58,12 @@ var (
 )
 
 // DefaultCacheConfig 返回默认配置
-func DefaultCacheConfig() CacheConfig {
+func DefaultCacheConfig(paths map[string]*time.Duration) CacheConfig {
 	return CacheConfig{
 		DefaultExpiration: 5 * time.Minute,
 		CleanupInterval:   10 * time.Minute,
 		KeyGenerator:      nil,
-		CachePaths:        []string{},
+		CachePaths:        paths,
 		IgnoreQueryParams: []string{},
 		StatusCodes:       []int{http.StatusOK},
 		MaxItemSize:       1024 * 1024, // 默认最大缓存1MB的响应
@@ -153,10 +153,14 @@ func Cache(config CacheConfig) gin.HandlerFunc {
 
 		// 判断是否需要缓存当前路径
 		shouldCachePath := false
+		duration := config.DefaultExpiration
 		path := c.Request.URL.Path
-		for _, cachePath := range config.CachePaths {
+		for cachePath, du := range config.CachePaths {
 			if cacheMatchRegex(path, cachePath) {
 				shouldCachePath = true
+				if du != nil {
+					duration = *du
+				}
 				break
 			}
 		}
@@ -251,8 +255,8 @@ func Cache(config CacheConfig) gin.HandlerFunc {
 			}
 
 			// 存入缓存
-			cacheStore.Set(cacheKey, response, config.DefaultExpiration)
-			log.DebugFmt("■ ■ Cache ■ ■ 网络缓存更新:%s, expire=%d", cacheKey, config.DefaultExpiration.Seconds())
+			cacheStore.Set(cacheKey, response, duration)
+			log.DebugFmt("■ ■ Cache ■ ■ 网络缓存更新:%s, expire=%d", cacheKey, duration.Seconds())
 		}
 	}
 }
