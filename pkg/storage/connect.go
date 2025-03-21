@@ -254,23 +254,21 @@ func configureConnectionPool(sqlDB *sql.DB, config DBConfig) {
 }
 
 // 启动健康检查
-func startHealthCheck(dbName string, interval time.Duration, autoReconnect bool) {
+func startHealthCheck(name string, interval time.Duration, autoReconnect bool) {
 	ticker := time.NewTicker(interval)
 	defer ticker.Stop()
 
 	for range ticker.C {
-		instance := GetDBInstance(dbName)
+		instance := GetDBInstance(name)
 		if instance == nil {
 			// 实例已被删除，停止健康检查
 			return
 		}
 		instance.Config.Logger.Info(
 			context.Background(),
-			fmt.Sprintf("■ ■ Storage ■ ■ 检查数据库健康: %s, %d, %s, %s",
-				instance.Config.Host, instance.Config.Port,
-				instance.Config.User, instance.Config.DBName))
+			fmt.Sprintf("■ ■ Storage ■ ■ 检查数据库健康: %s", name))
 
-		err := Ping(dbName)
+		err := Ping(name)
 		dbMutex.Lock()
 		now := time.Now()
 
@@ -279,9 +277,7 @@ func startHealthCheck(dbName string, interval time.Duration, autoReconnect bool)
 			if autoReconnect {
 				instance.Config.Logger.Error(
 					context.Background(),
-					fmt.Sprintf("■ ■ Storage ■ ■ 不健康数据库: %s, %d, %s, %s,\n %v",
-						instance.Config.Host, instance.Config.Port,
-						instance.Config.User, instance.Config.DBName, err))
+					fmt.Sprintf("■ ■ Storage ■ ■ 不健康数据库: %s\n %v", name, err))
 
 				// 尝试重新连接
 				sqlDB, _ := instance.DB.DB()
@@ -315,9 +311,7 @@ func startHealthCheck(dbName string, interval time.Duration, autoReconnect bool)
 
 				instance.Config.Logger.Error(
 					context.Background(),
-					fmt.Sprintf("■ ■ Storage ■ ■ 不健康数据库检查失败: %s, %d, %s, %s,\n %v",
-						instance.Config.Host, instance.Config.Port,
-						instance.Config.User, instance.Config.DBName, reconnectErr))
+					fmt.Sprintf("■ ■ Storage ■ ■ 不健康数据库检查失败: %s %v", name, reconnectErr))
 			}
 		} else {
 			instance.Healthy = true
@@ -325,9 +319,7 @@ func startHealthCheck(dbName string, interval time.Duration, autoReconnect bool)
 
 			instance.Config.Logger.Info(
 				context.Background(),
-				fmt.Sprintf("■ ■ Storage ■ ■ 健康数据库: %s, %d, %s, %s",
-					instance.Config.Host, instance.Config.Port,
-					instance.Config.User, instance.Config.DBName))
+				fmt.Sprintf("■ ■ Storage ■ ■ 健康数据库: %s", name))
 		}
 		dbMutex.Unlock()
 	}

@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"hash/fnv"
+	"katydid-mp-user/pkg/log"
 	"net/http"
 	"sync"
 	"sync/atomic"
@@ -34,7 +35,6 @@ type LimiterOptions struct {
 	RedisClient  *redis.Client             // Redis客户端(当StorageType为Redis时使用)
 	WhitelistIPs []string                  // IP白名单
 	KeyFunc      func(*gin.Context) string // 自定义键生成函数
-	LogFunc      func(string, ...any)      // 日志函数
 }
 
 // LimiterStats 限流器统计信息
@@ -97,7 +97,6 @@ func NewLimiter(limit int, duration time.Duration) *Limiter {
 			Duration:    duration,
 			Message:     "The request frequency exceeds the limit, please try again later", //"请求频率超过限制，请稍后再试",
 			StorageType: Memory,
-			LogFunc:     func(format string, args ...any) {},
 			ShardCount:  32, // 默认32个分片
 		},
 		stats: LimiterStats{},
@@ -170,9 +169,6 @@ func (l *Limiter) WithOptions(options LimiterOptions) *Limiter {
 	if options.KeyFunc != nil {
 		l.options.KeyFunc = options.KeyFunc
 	}
-	if options.LogFunc != nil {
-		l.options.LogFunc = options.LogFunc
-	}
 	return l
 }
 
@@ -191,7 +187,7 @@ func (l *Limiter) initStorage() {
 		if l.options.RedisClient != nil {
 			l.storage = &LimiterRedisStorage{client: l.options.RedisClient}
 		} else {
-			l.options.LogFunc("■ ■ connect ■ ■ Limiter: Redis客户端未配置，使用内存存储")
+			log.Error("■ ■ Limiter ■ ■  Redis客户端未配置，使用内存存储")
 			l.storage = newMemoryStorage(l.options.ShardCount)
 		}
 	default:
@@ -278,8 +274,13 @@ func (l *Limiter) Middleware() gin.HandlerFunc {
 			atomic.AddInt64(&l.stats.LimitedRequests, 1)
 
 			// 记录限流日志
-			l.options.LogFunc("■ ■ connect ■ ■ 请求被限流: IP=%s, 路径=%s, 方法=%s", key, c.FullPath(), c.Request.Method)
+			if gin.Mode() == gin.DebugMode {
+				log.WarnFmt("■ ■ Limiter ■ ■  请求被限流: IP=%s, 路径=%s, 方法=%s", key, c.FullPath(), c.Request.Method)
+			} else {
+				log.WarnFmtOutput("■ ■ Limiter ■ ■  请求被限流: IP=%s, 路径=%s, 方法=%s", true, key, c.FullPath(), c.Request.Method)
+			}
 
+			// 返回限流响应
 			ResponseData(c, http.StatusTooManyRequests, gin.H{
 				"code": l.options.Code,
 				"msg":  l.options.Message,
@@ -390,6 +391,8 @@ func (ms *LimiterMemoryStorage) Allow(key string, limit int, duration time.Durat
 
 // cleanupExpired 清理所有分片中的过期记录
 func (ms *LimiterMemoryStorage) cleanupExpired(expiredTime int64) {
+	log.InfoFmt("■ ■ Limiter ■ ■  清理过期记录START", time.Unix(expiredTime, 0).Format("2006-01-02 15:04:05"))
+
 	// 使用固定数量的goroutine并发清理各个分片，避免创建过多goroutine
 	const maxWorkers = 4
 	workers := min(maxWorkers, len(ms.shards))
@@ -424,12 +427,14 @@ func (ms *LimiterMemoryStorage) cleanupExpired(expiredTime int64) {
 	close(shardChan)
 
 	wg.Wait()
+	log.InfoFmt("■ ■ Limiter ■ ■  清理过期记录OK", time.Unix(expiredTime, 0).Format("2006-01-02 15:04:05"))
 }
 
 // cleanupShard 清理单个分片的过期记录
 func (ms *LimiterMemoryStorage) cleanupShard(s *shard, expiredTime int64) {
 	s.Lock()
 	defer s.Unlock()
+	log.InfoFmt("■ ■ Limiter ■ ■  清理过期记录(分片)", time.Unix(expiredTime, 0).Format("2006-01-02 15:04:05"))
 
 	for key, timestamps := range s.timestamps {
 		// 优化内存分配，预估需要的容量
