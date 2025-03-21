@@ -1,5 +1,12 @@
 env_name = "环境_开发"
 
+[log]
+con_levels = [1,2,3,4,5,6] # 打印级别，1(fatal) 2(panic) 3(error) 4(warn) 5(info) 6(debug)
+out_levels = [] # 输出级别，1(fatal) 2(panic) 3(error) 4(warn) 5(info) 6(debug)
+
+[lang]
+defautl = "zh-CN" # zh-CN / en-US  必须是已有的语言
+
 [auth]
 enable = true
 

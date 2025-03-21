@@ -6,11 +6,11 @@ type (
 	Config struct {
 		Env     string `toml:"env" mapstructure:"env"`
 		EnvName string `toml:"env_name" mapstructure:"env_name"`
-		DefLang string `toml:"def_lang" mapstructure:"def_lang"` // TODO:GG 需要跟随app吗?
 
 		RemoteConf `toml:"remote_conf" mapstructure:"remote_conf"`
 
-		LogConf `toml:"log" mapstructure:"log"`
+		LogConf  `toml:"log" mapstructure:"log"`
+		LangConf `toml:"lang" mapstructure:"lang"`
 
 		AppConf `mapstructure:",squash"`
 
@@ -29,11 +29,16 @@ type (
 	}
 
 	LogConf struct {
-		OutLevel      int    `toml:"out_level" mapstructure:"out_level"`
+		ConLevels     []int  `toml:"con_levels" mapstructure:"con_levels"`
+		OutLevels     []int  `toml:"out_levels" mapstructure:"out_levels"`
 		OutFormat     string `toml:"out_format" mapstructure:"out_format"`
 		CheckInterval int    `toml:"check_interval" mapstructure:"check_interval"`
 		FileMaxAge    int    `toml:"file_max_age" mapstructure:"file_max_age"`
 		FileMaxSize   int64  `toml:"file_max_size" mapstructure:"file_max_size"`
+	}
+
+	LangConf struct {
+		Default string `toml:"default" mapstructure:"default"`
 	}
 
 	AppConf struct {
@@ -53,11 +58,11 @@ type (
 	}
 
 	ModuleConf struct {
-		Enable  bool        `toml:"enable" mapstructure:"enable"`
-		Server  Server      `toml:"server" mapstructure:"server"`
-		PgSql   PgSqlConf   `toml:"pgsql" mapstructure:"pgsql"`
-		Redis   RedisConf   `toml:"redis"  mapstructure:"redis"`
-		MongoDB MongoDBConf `toml:"mongo_db"  mapstructure:"mongo_db"`
+		Enable bool      `toml:"enable" mapstructure:"enable"`
+		Server Server    `toml:"server" mapstructure:"server"`
+		PgSql  PgSqlConf `toml:"pgsql" mapstructure:"pgsql"`
+		Redis  RedisConf `toml:"redis"  mapstructure:"redis"`
+		Mongo  MongoConf `toml:"mongo"  mapstructure:"mongo"`
 	}
 
 	Server struct {
@@ -105,7 +110,7 @@ type (
 		Clusters    []string `toml:"clusters" mapstructure:"clusters"`
 	}
 
-	MongoDBConf struct {
+	MongoConf struct {
 		// TODO:GG
 	}
 )

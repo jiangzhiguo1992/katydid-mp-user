@@ -1,14 +1,16 @@
 enable = true # 也是sub的默认值
 env = "dev" # dev / fat / uat / pro
 
-def_lang = "en-US" # zh-CN / en-US  必须是已有的语言
-
 [log]
-out_level = 0 # 输出级别，1(fatal) 2(panic) 3(error) 4(warn) 5(info) 6(debug)
+con_levels = [1,2,3,4,5,6] # 打印级别，1(fatal) 2(panic) 3(error) 4(warn) 5(info) 6(debug)
+out_levels = [] # 输出级别，1(fatal) 2(panic) 3(error) 4(warn) 5(info) 6(debug)
 out_format = "06-01-02" # 可以按时间分割，06-01-02 15:04:05.000
 check_interval = 60 # 检查间隔，min
 file_max_age = 30  # 保留时间，day
 file_max_size = 100  # 单文件最大大小，MB
+
+[lang]
+defautl = "en-US" # zh-CN / en-US  必须是已有的语言
 
 [auth]
 enable = true
