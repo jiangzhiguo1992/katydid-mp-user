@@ -28,7 +28,7 @@ type (
 		IssuedAt int64     `json:"issuedAt"`       // 签发时间
 
 		Token     string `json:"token"`     // 访问令牌
-		ExpireSec int64  `json:"expireSec"` // 过期时间(秒)
+		ExpireSec int64  `json:"expireSec"` // 过期时间(秒) (-1就没有不过期间)
 
 		Claims *TokenClaims `json:"-"` // 令牌声明(不序列化)
 	}

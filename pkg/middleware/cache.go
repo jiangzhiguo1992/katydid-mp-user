@@ -27,10 +27,10 @@ const (
 
 // CacheConfig 缓存中间件配置
 type CacheConfig struct {
-	DefaultExpiration time.Duration             // 默认缓存过期时间
-	CleanupInterval   time.Duration             // 清理间隔
+	DefaultExpiration time.Duration             // 默认缓存过期时间 (-1不过期)
+	CleanupInterval   time.Duration             // 清理间隔 (-1不清理)
 	KeyGenerator      func(*gin.Context) string // 自定义缓存键生成函数
-	CachePaths        map[string]*time.Duration // 进行缓存的路径（支持前缀匹配）
+	CachePaths        map[string]*time.Duration // 进行缓存的路径（支持前缀匹配） (-1不过期)
 	IgnoreQueryParams []string                  // 忽略的查询参数
 	StatusCodes       []int                     // 需要缓存的状态码，默认只缓存200
 	MaxItemSize       int                       // 最大缓存项大小(字节)，超过此大小的响应不缓存，0表示不限制

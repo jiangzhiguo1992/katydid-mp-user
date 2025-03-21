@@ -41,13 +41,13 @@ type (
 		Password string // 密码
 		DBName   string // 数据库名称
 
-		MaxRetries int // 重试次数
-		RetryDelay int // 重试间隔，单位秒
+		MaxRetries int // 重试次数 (自动纠正<=0)
+		RetryDelay int // 重试间隔，单位秒 (自动纠正<=0)
 
 		MaxOpen     int           // 最大连接数，默认1000 (看数据库性能)
 		MaxIdle     int           // 最大空闲连接数，默认=Open
-		MaxLifeTime time.Duration // 连接最大存活时间，默认3m
-		MaxIdleTime time.Duration // 空闲连接最大存活时间，默认1m
+		MaxLifeTime time.Duration // 连接最大存活时间，默认3m (<=0永生)
+		MaxIdleTime time.Duration // 空闲连接最大存活时间，默认1m (<=0永生)
 
 		HealthCheckInterval time.Duration // 健康检查间隔(>0开启)
 		AutoReconnect       bool          // 自动重连
@@ -118,7 +118,8 @@ func InitConnect(name string, config DBConfig) (*gorm.DB, error) {
 
 	// 如果启用了健康检查，开始后台健康监控
 	if config.HealthCheckInterval > 0 {
-		go startHealthCheck(name, config.HealthCheckInterval, config.AutoReconnect)
+		go startHealthCheck(name, config.HealthCheckInterval,
+			config.AutoReconnect, config.QueryTimeout)
 	}
 	return db, nil
 }
@@ -254,7 +255,7 @@ func configureConnectionPool(sqlDB *sql.DB, config DBConfig) {
 }
 
 // 启动健康检查
-func startHealthCheck(name string, interval time.Duration, autoReconnect bool) {
+func startHealthCheck(name string, interval time.Duration, autoReconnect bool, queryTimeout time.Duration) {
 	ticker := time.NewTicker(interval)
 	defer ticker.Stop()
 
@@ -268,7 +269,7 @@ func startHealthCheck(name string, interval time.Duration, autoReconnect bool) {
 			context.Background(),
 			fmt.Sprintf("■ ■ Storage ■ ■ 检查数据库健康: %s", name))
 
-		err := Ping(name)
+		err := Ping(name, queryTimeout)
 		dbMutex.Lock()
 		now := time.Now()
 
@@ -392,7 +393,7 @@ func CloseAllDBs() []error {
 }
 
 // Ping 检查数据库连接状态
-func Ping(name string) error {
+func Ping(name string, timeout time.Duration) error {
 	instance := GetDBInstance(name)
 	if instance == nil {
 		return fmt.Errorf("■ ■ Storage ■ ■ Ping: 未找到指定的数据库连接:%s", name)
@@ -404,9 +405,13 @@ func Ping(name string) error {
 	}
 
 	// 使用带超时的上下文进行ping
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
-	return sqlDB.PingContext(ctx)
+	if timeout > 0 {
+		ctx, cancel := context.WithTimeout(context.Background(), timeout)
+		defer cancel()
+		return sqlDB.PingContext(ctx)
+	}
+
+	return sqlDB.Ping()
 }
 
 // Stats 获取数据库连接池统计信息
