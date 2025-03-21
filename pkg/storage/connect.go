@@ -77,7 +77,7 @@ func InitConnect(name string, config DBConfig) (*gorm.DB, error) {
 	defer dbMutex.Unlock()
 
 	if _, exists := dbInstances[name]; exists {
-		return nil, fmt.Errorf("■ ■ connect ■ ■ 数据库连接已存在: %s", name)
+		return nil, fmt.Errorf("■ ■ Storage ■ ■ 数据库连接已存在: %s", name)
 	}
 
 	// 根据数据库类型创建对应的方言
@@ -85,6 +85,7 @@ func InitConnect(name string, config DBConfig) (*gorm.DB, error) {
 	if err != nil {
 		return nil, err
 	}
+	config.Logger.Info(context.Background(), fmt.Sprintf("■ ■ Storage ■ ■ 连接数据库方言:%s :%s", name, dialector))
 
 	// 配置GORM
 	gormConfig := createGormConfig(config)
@@ -92,13 +93,14 @@ func InitConnect(name string, config DBConfig) (*gorm.DB, error) {
 	// 重试连接逻辑
 	db, err := connectWithRetries(dialector, gormConfig, config.MaxRetries, time.Duration(config.RetryDelay)*time.Second)
 	if err != nil {
-		return nil, fmt.Errorf("■ ■ connect ■ ■ 数据库连接失败: %s, %w", name, err)
+		return nil, fmt.Errorf("■ ■ Storage ■ ■ 数据库连接失败: %s, %w", name, err)
 	}
 
 	sqlDB, err := db.DB()
 	if err != nil {
 		return nil, err
 	}
+	config.Logger.Info(context.Background(), fmt.Sprintf("■ ■ Storage ■ ■ 连接数据库成功:%s", name))
 
 	// 设置连接池参数
 	configureConnectionPool(sqlDB, config)
@@ -144,11 +146,11 @@ func createDialector(config DBConfig) (gorm.Dialector, error) {
 		}), nil
 	case DBKindSQLite:
 		if len(config.SQLiteFile) == 0 {
-			return nil, fmt.Errorf("■ ■ connect ■ ■ SQLite数据库文件路径不能为空")
+			return nil, fmt.Errorf("■ ■ Storage ■ ■ SQLite数据库文件路径不能为空")
 		}
 		return sqlite.Open(config.SQLiteFile), nil
 	default:
-		return nil, fmt.Errorf("■ ■ connect ■ ■ 不支持的数据库类型: %s", config.Kind)
+		return nil, fmt.Errorf("■ ■ Storage ■ ■ 不支持的数据库类型: %s", config.Kind)
 	}
 }
 
@@ -227,6 +229,7 @@ func connectWithRetries(dialector gorm.Dialector, config *gorm.Config, maxRetrie
 		if err == nil && db != nil {
 			return db, nil
 		}
+		config.Logger.Warn(context.Background(), fmt.Sprintf("■ ■ Storage ■ ■ 连接数据库重试(%d/%d):%s\n%v", i+1, maxRetries, dialector, err))
 
 		select {
 		case <-time.After(retryInterval):
@@ -234,11 +237,12 @@ func connectWithRetries(dialector gorm.Dialector, config *gorm.Config, maxRetrie
 			return nil, ctx.Err()
 		}
 	}
+	config.Logger.Error(context.Background(), fmt.Sprintf("■ ■ Storage ■ ■ 连接数据库重试用尽(%d):%s\n%v", maxRetries, dialector, err))
 
 	if err != nil {
 		return nil, err
 	}
-	return nil, fmt.Errorf("■ ■ connect ■ ■ 数据库连接失败: 达到最大重试次数")
+	return nil, fmt.Errorf("■ ■ Storage ■ ■ 数据库连接失败: 达到最大重试次数")
 }
 
 // 配置连接池
@@ -260,6 +264,11 @@ func startHealthCheck(dbName string, interval time.Duration, autoReconnect bool)
 			// 实例已被删除，停止健康检查
 			return
 		}
+		instance.Config.Logger.Info(
+			context.Background(),
+			fmt.Sprintf("■ ■ Storage ■ ■ 检查数据库健康: %s, %d, %s, %s",
+				instance.Config.Host, instance.Config.Port,
+				instance.Config.User, instance.Config.DBName))
 
 		err := Ping(dbName)
 		dbMutex.Lock()
@@ -268,6 +277,12 @@ func startHealthCheck(dbName string, interval time.Duration, autoReconnect bool)
 		if err != nil {
 			instance.Healthy = false
 			if autoReconnect {
+				instance.Config.Logger.Error(
+					context.Background(),
+					fmt.Sprintf("■ ■ Storage ■ ■ 不健康数据库: %s, %d, %s, %s,\n %v",
+						instance.Config.Host, instance.Config.Port,
+						instance.Config.User, instance.Config.DBName, err))
+
 				// 尝试重新连接
 				sqlDB, _ := instance.DB.DB()
 				if sqlDB != nil {
@@ -297,10 +312,22 @@ func startHealthCheck(dbName string, interval time.Duration, autoReconnect bool)
 						instance.LastPingTime = now
 					}
 				}
+
+				instance.Config.Logger.Error(
+					context.Background(),
+					fmt.Sprintf("■ ■ Storage ■ ■ 不健康数据库检查失败: %s, %d, %s, %s,\n %v",
+						instance.Config.Host, instance.Config.Port,
+						instance.Config.User, instance.Config.DBName, reconnectErr))
 			}
 		} else {
 			instance.Healthy = true
 			instance.LastPingTime = now
+
+			instance.Config.Logger.Info(
+				context.Background(),
+				fmt.Sprintf("■ ■ Storage ■ ■ 健康数据库: %s, %d, %s, %s",
+					instance.Config.Host, instance.Config.Port,
+					instance.Config.User, instance.Config.DBName))
 		}
 		dbMutex.Unlock()
 	}
@@ -334,7 +361,7 @@ func CloseDB(name string) error {
 
 	instance, exists := dbInstances[name]
 	if !exists || instance == nil {
-		return fmt.Errorf("■ ■ connect ■ ■ 关闭: 未找到指定的数据库连接:%s", name)
+		return fmt.Errorf("■ ■ Storage ■ ■ 关闭: 未找到指定的数据库连接:%s", name)
 	}
 
 	sqlDB, err := instance.DB.DB()
@@ -354,7 +381,7 @@ func CloseAllDBs() []error {
 	var errs []error
 	for name, instance := range dbInstances {
 		if instance == nil || instance.DB == nil {
-			errs = append(errs, fmt.Errorf("■ ■ connect ■ ■ 关闭: 无效的数据库连接:%s", name))
+			errs = append(errs, fmt.Errorf("■ ■ Storage ■ ■ 关闭: 无效的数据库连接:%s", name))
 			continue
 		}
 
@@ -376,7 +403,7 @@ func CloseAllDBs() []error {
 func Ping(name string) error {
 	instance := GetDBInstance(name)
 	if instance == nil {
-		return fmt.Errorf("■ ■ connect ■ ■ Ping: 未找到指定的数据库连接:%s", name)
+		return fmt.Errorf("■ ■ Storage ■ ■ Ping: 未找到指定的数据库连接:%s", name)
 	}
 
 	sqlDB, err := instance.DB.DB()
@@ -394,7 +421,7 @@ func Ping(name string) error {
 func Stats(name string) (sql.DBStats, error) {
 	instance := GetDBInstance(name)
 	if instance == nil {
-		return sql.DBStats{}, fmt.Errorf("■ ■ connect ■ ■ Stats: 未找到指定的数据库连接:%s", name)
+		return sql.DBStats{}, fmt.Errorf("■ ■ Storage ■ ■ Stats: 未找到指定的数据库连接:%s", name)
 	}
 
 	sqlDB, err := instance.DB.DB()
