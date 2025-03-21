@@ -174,11 +174,11 @@ func Cache(config CacheConfig) gin.HandlerFunc {
 
 		// 生成缓存键
 		cacheKey := config.KeyGenerator(c)
-		log.InfoFmt("■ ■ Cache ■ ■ 网络缓存查找:%s", cacheKey)
+		log.DebugFmt("■ ■ Cache ■ ■ 网络缓存查找:%s", cacheKey)
 
 		// 尝试从缓存获取
 		if response, found := cacheStore.Get(cacheKey); found {
-			log.InfoFmt("■ ■ Cache ■ ■ 网络缓存命中:%s", cacheKey)
+			log.DebugFmt("■ ■ Cache ■ ■ 网络缓存命中:%s", cacheKey)
 
 			cachedResponse := response.(map[string]interface{})
 
@@ -202,7 +202,7 @@ func Cache(config CacheConfig) gin.HandlerFunc {
 			c.Abort()
 			return
 		}
-		log.InfoFmt("■ ■ Cache ■ ■ 网络缓存未命中:%s", cacheKey)
+		log.DebugFmt("■ ■ Cache ■ ■ 网络缓存未命中:%s", cacheKey)
 
 		// 更新未命中统计, 添加缓存未命中标记
 		c.Header(CacheHeaderHit, CacheMiss)
@@ -252,7 +252,7 @@ func Cache(config CacheConfig) gin.HandlerFunc {
 
 			// 存入缓存
 			cacheStore.Set(cacheKey, response, config.DefaultExpiration)
-			log.InfoFmt("■ ■ Cache ■ ■ 网络缓存更新:%s, expire=%d", cacheKey, config.DefaultExpiration.Seconds())
+			log.DebugFmt("■ ■ Cache ■ ■ 网络缓存更新:%s, expire=%d", cacheKey, config.DefaultExpiration.Seconds())
 		}
 	}
 }

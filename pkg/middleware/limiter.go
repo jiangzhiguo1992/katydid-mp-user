@@ -264,6 +264,7 @@ func (l *Limiter) Middleware() gin.HandlerFunc {
 
 		// 检查白名单
 		if l.isInWhitelist(key, c, rule) {
+			log.DebugFmt("■ ■ Limiter ■ ■  白名单通过: IP=%s, 路径=%s, 方法=%s", key, c.FullPath(), c.Request.Method)
 			c.Next()
 			return
 		}
@@ -288,6 +289,7 @@ func (l *Limiter) Middleware() gin.HandlerFunc {
 			c.Abort()
 			return
 		}
+		log.DebugFmt("■ ■ Limiter ■ ■  可以通行: IP=%s, 路径=%s, 方法=%s", key, c.FullPath(), c.Request.Method)
 
 		c.Next()
 	}
@@ -391,7 +393,7 @@ func (ms *LimiterMemoryStorage) Allow(key string, limit int, duration time.Durat
 
 // cleanupExpired 清理所有分片中的过期记录
 func (ms *LimiterMemoryStorage) cleanupExpired(expiredTime int64) {
-	log.InfoFmt("■ ■ Limiter ■ ■  清理过期记录START", time.Unix(expiredTime, 0).Format("2006-01-02 15:04:05"))
+	log.InfoFmt("■ ■ Limiter ■ ■  清理过期记录START: %s", time.Unix(expiredTime, 0).Format("2006-01-02 15:04:05"))
 
 	// 使用固定数量的goroutine并发清理各个分片，避免创建过多goroutine
 	const maxWorkers = 4
@@ -427,14 +429,14 @@ func (ms *LimiterMemoryStorage) cleanupExpired(expiredTime int64) {
 	close(shardChan)
 
 	wg.Wait()
-	log.InfoFmt("■ ■ Limiter ■ ■  清理过期记录OK", time.Unix(expiredTime, 0).Format("2006-01-02 15:04:05"))
+	log.InfoFmt("■ ■ Limiter ■ ■  清理过期记录OK: %s", time.Unix(expiredTime, 0).Format("2006-01-02 15:04:05"))
 }
 
 // cleanupShard 清理单个分片的过期记录
 func (ms *LimiterMemoryStorage) cleanupShard(s *shard, expiredTime int64) {
 	s.Lock()
 	defer s.Unlock()
-	log.InfoFmt("■ ■ Limiter ■ ■  清理过期记录(分片)", time.Unix(expiredTime, 0).Format("2006-01-02 15:04:05"))
+	log.InfoFmt("■ ■ Limiter ■ ■  清理过期记录(分片): %s", time.Unix(expiredTime, 0).Format("2006-01-02 15:04:05"))
 
 	for key, timestamps := range s.timestamps {
 		// 优化内存分配，预估需要的容量

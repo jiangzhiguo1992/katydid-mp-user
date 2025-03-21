@@ -3,6 +3,7 @@ package middleware
 import (
 	"github.com/gin-gonic/gin"
 	"katydid-mp-user/pkg/i18n"
+	"katydid-mp-user/pkg/log"
 	"sort"
 	"strconv"
 	"strings"
@@ -30,6 +31,7 @@ func Language() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		lang := c.GetHeader(HeaderKeyAcceptLanguage)
 		if lang == "" {
+			log.DebugFmt("■ ■ Language ■ ■ 空就默认语言: %s", i18n.DefLang())
 			// 如果头部为空，直接使用默认语言
 			c.Set(LanguageKey, i18n.DefLang())
 			c.Next()
@@ -39,10 +41,12 @@ func Language() gin.HandlerFunc {
 		// 优先检查缓存
 		resultLang := getCachedLanguage(lang)
 		if resultLang != "" {
+			log.DebugFmt("■ ■ Language ■ ■ 缓存命中: %s -> %s", lang, resultLang)
 			c.Set(LanguageKey, resultLang)
 			c.Next()
 			return
 		}
+		log.DebugFmt("■ ■ Language ■ ■ 缓存未命中: %s", lang)
 
 		// 解析所有语言偏好并按权重排序（从高到低）
 		preferences := parseLanguagePreferences(lang)
@@ -52,6 +56,7 @@ func Language() gin.HandlerFunc {
 
 		// 更新缓存
 		updateLanguageCache(lang, resultLang)
+		log.DebugFmt("■ ■ Language ■ ■ 更新缓存: %s -> %s", lang, resultLang)
 
 		c.Set(LanguageKey, resultLang)
 		c.Next()

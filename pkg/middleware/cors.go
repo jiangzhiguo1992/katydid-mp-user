@@ -120,7 +120,7 @@ func (opts *CorsOptions) handleRequest(c *gin.Context) {
 		return
 	}
 
-	log.InfoFmt("■ ■ Cors ■ ■ 接受源: %s", origin)
+	log.DebugFmt("■ ■ Cors ■ ■ 接受源: %s", origin)
 
 	// 设置 CORS 头
 	c.Header("Access-Control-Allow-Origin", origin)
