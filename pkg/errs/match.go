@@ -16,7 +16,7 @@ var (
 type Matcher struct {
 	codeLocIds map[int][]string
 	patterns   map[string]string
-	onError    func(string)
+	onWarn     func(string)
 	mu         sync.RWMutex // 仅用于保护 codeLocIds 和 patterns 的并发读取
 
 	patternCache sync.Map // 缓存已匹配的错误信息和对应的locId
@@ -25,12 +25,12 @@ type Matcher struct {
 }
 
 // Init 初始化错误匹配器
-func Init(codes map[int][]string, patterns map[string]string, onError func(string)) {
+func Init(codes map[int][]string, patterns map[string]string, onWarn func(string)) {
 	once.Do(func() {
 		matcher = &Matcher{
 			codeLocIds: codes,
 			patterns:   patterns,
-			onError:    onError,
+			onWarn:     onWarn,
 		}
 
 		// 预热缓存：将locId到code的映射预先计算并缓存
@@ -67,8 +67,8 @@ func MatchErr(err error) *CodeErrs {
 
 	if ok2 {
 		return New(err).WithCode(code).WrapLocalize(locId, nil, nil).Real()
-	} else if !ok1 && matcher.onError != nil {
-		matcher.onError(fmt.Sprintf("■ ■ Err ■ ■ match pattern no code: %s", locId))
+	} else if !ok1 && matcher.onWarn != nil {
+		matcher.onWarn(fmt.Sprintf("■ ■ Err ■ ■ match pattern no code: %s", locId))
 	}
 
 	// 未匹配到，返回通用错误，err不返回msg
@@ -89,8 +89,8 @@ func MatchMsg(msg string) *CodeErrs {
 
 	if ok2 {
 		return New().WithCode(code).WrapLocalize(locId, nil, nil).Real()
-	} else if !ok1 && matcher.onError != nil {
-		matcher.onError(fmt.Sprintf("■ ■ Err ■ ■ matchMsg pattern no code: %s", locId))
+	} else if !ok1 && matcher.onWarn != nil {
+		matcher.onWarn(fmt.Sprintf("■ ■ Err ■ ■ matchMsg pattern no code: %s", locId))
 	}
 
 	// 未匹配到，返回通用错误，可以返回msg

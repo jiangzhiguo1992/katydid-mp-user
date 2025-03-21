@@ -34,30 +34,27 @@ type (
 	DBConfig struct {
 		Kind   DBKind // 数据库类型
 		Logger logger.Interface
-
+		// info
 		Host     string // 主机地址
 		Port     int    // 端口号
 		User     string // 用户名
 		Password string // 密码
 		DBName   string // 数据库名称
-
+		// retry
 		MaxRetries int // 重试次数 (自动纠正<=0)
 		RetryDelay int // 重试间隔，单位秒 (自动纠正<=0)
-
+		// pool
 		MaxOpen     int           // 最大连接数，默认1000 (看数据库性能)
 		MaxIdle     int           // 最大空闲连接数，默认=Open
 		MaxLifeTime time.Duration // 连接最大存活时间，默认3m (<=0永生)
 		MaxIdleTime time.Duration // 空闲连接最大存活时间，默认1m (<=0永生)
-
+		// health
 		HealthCheckInterval time.Duration // 健康检查间隔(>0开启)
 		AutoReconnect       bool          // 自动重连
 		QueryTimeout        time.Duration // 查询超时
-
-		Params map[string]string // 额外连接参数
-
-		PgsqlSSLMode  string // SSL模式
-		PgsqlTimeZone string // 时区
-		SQLiteFile    string // SQLite文件路径 (file::memory:?cache=shared，是内存sqlite的意思)
+		// extra
+		Params     map[string]string // 额外连接参数
+		SQLiteFile string            // SQLite文件路径 (file::memory:?cache=shared，是内存sqlite的意思)
 	}
 
 	// DBInstance 封装数据库实例和相关元数据
@@ -171,13 +168,6 @@ func buildMySQLDSN(config DBConfig) string {
 func buildPgSQLDSN(config DBConfig) string {
 	dsn := fmt.Sprintf("host=%s port=%d user=%s password=%s dbname=%s",
 		config.Host, config.Port, config.User, config.Password, config.DBName)
-
-	if len(config.PgsqlSSLMode) > 0 {
-		dsn += fmt.Sprintf(" sslmode=%s", config.PgsqlSSLMode)
-	}
-	if len(config.PgsqlTimeZone) > 0 {
-		dsn += fmt.Sprintf(" TimeZone=%s", config.PgsqlTimeZone)
-	}
 
 	// 添加额外参数
 	for k, v := range config.Params {

@@ -1,7 +1,5 @@
 package configs
 
-import "time"
-
 type (
 	Config struct {
 		Env     string `toml:"env" mapstructure:"env"`
@@ -73,41 +71,45 @@ type (
 
 	PgSqlConf struct {
 		Write struct {
-			Host string `toml:"host" mapstructure:"host"`
-			Port string `toml:"port" mapstructure:"port"`
-			DB   string `toml:"db" mapstructure:"db"`
-			User string `toml:"user" mapstructure:"user"`
-			Pwd  string `toml:"pwd" mapstructure:"pwd"`
+			Host   string `toml:"host" mapstructure:"host"`
+			Port   int    `toml:"port" mapstructure:"port"`
+			User   string `toml:"user" mapstructure:"user"`
+			Pwd    string `toml:"pwd" mapstructure:"pwd"`
+			DBName string `toml:"db_name" mapstructure:"db_name"`
 		} `toml:"write"`
 		Read struct {
-			Host []string `toml:"host" mapstructure:"host"`
-			Port []string `toml:"port" mapstructure:"port"`
-			DB   []string `toml:"db" mapstructure:"db"`
-			User []string `toml:"user" mapstructure:"user"`
-			Pwd  []string `toml:"pwd" mapstructure:"pwd"`
+			Host   []string `toml:"host" mapstructure:"host"`
+			Port   []int    `toml:"port" mapstructure:"port"`
+			User   []string `toml:"user" mapstructure:"user"`
+			Pwd    []string `toml:"pwd" mapstructure:"pwd"`
+			DBName []string `toml:"db_name" mapstructure:"db_name"`
 		} `toml:"read"`
-		// TODO:GG mysql?
-		MaxOpenConn     int           `toml:"max_open_conn" mapstructure:"max_open_conn"`
-		MaxIdleConn     int           `toml:"max_idle_conn" mapstructure:"max_idle_conn"`
-		ConnMaxLifeTime time.Duration `toml:"conn_max_life_time" mapstructure:"conn_max_life_time"`
-		// TODO:GG other
-		Timeout    int    `toml:"timeout" mapstructure:"timeout"`
-		TimeZone   string `toml:"timezone" mapstructure:"timezone"`
-		SSLMode    string `toml:"ssl_mode" mapstructure:"ssl_mode"`
-		MaxRetries int    `toml:"max_retries" mapstructure:"max_retries"`
-		RetryDelay int    `toml:"retry_delay" mapstructure:"retry_delay"`
+		// retry
+		MaxRetries int `toml:"max_retries" mapstructure:"max_retries"`
+		RetryDelay int `toml:"retry_delay" mapstructure:"retry_delay"`
+		// pool
+		MaxOpen    int `toml:"max_open" mapstructure:"max_open"`
+		MaxIdle    int `toml:"max_idle" mapstructure:"max_idle"`
+		MaxLifeMin int `toml:"max_life_min" mapstructure:"max_life_min"`
+		MaxIdleMin int `toml:"max_idle_min" mapstructure:"max_idle_min"`
+		// health
+		HealthCheckInterval int  `toml:"health_check_interval" mapstructure:"health_check_interval"`
+		AutoReconnect       bool `toml:"auto_reconnect" mapstructure:"auto_reconnect"`
+		QueryTimeout        int  `toml:"query_timeout" mapstructure:"query_timeout"`
+		// extra
+		TimeZone string `toml:"timezone" mapstructure:"timezone"`
+		SSLMode  string `toml:"ssl_mode" mapstructure:"ssl_mode"`
 	}
 
 	RedisConf struct {
-		// TODO:GG 也需要支持集群模式？
-		Host        string   `toml:"host" mapstructure:"host"`
-		Port        string   `toml:"port" mapstructure:"port"`
-		DB          string   `toml:"db" mapstructure:"db"`
-		Pwd         string   `toml:"pwd" mapstructure:"pwd"`
-		MaxRetries  int      `toml:"max_retries" mapstructure:"max_retries"`
-		PoolSize    int      `toml:"pool_size" mapstructure:"pool_size"`
-		MinIdleConn int      `toml:"min_idle_conn" mapstructure:"min_idle_conn"`
-		Clusters    []string `toml:"clusters" mapstructure:"clusters"`
+		Host       string   `toml:"host" mapstructure:"host"`
+		Port       int      `toml:"port" mapstructure:"port"`
+		Pwd        string   `toml:"pwd" mapstructure:"pwd"`
+		DBName     string   `toml:"db_name" mapstructure:"db_name"`
+		MaxRetries int      `toml:"max_retries" mapstructure:"max_retries"`
+		PoolSize   int      `toml:"pool_size" mapstructure:"pool_size"`
+		MinIdle    int      `toml:"min_idle" mapstructure:"min_idle"`
+		Clusters   []string `toml:"clusters" mapstructure:"clusters"`
 	}
 
 	MongoConf struct {
