@@ -4,11 +4,9 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/swaggo/files"
 	"github.com/swaggo/gin-swagger"
-	accountHandler "katydid-mp-user/internal/api/account/handler"
+	accountHandler "katydid-mp-user/internal/api/auth/handler"
 	clientHandler "katydid-mp-user/internal/api/client/handler"
-	"katydid-mp-user/internal/api/perm/handler"
-	BHandler "katydid-mp-user/internal/pkg/handler"
-	"katydid-mp-user/pkg/middleware"
+	permHandler "katydid-mp-user/internal/api/role/handler"
 )
 
 type FormAccount struct {
@@ -16,20 +14,7 @@ type FormAccount struct {
 	Password string `json:"password" binding:"required"`
 }
 
-var fun = func(base *BHandler.Base, handler1 func()) func(context *gin.Context) {
-	return func(context *gin.Context) {
-		base.SetGCtx(context)
-		handler1()
-	}
-}
-
-func RouterRegister(r *gin.RouterGroup, authManager *middleware.AuthManager) {
-	v1 := r.Group("v1")
-	//
-	//e := handler.ValidPwd()
-	//if e != nil {
-	//	log.Error("ValidPwd", log.Error(e))
-	//}
+func RouterRegister(r *gin.RouterGroup) {
 
 	// TODO:GG 抽到configs里面吗？
 	//swagger.SwaggerInfo.Title = "Swagger Example API"
@@ -39,7 +24,7 @@ func RouterRegister(r *gin.RouterGroup, authManager *middleware.AuthManager) {
 	//swagger.SwaggerInfo.BasePath = "/api/v1"
 	//swagger.SwaggerInfo.Schemes = []string{"http", "https"}
 
-	v1.GET("/swagger/*any", ginSwagger.WrapHandler(swaggerFiles.Handler))
+	r.GET("/swagger/*any", ginSwagger.WrapHandler(swaggerFiles.Handler))
 	//ginSwagger.WrapHandler()
 
 	// 注册验证器
@@ -53,29 +38,30 @@ func RouterRegister(r *gin.RouterGroup, authManager *middleware.AuthManager) {
 	// TODO:GG 可以做多级缓存，http-cache(自带的session存储)，redis-cache，mysql-cache
 	// TODO:GG 关键操作还得让+verify(email/phone)
 
-	// orga
-	oh := handler.NewOrganization(nil)
-	v1.Use(func(context *gin.Context) {
-
-	})
+	// auth
 	{
-		team := v1.Group("organization")
-		team.POST("", fun(oh.Base, oh.PostTeam))
-		//team.POST("", ctx.Post)
+		AH := accountHandler.NewAccount(nil, nil, nil, nil)
+		account := r.Group("auth")
+		account.POST("", AH.Handler(AH.Post))
+		//auth.PUT(":id/*action", AH.Handler(AH.Put))
+		account.DELETE(":id", AH.Handler(AH.Del))
+		account.PUT(":id", AH.Handler(AH.Put))
+		account.GET("", AH.Handler(AH.Get))
+		account.GET(":id", AH.Handler(AH.Get))
 	}
 
-	// account
-	account := v1.Group("account")
+	// verify
 	{
-		account.POST("", accountHandler.PostAccount)
-		account.PUT(":id/*action", accountHandler.PutAccount)
-		account.GET(":id", accountHandler.GetAccount)
+		VH := accountHandler.NewVerify()
+		verify := r.Group("verify")
+		verify.POST("", VH.Handler(VH.Post))
+		verify.PUT("", VH.Handler(VH.Put))
 	}
 
 	//// 登录接口 - 不需要认证
 	//r.POST("/login", func(c *gin.Context) {
 	//	// 验证用户凭据...
-	//	token, err := authManager.GenerateToken("123", "testuser", []string{"user"})
+	//	token, err := authManager.Generate("123", "testuser", []string{"user"})
 	//	if err != nil {
 	//		c.JSON(500, gin.H{"error": err.Error()})
 	//		return
@@ -98,24 +84,35 @@ func RouterRegister(r *gin.RouterGroup, authManager *middleware.AuthManager) {
 	//	c.JSON(200, gin.H{"msg": "登出成功"})
 	//})
 
-	// account.auth
-	v1.Group("account/auth")
+	// auth.auth
+	r.Group("auth/auth")
 	{
 	}
 
-	// account.permission
-	v1.Group("account/permission")
+	// auth.permission
+	r.Group("auth/permission")
 	{
+	}
+
+	// orga
+	oh := permHandler.NewOrganization(nil)
+	r.Use(func(context *gin.Context) {
+
+	})
+	{
+		team := r.Group("organization")
+		team.POST("", oh.Handler(oh.PostTeam))
+		//team.POST("", ctx.Post)
 	}
 
 	// client
-	client := v1.Group("client")
+	client := r.Group("client")
 	{
 		client.POST("", clientHandler.PostClient)
 	}
 
 	// user
-	v1.Group("user")
+	r.Group("user")
 	{
 	}
 
