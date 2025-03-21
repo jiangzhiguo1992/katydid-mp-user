@@ -27,14 +27,16 @@ const (
 // LimiterOptions 限流器配置选项
 type LimiterOptions struct {
 	Code         int                       // 错误码
-	Limit        int                       // 限制的请求数量
-	Duration     time.Duration             // 时间窗口
 	Message      string                    // 自定义错误信息
 	StorageType  LimiterStorageType        // 存储类型
 	ShardCount   int                       // 分片数量，用于内存存储的分片锁
 	RedisClient  *redis.Client             // Redis客户端(当StorageType为Redis时使用)
 	WhitelistIPs []string                  // IP白名单
 	KeyFunc      func(*gin.Context) string // 自定义键生成函数
+
+	// 仅传值给defaultRule (全局的)
+	DefLimit    int           // 限制的请求数量 (-1不限制，0关闭)
+	DefDuration time.Duration // 时间窗口 (<=0不限时)
 }
 
 // LimiterStats 限流器统计信息
@@ -48,16 +50,19 @@ type LimiterStats struct {
 type LimitRule struct {
 	Path        string                  // 路径
 	Method      string                  // 方法
-	Limit       int                     // 限制
-	Duration    time.Duration           // 时间窗口
+	Limit       int                     // 限制的请求数量 (-1不限制，0关闭)
+	Duration    time.Duration           // 时间窗口 (<=0不限时)
 	WhitelistFn func(*gin.Context) bool // 白名单判断函数
 }
 
-// LimiterStorage 存储接口
-type LimiterStorage interface {
+// ILimiterStorage 存储接口
+type ILimiterStorage interface {
 	Allow(key string, limit int, duration time.Duration) bool
 	Close() error
 }
+
+var _ ILimiterStorage = (*LimiterMemoryStorage)(nil)
+var _ ILimiterStorage = (*LimiterRedisStorage)(nil)
 
 // LimiterMemoryStorage 内存存储实现
 type LimiterMemoryStorage struct {
@@ -80,12 +85,12 @@ type LimiterRedisStorage struct {
 
 // Limiter 限流器
 type Limiter struct {
-	options     LimiterOptions
-	storage     LimiterStorage
-	stats       LimiterStats
-	rules       []LimitRule
-	defaultRule LimitRule
-	mu          sync.RWMutex
+	options LimiterOptions
+	storage ILimiterStorage
+	stats   LimiterStats
+	rules   []LimitRule
+	defRule LimitRule
+	mu      sync.RWMutex
 }
 
 // NewLimiter 创建限流器
@@ -93,25 +98,26 @@ func NewLimiter(limit int, duration time.Duration) *Limiter {
 	limiter := &Limiter{
 		options: LimiterOptions{
 			Code:         http.StatusTooManyRequests, // 429,
-			Limit:        limit,
-			Duration:     duration,
-			Message:      "The request frequency exceeds the limit, please try again later", //"请求频率超过限制，请稍后再试",
+			Message:      "The request frequency exceeds the limit, please try again later",
 			StorageType:  Memory,
 			ShardCount:   32, // 默认32个分片
 			RedisClient:  nil,
 			WhitelistIPs: []string{},
 			KeyFunc:      IPKeyFunc,
+			//DefLimit:    limit,
+			//DefDuration: duration,
 		},
 		stats: LimiterStats{},
 		rules: make([]LimitRule, 0),
 	}
 
 	// 设置默认规则
-	limiter.defaultRule = LimitRule{
-		Path:     "*",
-		Method:   "*",
-		Limit:    limit,
-		Duration: duration,
+	limiter.defRule = LimitRule{
+		Path:        "*",
+		Method:      "*",
+		Limit:       limit,
+		Duration:    duration,
+		WhitelistFn: nil,
 	}
 
 	// 初始化存储
@@ -121,7 +127,7 @@ func NewLimiter(limit int, duration time.Duration) *Limiter {
 
 // NewLimiterWithOptions 创建限流器并添加规则
 func NewLimiterWithOptions(options LimiterOptions, rules ...LimitRule) *Limiter {
-	limiter := NewLimiter(options.Limit, options.Duration)
+	limiter := NewLimiter(options.DefLimit, options.DefDuration)
 	limiter.WithOptions(options)
 	for _, rule := range rules {
 		limiter.AddRule(rule)
@@ -138,14 +144,6 @@ func (l *Limiter) WithOptions(options LimiterOptions) *Limiter {
 	if options.Code != 0 {
 		l.options.Code = options.Code
 	}
-	if options.Limit != 0 {
-		l.options.Limit = options.Limit
-		l.defaultRule.Limit = options.Limit
-	}
-	if options.Duration != 0 {
-		l.options.Duration = options.Duration
-		l.defaultRule.Duration = options.Duration
-	}
 	if options.Message != "" {
 		l.options.Message = options.Message
 	}
@@ -154,23 +152,31 @@ func (l *Limiter) WithOptions(options LimiterOptions) *Limiter {
 	}
 	if options.StorageType != l.options.StorageType {
 		l.options.StorageType = options.StorageType
+		l.options.RedisClient = options.RedisClient
 		// 重新初始化存储
 		if l.storage != nil {
 			_ = l.storage.Close()
 		}
 		l.initStorage()
 	}
-	if options.RedisClient != nil {
-		l.options.RedisClient = options.RedisClient
-		if l.options.StorageType == Redis {
-			l.initStorage()
-		}
-	}
+	//if options.RedisClient != nil {
+	//	l.options.RedisClient = options.RedisClient
+	//	if l.options.StorageType == Redis {
+	//		l.initStorage()
+	//	}
+	//}
 	if options.WhitelistIPs != nil {
 		l.options.WhitelistIPs = options.WhitelistIPs
 	}
 	if options.KeyFunc != nil {
 		l.options.KeyFunc = options.KeyFunc
+	}
+
+	if options.DefLimit != 0 {
+		l.defRule.Limit = options.DefLimit
+	}
+	if options.DefDuration != 0 {
+		l.defRule.Duration = options.DefDuration
 	}
 	return l
 }
@@ -245,7 +251,9 @@ func (l *Limiter) findRule(c *gin.Context) LimitRule {
 			return rule
 		}
 	}
-	return l.defaultRule
+
+	// 找不到匹配的规则，返回默认规则
+	return l.defRule
 }
 
 // Middleware 限流中间件
@@ -323,11 +331,13 @@ func (ms *LimiterMemoryStorage) Allow(key string, limit int, duration time.Durat
 	expiredTime := now - int64(duration.Seconds())
 
 	// 懒清理：定期清理过期记录
-	lastCleanup := atomic.LoadInt64(&ms.lastCleanup)
-	if now-lastCleanup > int64(duration.Seconds()/2) {
-		// CAS操作，只有一个goroutine会成功更新lastCleanup
-		if atomic.CompareAndSwapInt64(&ms.lastCleanup, lastCleanup, now) {
-			go ms.cleanupExpired(expiredTime)
+	if duration > 0 {
+		lastCleanup := atomic.LoadInt64(&ms.lastCleanup)
+		if now-lastCleanup > int64(duration.Seconds()/2) {
+			// CAS操作，只有一个goroutine会成功更新lastCleanup
+			if atomic.CompareAndSwapInt64(&ms.lastCleanup, lastCleanup, now) {
+				go ms.cleanupExpired(expiredTime)
+			}
 		}
 	}
 
@@ -344,7 +354,7 @@ func (ms *LimiterMemoryStorage) Allow(key string, limit int, duration time.Durat
 		// 再次检查，防止在获取锁期间被修改
 		if timestamps, exists = s.timestamps[key]; !exists {
 			s.timestamps[key] = []int64{now}
-			return true
+			return limit != 0
 		}
 	}
 
@@ -352,14 +362,14 @@ func (ms *LimiterMemoryStorage) Allow(key string, limit int, duration time.Durat
 	validCount := 0
 	validTimestamps := make([]int64, 0, len(timestamps)+1)
 	for _, ts := range timestamps {
-		if ts >= expiredTime {
+		if (duration <= 0) || (ts >= expiredTime) {
 			validCount++
 			validTimestamps = append(validTimestamps, ts)
 		}
 	}
 
 	// 如果已超限制，直接返回false
-	if validCount >= limit {
+	if (limit >= 0) && (validCount >= limit) {
 		return false
 	}
 
@@ -371,7 +381,7 @@ func (ms *LimiterMemoryStorage) Allow(key string, limit int, duration time.Durat
 	timestamps, exists = s.timestamps[key]
 	if !exists {
 		s.timestamps[key] = []int64{now}
-		return true
+		return limit != 0
 	}
 
 	// 重新计算有效请求
@@ -379,13 +389,13 @@ func (ms *LimiterMemoryStorage) Allow(key string, limit int, duration time.Durat
 	validTimestamps = validTimestamps[:0] // 重置切片但保留容量
 
 	for _, ts := range timestamps {
-		if ts >= expiredTime {
+		if (duration <= 0) || (ts >= expiredTime) {
 			validCount++
 			validTimestamps = append(validTimestamps, ts)
 		}
 	}
 
-	if validCount >= limit {
+	if (limit >= 0) && (validCount >= limit) {
 		return false
 	}
 
@@ -524,9 +534,9 @@ func PathKeyFunc(c *gin.Context) string {
 	return c.FullPath()
 }
 
-// UserKeyFunc 按用户ID限流的键生成函数(需要认证中间件)
-func UserKeyFunc(c *gin.Context) string {
-	userID, exists := c.Get(AuthKeyUserID)
+// AccountKeyFunc 按账号ID限流的键生成函数(需要认证中间件)
+func AccountKeyFunc(c *gin.Context) string {
+	userID, exists := c.Get(AuthKeyAccountID)
 	if !exists {
 		return c.ClientIP() // 回退到IP
 	}
