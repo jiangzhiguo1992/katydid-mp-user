@@ -32,7 +32,7 @@ type AuthConfig struct {
 }
 
 // DefaultAuthConfig 返回默认配置
-func DefaultAuthConfig(secret string) AuthConfig {
+func DefaultAuthConfig(secret string, ignorePaths []string) AuthConfig {
 	return AuthConfig{
 		JwtSecret:          secret,
 		EnableTokenCaching: true,
@@ -40,7 +40,7 @@ func DefaultAuthConfig(secret string) AuthConfig {
 		CacheCleanupTime:   time.Minute * 30,
 		BlacklistTTL:       time.Hour * 24,
 		BlacklistCleanup:   time.Hour,
-		IgnorePaths:        []string{"/health", "/metrics"},
+		IgnorePaths:        append(ignorePaths, "/health", "/metrics"),
 		SkipExpireCheck:    false,
 		ErrorResponse:      defAuthErrorResponse,
 	}
