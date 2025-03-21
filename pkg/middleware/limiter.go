@@ -92,12 +92,15 @@ type Limiter struct {
 func NewLimiter(limit int, duration time.Duration) *Limiter {
 	limiter := &Limiter{
 		options: LimiterOptions{
-			Code:        http.StatusTooManyRequests, // 429,
-			Limit:       limit,
-			Duration:    duration,
-			Message:     "The request frequency exceeds the limit, please try again later", //"请求频率超过限制，请稍后再试",
-			StorageType: Memory,
-			ShardCount:  32, // 默认32个分片
+			Code:         http.StatusTooManyRequests, // 429,
+			Limit:        limit,
+			Duration:     duration,
+			Message:      "The request frequency exceeds the limit, please try again later", //"请求频率超过限制，请稍后再试",
+			StorageType:  Memory,
+			ShardCount:   32, // 默认32个分片
+			RedisClient:  nil,
+			WhitelistIPs: []string{},
+			KeyFunc:      IPKeyFunc,
 		},
 		stats: LimiterStats{},
 		rules: make([]LimitRule, 0),
@@ -256,7 +259,7 @@ func (l *Limiter) Middleware() gin.HandlerFunc {
 		if l.options.KeyFunc != nil {
 			key = l.options.KeyFunc(c)
 		} else {
-			key = c.ClientIP()
+			key = IPKeyFunc(c)
 		}
 
 		// 查找适用的规则
