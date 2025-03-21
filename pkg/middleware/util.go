@@ -9,8 +9,13 @@ import (
 const (
 	XRequestIDHeader = "X-Request-ID" // 网关生成并塞入的requestID
 
-	RequestIDKey = "RequestID"    // 上下文中存储的请求ID的上下文键
-	LanguageKey  = "Use-Language" // 上下文中存储的语言信息的键
+	RequestIDKey     = "RequestID" // 上下文中存储的请求ID的上下文键
+	LanguageKey      = "Use-Language"
+	AuthKeyToken     = "token"
+	AuthKeyOwnKind   = "ownKind"
+	AuthKeyOwnID     = "ownId"
+	AuthKeyUserID    = "userId"
+	AuthKeyAccountID = "accountId"
 )
 
 func ResponseData(c *gin.Context, code int, obj any) {
