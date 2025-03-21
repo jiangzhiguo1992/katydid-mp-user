@@ -2,6 +2,7 @@ package middleware
 
 import (
 	"katydid-mp-user/pkg/auth"
+	"katydid-mp-user/pkg/log"
 	"regexp"
 	"strings"
 	"sync"
@@ -47,12 +48,12 @@ func DefaultAuthConfig(secret string) AuthConfig {
 		BlacklistCleanup:   time.Hour,
 		IgnorePaths:        []string{"/health", "/metrics"},
 		SkipExpireCheck:    false,
-		ErrorResponse:      defaultErrorResponse,
+		ErrorResponse:      defAuthErrorResponse,
 	}
 }
 
 // 默认错误响应处理
-func defaultErrorResponse(c *gin.Context, msg string) {
+func defAuthErrorResponse(c *gin.Context, msg string) {
 	ResponseData(c, http.StatusUnauthorized, gin.H{"msg": msg})
 }
 
@@ -66,7 +67,7 @@ var (
 	authRegexMutex sync.RWMutex                      // 正则表达式缓存的锁
 )
 
-// BlacklistToken 使token失效(加入黑名单)
+// BlacklistToken 使token失效(加入黑名单)，被storage同步
 func BlacklistToken(c *gin.Context) {
 	token := c.GetHeader(AuthHeaderToken)
 	token = strings.TrimPrefix(token, AuthHeaderPrefix)
@@ -74,6 +75,20 @@ func BlacklistToken(c *gin.Context) {
 	authBlacklist.Set(token, time.Now(), authConfig.BlacklistTTL)
 	// 从缓存中移除
 	authTokenCache.Delete(token)
+
+	if gin.Mode() == gin.DebugMode {
+		log.InfoFmt("■ ■ Auth ■ ■ 加入黑名单:%s", maskToken(token))
+	} else {
+		log.InfoFmtOutput("■ ■ Auth ■ ■ 加入黑名单:%s", true, maskToken(token))
+	}
+}
+
+// ��护敏感信息 - 掩码处理token值
+func maskToken(token string) string {
+	if len(token) <= 8 {
+		return "***"
+	}
+	return token[:4] + "..." + token[len(token)-4:]
 }
 
 // Auth 认证中间件
@@ -114,7 +129,7 @@ func Auth(config AuthConfig) gin.HandlerFunc {
 			return
 		}
 
-		// 检查黑名单
+		// 检查黑名单 (只检查内存里的)
 		if _, exists := authBlacklist.Get(tokenStr); exists {
 			config.ErrorResponse(c, "token_is_black_list")
 			c.Abort()
@@ -129,12 +144,14 @@ func Auth(config AuthConfig) gin.HandlerFunc {
 			return
 		}
 
-		// 将用户信息存储在上下文中
+		// 将用户信息存储在上下文中 (claims里有的)
 		c.Set(AuthKeyToken, tokenStr)
 		c.Set(AuthKeyOwnKind, claims.OwnKind)
 		c.Set(AuthKeyOwnID, claims.OwnID)
 		c.Set(AuthKeyAccountID, claims.AccountID)
 		c.Set(AuthKeyUserID, claims.UserID)
+
+		log.DebugFmt("■ ■ Auth ■ ■ 设置进Header: %v", claims)
 
 		c.Next()
 	}
@@ -145,9 +162,11 @@ func validateAndParseToken(tokenStr string) (*auth.TokenClaims, error) {
 	// 检查缓存
 	if authConfig.EnableTokenCaching {
 		if claims, found := authTokenCache.Get(tokenStr); found {
+			log.DebugFmt("■ ■ Auth ■ ■ 缓存命中: %v", claims)
 			return claims.(*auth.TokenClaims), nil
 		}
 	}
+	log.DebugFmt("■ ■ Auth ■ ■ 缓存未命中: %s", tokenStr)
 
 	// 解析并验证token
 	claims, err := auth.ParseJWT(tokenStr, authConfig.JwtSecret, authConfig.SkipExpireCheck)
@@ -157,6 +176,7 @@ func validateAndParseToken(tokenStr string) (*auth.TokenClaims, error) {
 
 	// 只有成功，才存入缓存
 	if authConfig.EnableTokenCaching {
+		log.DebugFmt("■ ■ Auth ■ ■ 更新缓存: %v", claims)
 		authTokenCache.Set(tokenStr, claims, authConfig.CacheExpiration)
 	}
 	return claims, err
