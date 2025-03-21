@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
-	"log/slog"
 	"os"
 	"path"
 	"sync"
@@ -69,6 +68,27 @@ var levelConfigs = map[int][]levelConfig{
 	6: {{"debug", func(lv zapcore.Level) bool { return lv < zapcore.InfoLevel }}},
 }
 
+// 定义日志级别映射常量
+const (
+	LevelFatal = 1
+	LevelPanic = 2
+	LevelError = 3
+	LevelWarn  = 4
+	LevelInfo  = 5
+	LevelDebug = 6
+)
+
+// 日志级别映射表
+var levelMapping = map[zapcore.Level]int{
+	zapcore.FatalLevel:  LevelFatal,
+	zapcore.PanicLevel:  LevelPanic,
+	zapcore.DPanicLevel: LevelPanic,
+	zapcore.ErrorLevel:  LevelError,
+	zapcore.WarnLevel:   LevelWarn,
+	zapcore.InfoLevel:   LevelInfo,
+	zapcore.DebugLevel:  LevelDebug,
+}
+
 var (
 	logger *Logger
 	once   sync.Once
@@ -76,7 +96,9 @@ var (
 
 // Logger 封装日志实例
 type Logger struct {
-	zap    *zap.Logger
+	console *zap.Logger // 控制台
+	output  *zap.Logger // 写文件
+
 	config *Config
 	syncs  []*zapcore.BufferedWriteSyncer
 	mu     sync.RWMutex
@@ -84,7 +106,8 @@ type Logger struct {
 
 // Config 日志配置
 type Config struct {
-	OutLevel  int           // 输出级别
+	ConLevels []int         // 打印级别
+	OutLevels []int         // 输出级别
 	OutDir    string        // 输出目录
 	OutFormat string        // 输出格式
 	CheckInt  time.Duration // 检查间隔
@@ -92,9 +115,10 @@ type Config struct {
 	MaxSize   int64         // 最大大小
 }
 
-func NewDefaultConfig(outLevel int) Config {
+func NewDefaultConfig(conLevels, outLevels []int) Config {
 	return Config{
-		OutLevel:  outLevel,
+		ConLevels: conLevels,
+		OutLevels: outLevels,
 		OutDir:    defaultOutPath,
 		OutFormat: defaultFormat,
 		CheckInt:  defaultCheckInterval,
@@ -118,6 +142,7 @@ func Close() error {
 	logger.mu.Lock()
 	defer logger.mu.Unlock()
 
+	// 关闭所有缓冲写入器
 	var errs []error
 	for _, buffer := range logger.syncs {
 		if err := buffer.Stop(); err != nil {
@@ -125,7 +150,11 @@ func Close() error {
 		}
 	}
 
-	if err := logger.zap.Sync(); err != nil {
+	// 同步日志
+	if err := logger.console.Sync(); err != nil {
+		errs = append(errs, err)
+	}
+	if err := logger.output.Sync(); err != nil {
 		errs = append(errs, err)
 	}
 
@@ -138,73 +167,62 @@ func Close() error {
 // newLogger 创建新的日志实例
 func newLogger(cfg Config) *Logger {
 	l := &Logger{config: &cfg}
-	l.initialize()
+	l.initializeConsole()
+	l.initializeOutput()
 	return l
 }
 
-func (c *Config) outEnable() bool {
-	return c.OutLevel > 0
+func (l *Logger) initializeConsole() {
+	c := zap.NewProductionConfig()
+	c.Development = true
+	c.Encoding = "console"
+	c.Level = zap.NewAtomicLevelAt(zap.DebugLevel)
+	c.Sampling = nil                   // 禁用采样
+	c.OutputPaths = []string{"stdout"} // 及时打印
+	c.DisableStacktrace = true
+	c.DisableCaller = true
+	c.EncoderConfig = createEncoderConfig(false)
+
+	// logger
+	var err error
+	l.console, err = c.Build(
+		zap.WithClock(zapcore.DefaultClock), // 使用默认时钟
+		zap.AddStacktrace(zap.ErrorLevel),   // 只在 error 级别添加堆栈
+		zap.AddCallerSkip(2),
+	)
+	if err != nil {
+		panic(err)
+	}
 }
 
-func (l *Logger) initialize() {
+func (l *Logger) initializeOutput() {
 	// encoder
-	var encoder zapcore.Encoder
-	encoderCfg := createEncoderConfig(l.config)
-	if l.config.outEnable() {
-		encoder = zapcore.NewJSONEncoder(encoderCfg)
-	} else {
-		encoder = zapcore.NewConsoleEncoder(encoderCfg)
-	}
+	encoderCfg := createEncoderConfig(true)
+	encoder := zapcore.NewJSONEncoder(encoderCfg)
 
-	if l.config.outEnable() {
-		// cores
-		var cores []zapcore.Core
-		for level := 1; level <= l.config.OutLevel; level++ {
-			if configs, ok := levelConfigs[level]; ok {
-				for _, config := range configs {
-					core, syncer := createCore(encoder, l.config, config)
-					l.syncs = append(l.syncs, syncer)
-					cores = append(cores, core)
-				}
-			}
-		}
-
-		// logger
-		core := zapcore.NewTee(cores...)
-		l.zap = zap.New(
-			core,
-			zap.AddStacktrace(zap.ErrorLevel),
-			zap.AddCallerSkip(2),
-		)
-	} else {
-		// production config
-		c := zap.NewProductionConfig()
-		c.Development = true
-		c.Encoding = "console"
-		c.Level = zap.NewAtomicLevelAt(zap.DebugLevel)
-		c.Sampling = nil                   // 禁用采样
-		c.OutputPaths = []string{"stdout"} // 及时打印
-		c.DisableStacktrace = true
-		c.DisableCaller = true
-		c.EncoderConfig = encoderCfg
-
-		// logger
-		var err error
-		l.zap, err = c.Build(
-			zap.WithClock(zapcore.DefaultClock), // 使用默认时钟
-			zap.AddStacktrace(zap.ErrorLevel),   // 只在 error 级别添加堆栈
-			zap.AddCallerSkip(2),
-		)
-		if err != nil {
-			panic(err)
+	// cores
+	var cores []zapcore.Core
+	for _, configs := range levelConfigs {
+		for _, config := range configs {
+			core, syncer := createOutputCore(encoder, l.config, config)
+			l.syncs = append(l.syncs, syncer)
+			cores = append(cores, core)
 		}
 	}
+
+	// logger
+	core := zapcore.NewTee(cores...)
+	l.output = zap.New(
+		core,
+		zap.AddStacktrace(zap.ErrorLevel),
+		zap.AddCallerSkip(2),
+	)
 }
 
-func createEncoderConfig(config *Config) zapcore.EncoderConfig {
+func createEncoderConfig(output bool) zapcore.EncoderConfig {
 	encodeCfg := zap.NewProductionEncoderConfig()
 	encodeCfg.EncodeTime = zapcore.ISO8601TimeEncoder
-	if config.outEnable() {
+	if output {
 		encodeCfg.LevelKey = ""
 	} else {
 		encodeCfg.EncodeDuration = zapcore.StringDurationEncoder
@@ -221,7 +239,7 @@ func createEncoderConfig(config *Config) zapcore.EncoderConfig {
 	return encodeCfg
 }
 
-func createCore(encoder zapcore.Encoder, config *Config, lConf levelConfig) (zapcore.Core, *zapcore.BufferedWriteSyncer) {
+func createOutputCore(encoder zapcore.Encoder, config *Config, lConf levelConfig) (zapcore.Core, *zapcore.BufferedWriteSyncer) {
 	// path
 	dir := path.Join(config.OutDir, lConf.dir)
 	if err := os.MkdirAll(dir, os.ModePerm); err != nil {
@@ -251,65 +269,166 @@ func createCore(encoder zapcore.Encoder, config *Config, lConf levelConfig) (zap
 	return core, syncer
 }
 
-func log(level zapcore.Level, msg string, fields ...zap.Field) {
+func log(level zapcore.Level, output *bool, msg string, fields ...zap.Field) {
 	if logger == nil {
-		switch level {
-		case zapcore.DebugLevel:
-			slog.Debug(msg)
-		case zapcore.InfoLevel:
-			slog.Info(msg)
-		case zapcore.WarnLevel:
-			slog.Warn(msg)
-		default:
-			slog.Error(msg)
-		}
 		return
 	}
 
-	if !logger.config.outEnable() {
+	if output == nil {
+		matchLevel, ok := levelMapping[level]
+		if !ok {
+			return // 不支持的日志级别
+		}
+
+		// 检查是否需要输出到文件
+		shouldOutput := false
+		for _, v := range logger.config.OutLevels {
+			if v == matchLevel {
+				shouldOutput = true
+				output = &shouldOutput
+				break
+			}
+		}
+
+		// 如果不输出到文件，检查是否需要输出到控制台
+		if output == nil {
+			shouldOutput = false
+			for _, v := range logger.config.ConLevels {
+				if v == matchLevel {
+					shouldOutput = true
+					output = &shouldOutput
+					break
+				}
+			}
+		}
+
+		// 不需要输出
+		if output == nil {
+			return
+		}
+	}
+
+	// 使用适当的日志记录器
+	lg := logger.console
+	if *output {
+		lg = logger.output
+	} else {
 		if color, ok := levelColors[level]; ok {
 			msg = fmt.Sprintf("%s%s%s", color.fg, msg, colorReset)
 		}
 	}
 
+	// 记录日志
 	switch level {
 	case zapcore.DebugLevel:
-		logger.zap.Debug(msg, fields...)
+		lg.Debug(msg, fields...)
 	case zapcore.InfoLevel:
-		logger.zap.Info(msg, fields...)
+		lg.Info(msg, fields...)
 	case zapcore.WarnLevel:
-		logger.zap.Warn(msg, fields...)
+		lg.Warn(msg, fields...)
 	case zapcore.ErrorLevel:
-		logger.zap.Error(msg, fields...)
-	case zapcore.PanicLevel:
-		logger.zap.Panic(msg, fields...)
+		lg.Error(msg, fields...)
+	case zapcore.DPanicLevel, zapcore.PanicLevel:
+		lg.Panic(msg, fields...)
 	case zapcore.FatalLevel:
-		logger.zap.Fatal(msg, fields...)
+		lg.Fatal(msg, fields...)
 	default:
-		panic("unhandled default case")
+		panic("■ ■ Log ■ ■ unhandled default case")
 	}
 }
 
 func Debug(msg string, fields ...Field) {
-	log(zapcore.DebugLevel, msg, toZapFields(fields)...)
+	log(zapcore.DebugLevel, nil, msg, toZapFields(fields)...)
+}
+
+func DebugOutput(msg string, output bool, fields ...Field) {
+	log(zapcore.DebugLevel, &output, msg, toZapFields(fields)...)
+}
+
+func DebugFmt(msg string, a ...any) {
+	log(zapcore.DebugLevel, nil, fmt.Sprintf(msg, a...))
+}
+
+func DebugFmtOutput(msg string, output bool, a ...any) {
+	log(zapcore.DebugLevel, &output, fmt.Sprintf(msg, a...))
 }
 
 func Info(msg string, fields ...Field) {
-	log(zapcore.InfoLevel, msg, toZapFields(fields)...)
+	log(zapcore.InfoLevel, nil, msg, toZapFields(fields)...)
+}
+
+func InfoOutput(msg string, output bool, fields ...Field) {
+	log(zapcore.InfoLevel, &output, msg, toZapFields(fields)...)
+}
+
+func InfoFmt(msg string, a ...any) {
+	log(zapcore.InfoLevel, nil, fmt.Sprintf(msg, a...))
+}
+
+func InfoFmtOutput(msg string, output bool, a ...any) {
+	log(zapcore.InfoLevel, &output, fmt.Sprintf(msg, a...))
 }
 
 func Warn(msg string, fields ...Field) {
-	log(zapcore.WarnLevel, msg, toZapFields(fields)...)
+	log(zapcore.WarnLevel, nil, msg, toZapFields(fields)...)
+}
+
+func WarnOutput(msg string, output bool, fields ...Field) {
+	log(zapcore.WarnLevel, &output, msg, toZapFields(fields)...)
+}
+
+func WarnFmt(msg string, a ...any) {
+	log(zapcore.WarnLevel, nil, fmt.Sprintf(msg, a...))
+}
+
+func WarnFmtOutput(msg string, output bool, a ...any) {
+	log(zapcore.WarnLevel, &output, fmt.Sprintf(msg, a...))
 }
 
 func Error(msg string, fields ...Field) {
-	log(zapcore.ErrorLevel, msg, toZapFields(fields)...)
+	log(zapcore.ErrorLevel, nil, msg, toZapFields(fields)...)
+}
+
+func ErrorOutput(msg string, output bool, fields ...Field) {
+	log(zapcore.ErrorLevel, &output, msg, toZapFields(fields)...)
+}
+
+func ErrorFmt(msg string, a ...any) {
+	log(zapcore.ErrorLevel, nil, fmt.Sprintf(msg, a...))
+}
+
+func ErrorFmtOutput(msg string, output bool, a ...any) {
+	log(zapcore.ErrorLevel, &output, fmt.Sprintf(msg, a...))
 }
 
 func Panic(msg string, fields ...Field) {
-	log(zapcore.PanicLevel, msg, toZapFields(fields)...)
+	log(zapcore.PanicLevel, nil, msg, toZapFields(fields)...)
+}
+
+func PanicOutput(msg string, output bool, fields ...Field) {
+	log(zapcore.PanicLevel, &output, msg, toZapFields(fields)...)
+}
+
+func PanicFmt(msg string, a ...any) {
+	log(zapcore.PanicLevel, nil, fmt.Sprintf(msg, a...))
+}
+
+func PanicFmtOutput(msg string, output bool, a ...any) {
+	log(zapcore.PanicLevel, &output, fmt.Sprintf(msg, a...))
 }
 
 func Fatal(msg string, fields ...Field) {
-	log(zapcore.FatalLevel, msg, toZapFields(fields)...)
+	log(zapcore.FatalLevel, nil, msg, toZapFields(fields)...)
+}
+
+func FatalOutput(msg string, output bool, fields ...Field) {
+	log(zapcore.FatalLevel, &output, msg, toZapFields(fields)...)
+}
+
+func FatalFmt(msg string, a ...any) {
+	log(zapcore.FatalLevel, nil, fmt.Sprintf(msg, a...))
+}
+
+func FatalFmtOutput(msg string, output bool, a ...any) {
+	log(zapcore.FatalLevel, &output, fmt.Sprintf(msg, a...))
 }
