@@ -64,6 +64,7 @@ import (
 // TODO:GG afero
 // TODO:GG go-callvis
 // TODO:GG hey + vegeta + Comcast
+// TODO:GG 检查所有的json response
 
 func main() {
 	// 写一个channel，让main挂起来
