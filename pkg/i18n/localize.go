@@ -7,7 +7,6 @@ import (
 	"github.com/nicksnyder/go-i18n/v2/i18n"
 	"golang.org/x/text/language"
 	"gopkg.in/yaml.v3"
-	"log/slog"
 	"os"
 	"path/filepath"
 	"strings"
@@ -24,6 +23,7 @@ var defaultManager *Manager
 type Config struct {
 	DefaultLang string
 	DocDirs     []string
+	OnInfo      func(string, map[string]any)
 	OnErr       func(string, map[string]any)
 }
 
@@ -118,7 +118,7 @@ func (m *Manager) loadMessageFiles() error {
 	if len(files) == 0 {
 		return fmt.Errorf("■ ■ i18n ■ ■ no message files found in dirs: %v", m.config.DocDirs)
 	}
-	slog.Info("■ ■ i18n ■ ■ loading i18n files", slog.Any("files", files))
+	m.config.OnInfo("■ ■ i18n ■ ■ 本地化加载文件 ", map[string]any{"files": files})
 
 	// 加载文件并提取消息ID
 	m.langs = make([]string, 0, len(files))
@@ -128,7 +128,7 @@ func (m *Manager) loadMessageFiles() error {
 		}
 		m.langs = append(m.langs, extractLangFromFilename(file))
 	}
-	slog.Info("■ ■ i18n ■ ■ loading i18n langs", slog.Any("languages", m.langs))
+	m.config.OnInfo("■ ■ i18n ■ ■ 本地化加载语言 ", map[string]any{"languages": m.langs})
 
 	// 确保默认语言存在
 	hasDefault := false
@@ -139,7 +139,7 @@ func (m *Manager) loadMessageFiles() error {
 		}
 	}
 	if !hasDefault {
-		slog.Warn("■ ■ i18n ■ ■ default language %q not found in message files", slog.String("lang", m.config.DefaultLang))
+		m.config.OnErr("■ ■ i18n ■ ■ 本地化默认文件不存在 ", map[string]any{"lang": m.config.DefaultLang})
 	}
 
 	// 预缓存默认Localizer
@@ -243,8 +243,7 @@ func (m *Manager) localize(lang, msgID string, data map[string]any, nilBackId bo
 	// error
 	if !nilBackId && (err != nil) && (m.config.OnErr != nil) {
 		m.config.OnErr("■ ■ i18n ■ ■ 本地化失败: ", map[string]any{
-			"msgID": msgID, "lang": lang, "error": err,
-		})
+			"msgID": msgID, "lang": lang, "error": err})
 	}
 	return msg
 }
