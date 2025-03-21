@@ -10,9 +10,6 @@ import (
 )
 
 const (
-	// LanguageKey 是上下文中存储语言信息的键
-	LanguageKey = "Use-Language"
-
 	HeaderKeyAcceptLanguage = "Accept-Language"
 )
 

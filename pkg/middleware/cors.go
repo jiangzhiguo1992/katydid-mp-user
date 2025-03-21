@@ -2,7 +2,7 @@ package middleware
 
 import (
 	"fmt"
-	"log/slog"
+	"katydid-mp-user/pkg/log"
 	"net/http"
 	"regexp"
 	"strings"
@@ -25,8 +25,6 @@ type CorsOptions struct {
 	AllowCredentials bool
 	// MaxAge 预检请求结果缓存时间(秒)
 	MaxAge int
-	// Debug 是否启用调试日志
-	Debug bool
 
 	// 内部使用，预编译的正则表达式
 	regexPatterns    []*regexp.Regexp
@@ -42,7 +40,6 @@ func DefaultCorsOptions() *CorsOptions {
 		ExposeHeaders:    []string{"Content-Length", "Content-Type", "X-Request-Id"},
 		AllowCredentials: false,
 		MaxAge:           86400,
-		Debug:            false,
 	}
 }
 
@@ -73,11 +70,17 @@ func (opts *CorsOptions) compilePatterns() {
 			pattern := strings.TrimPrefix(origin, "regex:")
 			if re, err := regexp.Compile(pattern); err == nil {
 				opts.regexPatterns = append(opts.regexPatterns, re)
-				if opts.Debug {
-					slog.Info("■ ■ cors ■ ■ 编译正则表达式: %s", pattern)
+				if gin.Mode() == gin.DebugMode {
+					log.InfoFmt("■ ■ Cors ■ ■ 编译正则表达式: %s", pattern)
+				} else {
+					log.InfoFmtOutput("■ ■ Cors ■ ■ 编译正则表达式: %s", true, pattern)
 				}
-			} else if opts.Debug {
-				slog.Error("■ ■ cors ■ ■ 无法编译正则表达式 %s: %v", pattern, err)
+			} else {
+				if gin.Mode() == gin.DebugMode {
+					log.ErrorFmt("■ ■ Cors ■ ■ 无法编译正则表达式 %s: %v", pattern, err)
+				} else {
+					log.ErrorFmtOutput("■ ■ Cors ■ ■ 无法编译正则表达式 %s: %v", true, pattern, err)
+				}
 			}
 		} else if strings.Contains(origin, "*") {
 			// 处理通配符模式
@@ -86,8 +89,10 @@ func (opts *CorsOptions) compilePatterns() {
 			pattern = "^" + pattern + "$"
 			if re, err := regexp.Compile(pattern); err == nil {
 				opts.wildcardPatterns = append(opts.wildcardPatterns, re)
-				if opts.Debug {
-					slog.Info("■ ■ cors ■ ■ 编译通配符模式: %s -> %s", origin, pattern)
+				if gin.Mode() == gin.DebugMode {
+					log.InfoFmt("■ ■ Cors ■ ■ 编译通配符模式: %s -> %s", origin, pattern)
+				} else {
+					log.InfoFmtOutput("■ ■ Cors ■ ■ 编译通配符模式: %s -> %s", true, origin, pattern)
 				}
 			}
 		}
@@ -106,16 +111,16 @@ func (opts *CorsOptions) handleRequest(c *gin.Context) {
 
 	// 检查是否允许该源
 	if !opts.isOriginAllowed(origin) {
-		if opts.Debug {
-			slog.Warn("■ ■ cors ■ ■ 拒绝源: %s", origin)
+		if gin.Mode() == gin.DebugMode {
+			log.WarnFmt("■ ■ Cors ■ ■ 拒绝源: %s", origin)
+		} else {
+			log.WarnFmtOutput("■ ■ Cors ■ ■ 拒绝源: %s", true, origin)
 		}
 		c.AbortWithStatus(http.StatusForbidden)
 		return
 	}
 
-	if opts.Debug {
-		slog.Info("■ ■ cors ■ ■ 接受源: %s", origin)
-	}
+	log.InfoFmt("■ ■ Cors ■ ■ 接受源: %s", origin)
 
 	// 设置 CORS 头
 	c.Header("Access-Control-Allow-Origin", origin)
