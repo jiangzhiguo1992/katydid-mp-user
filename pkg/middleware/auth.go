@@ -16,12 +16,6 @@ import (
 const (
 	AuthHeaderToken  = "Authorization"
 	AuthHeaderPrefix = "Bearer "
-
-	AuthKeyToken     = "token"
-	AuthKeyOwnKind   = "ownKind"
-	AuthKeyOwnID     = "ownId"
-	AuthKeyUserID    = "userId"
-	AuthKeyAccountID = "accountId"
 )
 
 // AuthConfig 认证中间件配置
@@ -80,6 +74,22 @@ func BlacklistToken(c *gin.Context) {
 		log.InfoFmt("■ ■ Auth ■ ■ 加入黑名单:%s", maskToken(token))
 	} else {
 		log.InfoFmtOutput("■ ■ Auth ■ ■ 加入黑名单:%s", true, maskToken(token))
+	}
+}
+
+// WhiteListToken 移除token黑名单
+func WhiteListToken(c *gin.Context) {
+	token := c.GetHeader(AuthHeaderToken)
+	token = strings.TrimPrefix(token, AuthHeaderPrefix)
+	// 从黑名单中移除
+	authBlacklist.Delete(token)
+	// 从缓存中移除 (重新读取)
+	authTokenCache.Delete(token)
+
+	if gin.Mode() == gin.DebugMode {
+		log.InfoFmt("■ ■ Auth ■ ■ 移除黑名单:%s", maskToken(token))
+	} else {
+		log.InfoFmtOutput("■ ■ Auth ■ ■ 移除黑名单:%s", true, maskToken(token))
 	}
 }
 
@@ -196,13 +206,12 @@ func authMatchRegex(path string, pattern string) bool {
 
 	// 如果不存在，则编译正则表达式并缓存
 	if !exists {
-		authRegexMutex.Lock()
 		var err error
 		re, err = regexp.Compile(pattern)
 		if err != nil {
-			authRegexMutex.Unlock()
 			return false
 		}
+		authRegexMutex.Lock()
 		authRegexps[pattern] = re
 		authRegexMutex.Unlock()
 	}
