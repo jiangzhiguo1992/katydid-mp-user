@@ -73,16 +73,16 @@ type (
 		Write struct {
 			Host   string `toml:"host" mapstructure:"host"`
 			Port   int    `toml:"port" mapstructure:"port"`
+			DBName string `toml:"db_name" mapstructure:"db_name"`
 			User   string `toml:"user" mapstructure:"user"`
 			Pwd    string `toml:"pwd" mapstructure:"pwd"`
-			DBName string `toml:"db_name" mapstructure:"db_name"`
 		} `toml:"write"`
 		Read struct {
 			Host   []string `toml:"host" mapstructure:"host"`
 			Port   []int    `toml:"port" mapstructure:"port"`
+			DBName []string `toml:"db_name" mapstructure:"db_name"`
 			User   []string `toml:"user" mapstructure:"user"`
 			Pwd    []string `toml:"pwd" mapstructure:"pwd"`
-			DBName []string `toml:"db_name" mapstructure:"db_name"`
 		} `toml:"read"`
 		// retry
 		MaxRetries int `toml:"max_retries" mapstructure:"max_retries"`
@@ -104,8 +104,8 @@ type (
 	RedisConf struct {
 		Host       string   `toml:"host" mapstructure:"host"`
 		Port       int      `toml:"port" mapstructure:"port"`
-		Pwd        string   `toml:"pwd" mapstructure:"pwd"`
 		DBName     string   `toml:"db_name" mapstructure:"db_name"`
+		Pwd        string   `toml:"pwd" mapstructure:"pwd"`
 		MaxRetries int      `toml:"max_retries" mapstructure:"max_retries"`
 		PoolSize   int      `toml:"pool_size" mapstructure:"pool_size"`
 		MinIdle    int      `toml:"min_idle" mapstructure:"min_idle"`

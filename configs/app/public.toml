@@ -5,44 +5,32 @@ api_http_port = 80
 api_https_port = 8080
 
 [pgsql]
-timeout = 10
-timezone = "Asia/Shanghai"
-ssl_mode = "app_disable"
-max_retries = 5
-retry_delay = 2
-
-[pgsql.write]
-host = "169.2.14.2"
+host = "localhost"
 port = 5432
-db = "postgres"
-user = "write"
-pwd = "write_pwd"
+db_name = "postgres"
+user="jiang"
+pwd=""
 
-[pgsql.read]
-host = ["169.2.14.3"]
-port = [5432]
-db = ["postgres"]
-user = ["read"]
-pwd = ["read_pwd"]
+timezone = "Asia/Shanghai" # 时区
+ssl_mode = "app_disable" # ssl模式
 
-[client.pgsql.write]
-host = "169.2.14.1111"
-port = 5432
-db = "postgres"
-user = "root"
-pwd = "2ud8scsdc"
-[client.pgsql.read]
-host = ["169.2.14.1111", "169.2.14.2222"]
-port = [5432]
-db = ["postgres"]
-user = ["root"]
-pwd = ["2ud8scsdc"]
+max_retries = 3 # 连接失败重试次数
+retry_delay = 3 # 连接失败重试间隔
 
-[redis]
-address = "r-2zegwp14leh0qyqzrs.redis.rds.aliyuncs.com"
-port = 6379
-pwd = "LAOjiang1"
-Host = ""
-MaxIdle = 30
-MaxActive = 30
-IdleTimeout = 200
+max_open = 1000 # 连接池最大连接数
+max_idle = 500 # 连接池最大空闲连接数
+max_life_min  = 3 # 连接池最大存活时间
+max_idle_min = 1 # 连接池最大空闲时间
+
+health_check_interval = 10 # 健康检查间隔
+auto_reconnect = true # 自动重连
+query_timeout = 5 # 查询超时时间
+
+#[redis]
+#address = "r-2zegwp14leh0qyqzrs.redis.rds.aliyuncs.com"
+#port = 6379
+#pwd = "LAOjiang1"
+#Host = ""
+#MaxIdle = 30
+#MaxActive = 30
+#IdleTimeout = 200

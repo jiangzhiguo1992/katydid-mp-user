@@ -69,9 +69,9 @@ func init() {
 		// db
 		Host:     config.PgSql.Write.Host,
 		Port:     config.PgSql.Write.Port,
+		DBName:   config.PgSql.Write.DBName,
 		User:     config.PgSql.Write.User,
 		Password: config.PgSql.Write.Pwd,
-		DBName:   config.PgSql.Write.DBName,
 		// retry
 		MaxRetries: config.PgSql.MaxRetries,
 		RetryDelay: config.PgSql.RetryDelay,
@@ -83,7 +83,7 @@ func init() {
 		// health
 		HealthCheckInterval: time.Duration(config.PgSql.HealthCheckInterval) * time.Minute,
 		AutoReconnect:       config.PgSql.AutoReconnect,
-		QueryTimeout:        time.Duration(config.PgSql.HealthCheckInterval) * time.Minute,
+		QueryTimeout:        time.Duration(config.PgSql.QueryTimeout) * time.Second,
 		// extra
 		Params: map[string]string{
 			"sslmode":  config.PgSql.SSLMode,

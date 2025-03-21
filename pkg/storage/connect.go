@@ -37,9 +37,9 @@ type (
 		// info
 		Host     string // 主机地址
 		Port     int    // 端口号
+		DBName   string // 数据库名称
 		User     string // 用户名
 		Password string // 密码
-		DBName   string // 数据库名称
 		// retry
 		MaxRetries int // 重试次数 (自动纠正<=0)
 		RetryDelay int // 重试间隔，单位秒 (自动纠正<=0)
@@ -212,7 +212,7 @@ func connectWithRetries(dialector gorm.Dialector, config *gorm.Config, maxRetrie
 		maxRetries = 3 // 默认重试3次
 	}
 	if retryInterval <= 0 {
-		retryInterval = 2 * time.Second // 默认重试间隔2秒
+		retryInterval = 3 * time.Second // 默认重试间隔3秒
 	}
 
 	for i := 0; i < maxRetries; i++ {
