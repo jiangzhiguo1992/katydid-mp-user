@@ -14,24 +14,67 @@ import (
 )
 
 var (
-	// 扩展XSS攻击模式检测
+	// XSS攻击模式检测正则表达式
 	xssPatterns = []*regexp.Regexp{
-		regexp.MustCompile(`(?i)<script.*?>.*?</script.*?>`),
-		regexp.MustCompile(`(?i)javascript:`),
-		regexp.MustCompile(`(?i)on\w+\s*=`), // 匹配所有事件处理程序
-		regexp.MustCompile(`(?i)data:text/html`),
-		regexp.MustCompile(`(?i)<iframe.*?>`),
-		regexp.MustCompile(`(?i)document\.cookie`),
-		regexp.MustCompile(`(?i)document\.domain`),
-		regexp.MustCompile(`(?i)eval\(`),
-		regexp.MustCompile(`(?i)setTimeout\(`),
-		regexp.MustCompile(`(?i)setInterval\(`),
-		regexp.MustCompile(`(?i)new\s+Function\(`),
+		// 脚本标签及其变种
+		regexp.MustCompile(`(?i)<\s*script[\s\S]*?>`),
+		regexp.MustCompile(`(?i)</\s*script\s*>`),
+
+		// JavaScript 协议变种
+		regexp.MustCompile(`(?i)javascript\s*:`),
+		regexp.MustCompile(`(?i)vbscript\s*:`),
+		regexp.MustCompile(`(?i)livescript\s*:`),
+		regexp.MustCompile(`(?i)data\s*:.*script`),
+
+		// JavaScript 事件处理器
+		regexp.MustCompile(`(?i)\s+on\w+\s*=`),
+
+		// 危险函数
+		regexp.MustCompile(`(?i)\b(eval|setTimeout|setInterval|Function|execScript)\s*\(`),
+		regexp.MustCompile(`(?i)(document|window|location|cookie|localStorage)\.(cookie|domain|write|location)`),
+
+		// 内联框架及对象标签
+		regexp.MustCompile(`(?i)<\s*(iframe|embed|object|base|applet)\b`),
+
+		// 数据URI
+		regexp.MustCompile(`(?i)data:(?:text|image|application)/(?:html|xml|xhtml|svg)`),
+		regexp.MustCompile(`(?i)data:.*?;base64`),
+
+		// 表达式和绕过
+		regexp.MustCompile(`(?i)expression\s*\(`),
+		regexp.MustCompile(`(?i)@import\s+`),
+		regexp.MustCompile(`(?i)url\s*\(`),
+
+		// HTML5 特性
+		regexp.MustCompile(`(?i)formaction\s*=`),
+		regexp.MustCompile(`(?i)srcdoc\s*=`),
+
+		// 元素属性
+		regexp.MustCompile(`(?i)\bhref\s*=\s*["']?(?:javascript:|data:text|vbscript:)`),
+		regexp.MustCompile(`(?i)\bsrc\s*=\s*["']?(?:javascript:|data:text|vbscript:)`),
+
+		// 常见的HTML注入向量
+		regexp.MustCompile(`(?i)<\s*style[^>]*>.*?(expression|behavior|javascript|vbscript).*?</style>`),
+		regexp.MustCompile(`(?i)<\s*link[^>]*(?:href|xlink:href)\s*=\s*["']?(?:javascript:|data:text|vbscript:)`),
+
+		// SVG嵌入式脚本
+		regexp.MustCompile(`(?i)<\s*svg[^>]*>.*?<\s*script`),
+	}
+
+	// 预定义常见危险内容类型
+	dangerousContentTypes = map[string]bool{
+		"application/json":                  true,
+		"application/x-www-form-urlencoded": true,
+		"text/html":                         true,
+		"text/plain":                        true,
+		"multipart/form-data":               true,
 	}
 )
 
 // XSSConfig XSS防护中间件配置
 type XSSConfig struct {
+	// 检查严格模式
+	StrictMode bool
 	// 是否过滤请求参数
 	FilterParams bool
 	// 是否过滤请求体
@@ -44,23 +87,18 @@ type XSSConfig struct {
 	CacheExpiration time.Duration
 	// 缓存清理时间间隔
 	CacheCleanupInterval time.Duration
-	// 最大缓存项数量 (go-cache不直接支持项数量限制，通过过期时间间接控制)
-	MaxCacheItems int
-	// 检查严格模式
-	StrictMode bool
 }
 
 // DefaultXSSConfig 默认XSS配置
 func DefaultXSSConfig() XSSConfig {
 	return XSSConfig{
+		StrictMode:           true,
 		FilterParams:         true,
 		FilterBody:           true,
 		FilterResponse:       true,
 		EnableCache:          true,
 		CacheExpiration:      5 * time.Minute,
 		CacheCleanupInterval: 10 * time.Minute,
-		MaxCacheItems:        1000, // 通过过期时间间接控制
-		StrictMode:           true,
 	}
 }
 
@@ -89,13 +127,17 @@ func XSS(config ...XSSConfig) gin.HandlerFunc {
 
 		// 检查并过滤URL参数
 		if cfg.FilterParams {
-			filterURLParams(c, policy, xssCache)
+			if ok := checkURLParams(c, policy, xssCache); !ok {
+				c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{
+					"error": "URL参数中检测到可能的XSS攻击内容",
+				})
+			}
 		}
 
 		// 检查并过滤请求体
 		if cfg.FilterBody {
-			if err := filterRequestBody(c, policy, xssCache); err != nil {
-				c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{
+			if ok := checkRequestBody(c, policy, xssCache); !ok {
+				ResponseData(c, http.StatusBadRequest, gin.H{
 					"error": "无法处理请求内容",
 				})
 				return
@@ -106,6 +148,12 @@ func XSS(config ...XSSConfig) gin.HandlerFunc {
 		if cfg.FilterResponse {
 			c.Writer = &xssResponseWriter{ResponseWriter: c.Writer, policy: policy, cache: xssCache}
 		}
+
+		//if gin.Mode() == gin.DebugMode {
+		//	log.InfoFmt("■ ■ Cors ■ ■ 编译正则表达式: %s", pattern)
+		//} else {
+		//	log.InfoFmtOutput("■ ■ Cors ■ ■ 编译正则表达式: %s", true, pattern)
+		//}
 
 		c.Next()
 	}
@@ -144,7 +192,7 @@ func setSecurityHeaders(c *gin.Context) {
 }
 
 // 过滤URL参数
-func filterURLParams(c *gin.Context, policy *bluemonday.Policy, xssCache *cache.Cache) {
+func checkURLParams(c *gin.Context, policy *bluemonday.Policy, xssCache *cache.Cache) bool {
 	query := c.Request.URL.Query()
 	changed := false
 
@@ -152,10 +200,7 @@ func filterURLParams(c *gin.Context, policy *bluemonday.Policy, xssCache *cache.
 		for i, value := range values {
 			// 检查是否包含XSS攻击模式
 			if containsXSSPattern(value) {
-				c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{
-					"error": "URL参数中检测到可能的XSS攻击内容",
-				})
-				return
+				return false
 			}
 
 			// 如果启用缓存，先尝试从缓存获取
@@ -188,27 +233,22 @@ func filterURLParams(c *gin.Context, policy *bluemonday.Policy, xssCache *cache.
 	if changed {
 		c.Request.URL.RawQuery = query.Encode()
 	}
+	return true
 }
 
 // 过滤请求体
-func filterRequestBody(c *gin.Context, policy *bluemonday.Policy, xssCache *cache.Cache) error {
-	contentType := c.GetHeader("Content-Type")
-	// 只处理相关内容类型
-	if !shouldProcessContentType(contentType) {
-		return nil
-	}
-
+func checkRequestBody(c *gin.Context, policy *bluemonday.Policy, xssCache *cache.Cache) bool {
 	// 读取请求体
 	body, err := c.GetRawData()
 	if err != nil {
-		return err
+		return false
 	}
 
 	// 检查是否为空
 	if len(body) == 0 {
 		// 重置空请求体
 		c.Request.Body = io.NopCloser(bytes.NewBuffer(body))
-		return nil
+		return true
 	}
 
 	// 将请求体转换为字符串
@@ -216,10 +256,7 @@ func filterRequestBody(c *gin.Context, policy *bluemonday.Policy, xssCache *cach
 
 	// 检查是否包含XSS攻击模式
 	if containsXSSPattern(content) {
-		c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{
-			"error": "请求体中检测到可能的XSS攻击内容",
-		})
-		return nil
+		return false
 	}
 
 	// 尝试从缓存获取过滤后的内容
@@ -234,6 +271,7 @@ func filterRequestBody(c *gin.Context, policy *bluemonday.Policy, xssCache *cach
 	}
 
 	if !found {
+		contentType := c.GetHeader("Content-Type")
 		// 根据内容类型选择过滤方法
 		if strings.Contains(contentType, "json") {
 			sanitized = sanitizeJSON(content, policy)
@@ -249,7 +287,7 @@ func filterRequestBody(c *gin.Context, policy *bluemonday.Policy, xssCache *cach
 
 	// 重新设置请求体
 	c.Request.Body = io.NopCloser(bytes.NewBuffer([]byte(sanitized)))
-	return nil
+	return false
 }
 
 // 检查文本是否包含XSS攻击模式
@@ -265,11 +303,14 @@ func containsXSSPattern(text string) bool {
 // 判断是否应该处理该内容类型
 func shouldProcessContentType(contentType string) bool {
 	contentType = strings.ToLower(contentType)
-	return strings.Contains(contentType, "application/json") ||
-		strings.Contains(contentType, "application/x-www-form-urlencoded") ||
-		strings.Contains(contentType, "text/html") ||
-		strings.Contains(contentType, "text/plain") ||
-		strings.Contains(contentType, "multipart/form-data")
+
+	// 遍历内容类型检查最常见类型
+	for dangerousType := range dangerousContentTypes {
+		if strings.Contains(contentType, dangerousType) {
+			return true
+		}
+	}
+	return false
 }
 
 // 优化的响应写入器
