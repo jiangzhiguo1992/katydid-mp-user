@@ -16,6 +16,8 @@ const (
 	AuthKeyOwnID     = "ownId"
 	AuthKeyUserID    = "userId"
 	AuthKeyAccountID = "accountId"
+
+	CSRFKeyToken = "csrf_token" // 上下文中的令牌键名
 )
 
 func ResponseData(c *gin.Context, code int, obj any) {
