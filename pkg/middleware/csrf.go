@@ -6,6 +6,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/gorilla/securecookie"
 	"net/http"
+	"net/url"
 	"strings"
 )
 
@@ -22,33 +23,35 @@ var (
 
 // CSRFOptions 配置CSRF中间件的选项
 type CSRFOptions struct {
-	ExemptNonBrowser bool          // 是否豁免非浏览器请求
-	CookieMaxAge     int           // Cookie有效期(秒)
-	Path             string        // 路径
-	Domain           string        // 域名
-	Secure           bool          // 是否仅HTTPS
-	HttpOnly         bool          // 是否HttpOnly
-	SameSite         http.SameSite // SameSite策略
-	SetTokenHeader   bool          // 是否在响应头中设置令牌
-	ExcludePaths     []string      // 要排除的路径前缀
+	CookieMaxAge   int           // Cookie有效期(秒)
+	Path           string        // 路径
+	Domain         string        // 域名
+	Secure         bool          // 是否仅HTTPS
+	HttpOnly       bool          // 是否HttpOnly
+	SameSite       http.SameSite // SameSite策略
+	SetTokenHeader bool          // 是否在响应头中设置令牌
+	ExcludePaths   []string      // 要排除的路径前缀
+	CheckReferer   bool          // 是否检查Referer头
+	AllowedHosts   []string      // 允许的主机名列表
 }
 
 // DefaultCSRFOptions 返回默认CSRF选项
-func DefaultCSRFOptions() *CSRFOptions {
+func DefaultCSRFOptions(excludes []string) *CSRFOptions {
 	return &CSRFOptions{
-		ExemptNonBrowser: true,
-		CookieMaxAge:     3600, // 1小时
-		Path:             "/",
-		Domain:           "",
-		Secure:           true,
-		HttpOnly:         true,
-		SameSite:         http.SameSiteStrictMode,
-		SetTokenHeader:   true,
-		ExcludePaths:     []string{"/api/"},
+		CookieMaxAge:   3600, // 1小时
+		Path:           "/",
+		Domain:         "",
+		Secure:         true,
+		HttpOnly:       true,
+		SameSite:       http.SameSiteStrictMode, // 限制跨站请求携带Cookie
+		SetTokenHeader: true,
+		ExcludePaths:   excludes, // []string{"/api/"},
+		CheckReferer:   true,     // 默认开启Referer检查
+		AllowedHosts:   []string{},
 	}
 }
 
-// CSRF CSRF防护中间件
+// CSRF 跨站请求伪造
 func CSRF(hashKey, blockKey []byte, options ...*CSRFOptions) gin.HandlerFunc {
 	// 初始化CSRF安全Cookie
 	if hashKey != nil && blockKey != nil {
@@ -67,7 +70,7 @@ func CSRF(hashKey, blockKey []byte, options ...*CSRFOptions) gin.HandlerFunc {
 	if len(options) > 0 && options[0] != nil {
 		opts = options[0]
 	} else {
-		opts = DefaultCSRFOptions()
+		opts = DefaultCSRFOptions([]string{"/api/"})
 	}
 
 	return func(c *gin.Context) {
@@ -80,12 +83,6 @@ func CSRF(hashKey, blockKey []byte, options ...*CSRFOptions) gin.HandlerFunc {
 			}
 		}
 
-		// 判断请求是否来自浏览器
-		if opts.ExemptNonBrowser && !isBrowserRequest(c.Request) {
-			c.Next()
-			return
-		}
-
 		// 只处理非安全方法(POST, PUT, DELETE, PATCH)的CSRF保护
 		if c.Request.Method == http.MethodGet ||
 			c.Request.Method == http.MethodHead ||
@@ -93,6 +90,14 @@ func CSRF(hashKey, blockKey []byte, options ...*CSRFOptions) gin.HandlerFunc {
 			// 对于安全方法，设置CSRF令牌
 			setCSRFToken(c, opts)
 			c.Next()
+			return
+		}
+
+		// 对于非安全方法，先检查Referer
+		if opts.CheckReferer && !isValidReferer(c.Request, opts.AllowedHosts) {
+			c.AbortWithStatusJSON(http.StatusForbidden, gin.H{
+				"error": "无效的请求来源",
+			})
 			return
 		}
 
@@ -110,15 +115,38 @@ func CSRF(hashKey, blockKey []byte, options ...*CSRFOptions) gin.HandlerFunc {
 	}
 }
 
-// 判断请求是否来自浏览器
-func isBrowserRequest(r *http.Request) bool {
-	userAgent := r.UserAgent()
-	// 非浏览器请求通常不会有这些标准浏览器特征
-	return strings.Contains(strings.ToLower(userAgent), "mozilla") ||
-		strings.Contains(strings.ToLower(userAgent), "chrome") ||
-		strings.Contains(strings.ToLower(userAgent), "safari") ||
-		strings.Contains(strings.ToLower(userAgent), "firefox") ||
-		strings.Contains(strings.ToLower(userAgent), "edge")
+// 检查Referer是否有效
+func isValidReferer(r *http.Request, allowedHosts []string) bool {
+	// 获取Referer
+	referer := r.Header.Get("Referer")
+	if referer == "" {
+		// 没有Referer头，根据安全考虑，默认拒绝
+		return false
+	}
+
+	// 解析Referer URL
+	refererURL, err := url.Parse(referer)
+	if err != nil {
+		return false
+	}
+
+	// 获取当前请求的主机
+	requestHost := r.Host
+
+	// 检查Referer的主机是否匹配当前主机
+	refererHost := refererURL.Host
+	if refererHost == requestHost {
+		return true
+	}
+
+	// 检查是否在允许的主机列表中
+	for _, host := range allowedHosts {
+		if refererHost == host {
+			return true
+		}
+	}
+
+	return false
 }
 
 // 生成CSRF令牌

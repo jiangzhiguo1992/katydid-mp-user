@@ -43,7 +43,7 @@ func DefaultCorsOptions() *CorsOptions {
 	}
 }
 
-// Cors 返回 CORS 中间件处理函数
+// Cors 跨域资源访问
 func Cors(options ...*CorsOptions) gin.HandlerFunc {
 	// 使用默认配置或用户提供的配置
 	var opts *CorsOptions
