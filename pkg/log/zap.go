@@ -281,10 +281,9 @@ func log(level zapcore.Level, output *bool, msg string, fields ...zap.Field) {
 		}
 
 		// 检查是否需要输出到文件
-		shouldOutput := false
 		for _, v := range logger.config.OutLevels {
 			if v == matchLevel {
-				shouldOutput = true
+				shouldOutput := true
 				output = &shouldOutput
 				break
 			}
@@ -292,10 +291,9 @@ func log(level zapcore.Level, output *bool, msg string, fields ...zap.Field) {
 
 		// 如果不输出到文件，检查是否需要输出到控制台
 		if output == nil {
-			shouldOutput = false
 			for _, v := range logger.config.ConLevels {
 				if v == matchLevel {
-					shouldOutput = true
+					shouldOutput := false
 					output = &shouldOutput
 					break
 				}
