@@ -53,6 +53,7 @@ func Get() *Config {
 
 // Init 初始化配置
 func Init(confDir string) (*Config, error) {
+	var err error
 	once.Do(func() {
 		manager = &Manager{
 			main:        viper.GetViper(),
@@ -60,8 +61,9 @@ func Init(confDir string) (*Config, error) {
 			config:      new(Config),
 			subscribers: make([]ChangeSubscriber, 0),
 		}
+		err = manager.load(confDir)
 	})
-	if err := manager.load(confDir); err != nil {
+	if err != nil {
 		return nil, err
 	}
 	return manager.config, nil
@@ -91,8 +93,7 @@ func Subscribe(key string, callback func(value any)) func() {
 		for i, sub := range manager.subscribers {
 			if sub.ID == id {
 				// 删除订阅
-				manager.subscribers[i] = manager.subscribers[len(manager.subscribers)-1]
-				manager.subscribers = manager.subscribers[:len(manager.subscribers)-1]
+				manager.subscribers = append(manager.subscribers[:i], manager.subscribers[i+1:]...)
 				slog.Info("■ ■ Conf ■ ■ subscribe cancel", slog.String("key", sub.Key), slog.String("id", sub.ID))
 				break
 			}
@@ -164,11 +165,9 @@ func (m *Manager) loadConfigs(priority int, confDir string, subs ...string) erro
 		return fmt.Errorf("■ ■ Conf ■ ■ read dir %s failed: %w", dir, err)
 	}
 
-	// files排序，init第一个
+	// files排序，init文件优先处理
 	if len(files) > 1 {
-		sortedFiles := make([]os.DirEntry, 0, len(files))
-		initFiles := make([]os.DirEntry, 0)
-		otherFiles := make([]os.DirEntry, 0)
+		var initFiles, otherFiles []os.DirEntry
 
 		for _, f := range files {
 			name := strings.TrimSuffix(f.Name(), filepath.Ext(f.Name()))
@@ -179,14 +178,13 @@ func (m *Manager) loadConfigs(priority int, confDir string, subs ...string) erro
 			}
 		}
 
-		sortedFiles = append(sortedFiles, initFiles...)
-		sortedFiles = append(sortedFiles, otherFiles...)
-		files = sortedFiles
+		files = append(initFiles, otherFiles...)
 	}
 
 	// 加载每个文件
 	for _, file := range files {
 		if file.IsDir() {
+			// 递归处理子目录
 			return m.loadConfigs(priority, filepath.Join(dir, file.Name()))
 		} else {
 			err = m.loadConfig(priority, dir, file.Name())
@@ -201,11 +199,14 @@ func (m *Manager) loadConfigs(priority int, confDir string, subs ...string) erro
 
 // loadConfigs 加载配置文件
 func (m *Manager) loadConfig(priority int, confDir string, fileName string) error {
-	// 为每个目录创建新的Viper实例
 	if _, ok := m.subs[priority]; !ok {
 		m.subs[priority] = make(map[string]*viper.Viper)
 	}
+
+	// 存储sub的key
 	subsKey := filepath.Join(confDir, fileName)
+
+	// 获取或创建viper实例
 	var subViper *viper.Viper
 	if v, ok := m.subs[priority][subsKey]; ok {
 		subViper = v
@@ -233,7 +234,7 @@ func (m *Manager) loadConfig(priority int, confDir string, fileName string) erro
 	subViper.AddConfigPath(confDir)
 
 	// 提取不带扩展名的文件名
-	realFileName := strings.TrimSuffix(fileName, filepath.Ext(fileName))
+	realFileName := strings.TrimSuffix(fileName, ext)
 	subViper.SetConfigName(realFileName)
 
 	// 读取配置文件
@@ -287,43 +288,7 @@ func (m *Manager) watchConfigs() {
 				continue
 			}
 			sub.OnConfigChange(func(e fsnotify.Event) {
-				slog.Info(
-					"■ ■ Conf ■ ■ local on_change success",
-					slog.String("op", e.Op.String()),
-					slog.String("name", e.Name),
-				)
-
-				// 保存变更前的配置快照
-				prevConfig := make(map[string]interface{})
-				for _, key := range m.main.AllKeys() {
-					prevConfig[key] = m.main.Get(key)
-				}
-
-				// 重新加载配置
-				err := m.parseConfigs()
-				if err != nil {
-					slog.Error("■ ■ Conf ■ ■ local on_change failed", slog.Any("err", err))
-					return
-				}
-
-				// 通知订阅者
-				for _, subscriber := range m.subscribers {
-					if !m.main.IsSet(subscriber.Key) {
-						continue
-					}
-					if prevConfig[subscriber.Key] == m.main.Get(subscriber.Key) {
-						continue
-					}
-
-					value := m.main.Get(subscriber.Key)
-					slog.Info(
-						"■ ■ Conf ■ ■ local subscribe callback",
-						slog.String("key", subscriber.Key),
-						slog.Any("Value", value),
-					)
-
-					go subscriber.Callback(value)
-				}
+				m.handleConfigChange(e, "local")
 			})
 			sub.WatchConfig()
 		}
@@ -338,45 +303,119 @@ func (m *Manager) loadRemoteConfig() error {
 
 	// TODO:GG viper.SupportedRemoteProviders 支持的类型
 
+	// 添加远程配置提供者
 	err := m.main.AddRemoteProvider(
 		m.config.RemoteConf.Provider,
 		m.config.RemoteConf.Endpoint,
 		m.config.RemoteConf.Path,
 	)
 	if err != nil {
-		return err
+		return fmt.Errorf("■ ■ Conf ■ ■ add remote provider failed: %w", err)
 	}
 
 	// 设置远程配置类型
 	m.main.SetConfigType("toml")
 
-	if err := m.main.ReadRemoteConfig(); err != nil {
-		return err
+	if err = m.main.ReadRemoteConfig(); err != nil {
+		return fmt.Errorf("■ ■ Conf ■ ■ read remote config failed: %w", err)
 	}
 
-	// 启动远程配置监听 TODO:GG 需要改，没有结合subscribers
+	// 解析远程配置
+	if err = m.parseConfigs(); err != nil {
+		return fmt.Errorf("■ ■ Conf ■ ■ parse remote config failed: %w", err)
+	}
+
+	// 打印远程配置
+	m.logSettings("remote_", m.main.AllSettings())
+
+	// 启动远程配置监听
+	go m.watchRemoteConfig()
+
+	return nil
+}
+
+// watchRemoteConfig 监听远程配置变更
+func (m *Manager) watchRemoteConfig() {
+	// 获取刷新间隔，最小为10秒
 	refreshInterval := time.Duration(m.config.RemoteConf.RefreshInterval) * time.Second
 	if refreshInterval < 10*time.Second {
-		refreshInterval = 30 * time.Second // 默认最小刷新间隔
+		refreshInterval = 30 * time.Second
 	}
 
-	go func() {
-		for {
-			time.Sleep(refreshInterval)
-			err := m.main.WatchRemoteConfig()
-			if err != nil {
-				slog.Error("■ ■ Conf ■ ■ watch remote failed", slog.Any("err", err))
-				continue
-			}
+	// TODO:GG 需要改，没有结合channel
+	for {
+		time.Sleep(refreshInterval)
 
-			m.mu.Lock()
-			if err := m.parseConfigs(); err != nil {
-				slog.Error("■ ■ Conf ■ ■ parse remote failed", slog.Any("err", err))
-			}
-			m.mu.Unlock()
+		// 监听远程配置变化
+		err := m.main.WatchRemoteConfig()
+		if err != nil {
+			slog.Error("■ ■ Conf ■ ■ watch remote failed", slog.Any("err", err))
+			continue
 		}
-	}()
-	return nil
+
+		// 使用相同的变更处理流程
+		m.handleConfigChange(fsnotify.Event{Op: fsnotify.Write}, "remote")
+	}
+}
+
+// handleConfigChange 处理配置变更
+func (m *Manager) handleConfigChange(e fsnotify.Event, source string) {
+	slog.Info(
+		"■ ■ Conf ■ ■ on change",
+		slog.String("source", source),
+		slog.String("op", e.Op.String()),
+		slog.String("name", e.Name),
+	)
+
+	m.mu.Lock()
+
+	// 保存变更前的配置快照
+	prevConfig := make(map[string]interface{})
+	for _, key := range m.main.AllKeys() {
+		prevConfig[key] = m.main.Get(key)
+	}
+
+	// 重新加载配置
+	err := m.parseConfigs()
+
+	m.mu.Unlock()
+
+	if err != nil {
+		slog.Error("■ ■ Conf ■ ■ config change failed",
+			slog.String("source", source),
+			slog.Any("err", err))
+		return
+	}
+
+	// 通知订阅者（在锁外执行回调，避免死锁）
+	m.notifySubscribers(prevConfig)
+}
+
+// notifySubscribers 通知订阅者
+func (m *Manager) notifySubscribers(prevConfig map[string]interface{}) {
+	m.mu.RLock()
+	subscribers := make([]ChangeSubscriber, len(m.subscribers))
+	copy(subscribers, m.subscribers)
+	m.mu.RUnlock()
+
+	for _, subscriber := range subscribers {
+		if !m.main.IsSet(subscriber.Key) {
+			continue
+		}
+
+		newValue := m.main.Get(subscriber.Key)
+		if prevConfig[subscriber.Key] == newValue {
+			continue
+		}
+
+		slog.Info(
+			"■ ■ Conf ■ ■ notify subscriber",
+			slog.String("key", subscriber.Key),
+			slog.Any("value", newValue),
+		)
+
+		go subscriber.Callback(newValue)
+	}
 }
 
 // logSettings 打印配置
