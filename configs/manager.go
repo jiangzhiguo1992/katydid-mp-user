@@ -288,7 +288,7 @@ func (m *Manager) watchConfigs() {
 			}
 			sub.OnConfigChange(func(e fsnotify.Event) {
 				slog.Info(
-					"■ ■ Conf ■ ■ on_change success",
+					"■ ■ Conf ■ ■ local on_change success",
 					slog.String("op", e.Op.String()),
 					slog.String("name", e.Name),
 				)
@@ -296,28 +296,28 @@ func (m *Manager) watchConfigs() {
 				// 保存变更前的配置快照
 				prevConfig := make(map[string]interface{})
 				for _, key := range m.main.AllKeys() {
-					prevConfig[key] = sub.Get(key)
+					prevConfig[key] = m.main.Get(key)
 				}
 
 				// 重新加载配置
 				err := m.parseConfigs()
 				if err != nil {
-					slog.Error("■ ■ Conf ■ ■ on_change failed", slog.Any("err", err))
+					slog.Error("■ ■ Conf ■ ■ local on_change failed", slog.Any("err", err))
 					return
 				}
 
 				// 通知订阅者
 				for _, subscriber := range m.subscribers {
-					if !sub.IsSet(subscriber.Key) {
+					if !m.main.IsSet(subscriber.Key) {
 						continue
 					}
 					if prevConfig[subscriber.Key] == m.main.Get(subscriber.Key) {
 						continue
 					}
 
-					value := sub.Get(subscriber.Key)
+					value := m.main.Get(subscriber.Key)
 					slog.Info(
-						"■ ■ Conf ■ ■ subscribe callback",
+						"■ ■ Conf ■ ■ local subscribe callback",
 						slog.String("key", subscriber.Key),
 						slog.Any("Value", value),
 					)
@@ -365,13 +365,13 @@ func (m *Manager) loadRemoteConfig() error {
 			time.Sleep(refreshInterval)
 			err := m.main.WatchRemoteConfig()
 			if err != nil {
-				slog.Error("■ ■ Conf ■ ■ watch remote config failed", slog.Any("err", err))
+				slog.Error("■ ■ Conf ■ ■ watch remote failed", slog.Any("err", err))
 				continue
 			}
 
 			m.mu.Lock()
 			if err := m.parseConfigs(); err != nil {
-				slog.Error("■ ■ Conf ■ ■ parse remote config failed", slog.Any("err", err))
+				slog.Error("■ ■ Conf ■ ■ parse remote failed", slog.Any("err", err))
 			}
 			m.mu.Unlock()
 		}
@@ -392,7 +392,9 @@ func (m *Manager) logSettings(group string, settings map[string]any) {
 			m.logSettings(nextGroup, vs)
 			continue
 		}
-		key := fmt.Sprintf("%s%s", group, k)
-		slog.Info("■ ■ Conf ■ ■ --->", slog.Any(key, v))
+		key := fmt.Sprintf("%s%s ", group, k)
+		val := slog.Any("", v).Value.String()
+		sprintf := fmt.Sprintf("%s = %s", key, val)
+		slog.Info(fmt.Sprintf("■ ■ Conf ■ ■ ---> %s", sprintf))
 	}
 }

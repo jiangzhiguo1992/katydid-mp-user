@@ -18,9 +18,10 @@ func init() {
 	if err != nil {
 		panic(err)
 	}
-	//configs.Subscribe("auth.enable", func(v any) {
-	//	slog.Info("reload auth.enable", slog.Any("v", v))
-	//}) // TODO:GG 订阅reload
+	// TODO:GG 理论上每个可变动的configs都需要监听，并reset后续
+	configs.Subscribe("auth.enable", func(v any) {
+		//slog.Info("reload auth.enable", slog.Any("v", v))
+	})
 
 	// logger
 	log.Init(log.Config{
