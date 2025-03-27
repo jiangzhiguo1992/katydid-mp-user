@@ -16,9 +16,12 @@ type TokenKind string
 const (
 	TokenKindBasic  TokenKind = "Basic"  // Basic令牌类型
 	TokenKindBearer TokenKind = "Bearer" // Bearer令牌类型
+
+	DefaultTokenLength = 16 // 默认令牌ID长度
 )
 
-var SigningMethod = jwt.SigningMethodHS256 // 签名方法
+// SigningMethod 默认签名方法
+var SigningMethod = jwt.SigningMethodHS256
 
 type (
 	// Token JWT令牌模型
@@ -28,7 +31,7 @@ type (
 		IssuedAt int64     `json:"issuedAt"`       // 签发时间
 
 		Token     string `json:"token"`     // 访问令牌
-		ExpireSec int64  `json:"expireSec"` // 过期时间(秒) (-1就没有不过期间)
+		ExpireSec int64  `json:"expireSec"` // 过期时间(秒) (-1表示不过期)
 
 		Claims *TokenClaims `json:"-"` // 令牌声明(不序列化)
 	}
@@ -62,12 +65,13 @@ func NewToken(
 	return token
 }
 
+// NewTokenClaims 创建令牌声明
 func NewTokenClaims(
 	ownKind int16, ownID uint64, accountID uint64, userID *uint64,
 	issuer string, expireSec int64,
 ) *TokenClaims {
 	// 生成唯一令牌ID
-	tokenID, _ := generateSecureRandomString(16)
+	tokenID, _ := generateSecureRandomString(DefaultTokenLength)
 
 	// 计算过期时间
 	now := time.Now()
@@ -78,7 +82,8 @@ func NewTokenClaims(
 
 	return &TokenClaims{
 		TokenID: tokenID,
-		OwnKind: ownKind, OwnID: ownID, AccountID: accountID, UserID: userID,
+		OwnKind: ownKind, OwnID: ownID,
+		AccountID: accountID, UserID: userID,
 		RegisteredClaims: jwt.RegisteredClaims{
 			Issuer:    issuer,
 			Subject:   fmt.Sprintf("%d", accountID),
@@ -90,12 +95,13 @@ func NewTokenClaims(
 	}
 }
 
-// GenerateJWTTokens 生成所有访问令牌
+// GenerateJWTTokens 生成访问令牌，可选保留原令牌ID
+// oldToken为nil时生成新令牌ID，不为nil时尝试保留原令牌ID
 func (t *Token) GenerateJWTTokens(secret string, oldToken *string) error {
 	var tokenID *string
 	if oldToken != nil && *oldToken != "" {
 		// 解析刷新令牌但不检查过期
-		claims, err := ParseJWT(*oldToken, secret, false)
+		claims, _, err := ParseJWT(*oldToken, secret, false)
 		if err != nil {
 			return err
 		}
@@ -106,7 +112,11 @@ func (t *Token) GenerateJWTTokens(secret string, oldToken *string) error {
 
 // generateJWTToken 生成访问令牌
 func (t *Token) generateJWTToken(secret string, tokenID *string) error {
-	claims := NewTokenClaims(t.Claims.OwnKind, t.Claims.OwnID, t.Claims.AccountID, t.Claims.UserID, t.Claims.Issuer, t.ExpireSec)
+	claims := NewTokenClaims(
+		t.Claims.OwnKind, t.Claims.OwnID,
+		t.Claims.AccountID, t.Claims.UserID,
+		t.Claims.Issuer, t.ExpireSec,
+	)
 
 	// 设置令牌ID
 	if tokenID != nil && *tokenID != "" {
@@ -118,6 +128,12 @@ func (t *Token) generateJWTToken(secret string, tokenID *string) error {
 
 	var err error
 	t.Token, err = claims.generateJWTToken(secret)
+	if err != nil {
+		return err
+	}
+
+	// 更新令牌的Claims
+	t.Claims = claims
 	return err
 }
 
@@ -132,14 +148,18 @@ func (tc *TokenClaims) generateJWTToken(secret string) (string, error) {
 // IsExpired 检查令牌是否过期
 func (t *Token) IsExpired() bool {
 	if t.Claims == nil || t.Claims.ExpiresAt == nil {
-		return true
+		return true // 没有声明或过期时间视为已过期
 	}
 	return time.Now().After(t.Claims.ExpiresAt.Time)
 }
 
 // generateSecureRandomString 生成安全的随机字符串
 func generateSecureRandomString(length int) (string, error) {
-	bytes := make([]byte, length)
+	// 计算需要多少字节来生成所需长度的base64字符串
+	// Base64编码将3个字节转换为4个字符，因此需要至少 length*3/4 字节
+	requiredBytes := (length*3)/4 + 1
+
+	bytes := make([]byte, requiredBytes)
 	if _, err := rand.Read(bytes); err != nil {
 		return "", err
 	}
@@ -151,31 +171,40 @@ func generateSecureRandomString(length int) (string, error) {
 }
 
 // ParseJWT 解析JWT令牌
-func ParseJWT(tokenStr string, secret string, checkExpire bool) (*TokenClaims, error) {
-	token, err := jwt.ParseWithClaims(tokenStr, &TokenClaims{}, func(token *jwt.Token) (any, error) {
+func ParseJWT(tokenStr string, secret string, checkExpire bool) (*TokenClaims, bool, error) {
+	// 如果不检查过期，使用自定义验证函数
+	var parserOptions []jwt.ParserOption
+	if !checkExpire {
+		parserOptions = append(parserOptions, jwt.WithoutClaimsValidation())
+	}
+
+	parser := jwt.NewParser(parserOptions...)
+
+	token, err := parser.ParseWithClaims(tokenStr, &TokenClaims{}, func(token *jwt.Token) (any, error) {
 		// 确保token的签名方法是我们期望的
 		if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
 			return nil, fmt.Errorf("invalid_token_sign_method") // token.Header["alg"]
 		}
 		return []byte(secret), nil
 	})
+
 	if err != nil {
-		return nil, err // "无效的token: %w"
+		return nil, false, err // "无效的token: %w"
 	}
 
 	if claims, ok := token.Claims.(*TokenClaims); ok && token.Valid {
 		// 检查是否过期 (只是token自带的过期，外部应该还会检查，灵活机制)
 		if checkExpire && (claims.ExpiresAt != nil) {
 			if time.Now().After(claims.ExpiresAt.Time) {
-				return nil, fmt.Errorf("token_is_expire")
+				return nil, true, fmt.Errorf("token_is_expire")
 			}
 		}
-		return claims, nil
+		return claims, false, nil
 	}
-	return nil, fmt.Errorf("invalid_token_struct")
+	return nil, false, fmt.Errorf("invalid_token_struct")
 }
 
-// IsTokenFormat 检查格式 (header.payload.signature)
+// IsTokenFormat 检查是否符合JWT格式 (header.payload.signature)
 func IsTokenFormat(tokenStr string) bool {
 	// 检查是否为空
 	if tokenStr == "" {
@@ -188,31 +217,25 @@ func IsTokenFormat(tokenStr string) bool {
 		return false
 	}
 
-	// 验证头部和载荷部分是有效的 base64url 编码
-	// 注意：签名部分可能包含填充，验证方式稍有不同
-	for _, part := range parts[:2] {
+	// 确保所有部分不为空
+	for _, part := range parts {
 		if part == "" {
 			return false
 		}
+	}
 
-		// 添加可能缺少的填充
-		padded := part
-		switch len(part) % 4 {
-		case 2:
-			padded += "=="
-		case 3:
-			padded += "="
-		}
-
-		// 检查每个部分是否是有效的base64URL编码
-		if _, err := base64.RawURLEncoding.DecodeString(padded); err != nil {
+	// 验证头部和载荷部分是有效的 base64url 编码
+	for _, part := range parts[:2] {
+		// base64url 不使用填充，直接尝试解码
+		if _, err := base64.RawURLEncoding.DecodeString(part); err != nil {
 			return false
 		}
 	}
 
-	// 简单检查签名部分非空
-	if parts[2] == "" {
+	// 签名部分也应该是有效的 base64url 编码
+	if _, err := base64.RawURLEncoding.DecodeString(parts[2]); err != nil {
 		return false
 	}
+
 	return true
 }
