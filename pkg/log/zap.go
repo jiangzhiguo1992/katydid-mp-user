@@ -1,9 +1,11 @@
 package log
 
 import (
+	"encoding/json"
 	"fmt"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
+	"log/slog"
 	"os"
 	"path"
 	"sync"
@@ -129,6 +131,9 @@ func NewDefaultConfig(conLevels, outLevels []int) Config {
 
 // Init 初始化日志
 func Init(cfg Config) {
+	marshal, _ := json.MarshalIndent(cfg, "", "\t")
+	slog.Info(fmt.Sprintf("■ ■ Log ■ ■ 配置 ---> %s", marshal))
+
 	once.Do(func() {
 		logger = newLogger(cfg)
 	})
@@ -159,7 +164,7 @@ func Close() error {
 	}
 
 	if len(errs) > 0 {
-		return fmt.Errorf("■ ■ Log ■ ■ failed to close logger: %v", errs)
+		return fmt.Errorf("■ ■ Log ■ ■ 关闭失败: %v", errs)
 	}
 	return nil
 }
@@ -243,7 +248,7 @@ func createOutputCore(encoder zapcore.Encoder, config *Config, lConf levelConfig
 	// path
 	dir := path.Join(config.OutDir, lConf.dir)
 	if err := os.MkdirAll(dir, os.ModePerm); err != nil {
-		panic(fmt.Errorf("■ ■ Log ■ ■ failed to create dir %s: %w", lConf.dir, err))
+		panic(fmt.Errorf("■ ■ Log ■ ■ 创建文件夹失败 %s: %w", lConf.dir, err))
 	}
 	// writer
 	writer := NewDateWriteSyncer(
@@ -333,7 +338,7 @@ func log(level zapcore.Level, output *bool, msg string, fields ...zap.Field) {
 	case zapcore.FatalLevel:
 		lg.Fatal(msg, fields...)
 	default:
-		panic("■ ■ Log ■ ■ unhandled default case")
+		panic("■ ■ Log ■ ■ 打印级别找不到")
 	}
 }
 

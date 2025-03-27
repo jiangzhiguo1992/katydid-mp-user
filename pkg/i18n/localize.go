@@ -7,6 +7,7 @@ import (
 	"github.com/nicksnyder/go-i18n/v2/i18n"
 	"golang.org/x/text/language"
 	"gopkg.in/yaml.v3"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"strings"
@@ -29,16 +30,20 @@ type Config struct {
 
 type Manager struct {
 	config     Config
-	langs      []string
 	bundle     *i18n.Bundle
-	localizer  sync.Map // 缓存常用localizer对象
-	localizers sync.Map // 缓存常用localizers对象
+	langs      []string
+	langsMap   map[string]bool // 用于快速查找语言是否支持
+	localizer  sync.Map        // 缓存常用localizer对象
+	localizers sync.Map        // 缓存常用localizers对象
 }
 
 func Init(cfg Config) error {
+	marshal, _ := json.MarshalIndent(cfg, "", "\t")
+	slog.Info(fmt.Sprintf("■ ■ i18n ■ ■ 配置 ---> %s", marshal))
+
 	m, err := newManager(cfg)
 	if err != nil {
-		return fmt.Errorf("■ ■ i18n ■ ■ create i18n manager failed: %w", err)
+		return fmt.Errorf("■ ■ i18n ■ ■ 创建 i18n 失败: %w", err)
 	}
 	defaultManager = m
 	return nil
@@ -49,12 +54,7 @@ func HasLang(lang string) bool {
 	if defaultManager == nil {
 		return false
 	}
-	for _, e := range defaultManager.langs {
-		if lang == e {
-			return true
-		}
-	}
-	return false
+	return defaultManager.langsMap[lang]
 }
 
 // DefLang 获取默认语言
@@ -82,13 +82,14 @@ func newManager(cfg Config) (*Manager, error) {
 
 	defaultTag, err := language.Parse(cfg.DefaultLang)
 	if err != nil {
-		return nil, fmt.Errorf("■ ■ i18n ■ ■ parse default language failed: %w", err)
+		return nil, fmt.Errorf("■ ■ i18n ■ ■ 解析默认失败: %w", err)
 	}
 
 	m := &Manager{
-		config: cfg,
-		langs:  nil,
-		bundle: i18n.NewBundle(defaultTag),
+		config:   cfg,
+		bundle:   i18n.NewBundle(defaultTag),
+		langs:    nil,
+		langsMap: make(map[string]bool),
 	}
 
 	m.registerUnmarshalFuncs()
@@ -111,12 +112,12 @@ func (m *Manager) loadMessageFiles() error {
 	for _, dir := range m.config.DocDirs {
 		fs, err := filepath.Glob(filepath.Join(dir, "*"))
 		if err != nil {
-			return fmt.Errorf("■ ■ i18n ■ ■ glob dir %s failed: %w", dir, err)
+			return fmt.Errorf("■ ■ i18n ■ ■ 加载文件夹 %s 失败: %w", dir, err)
 		}
 		files = append(files, filterMessageFiles(fs)...)
 	}
 	if len(files) == 0 {
-		return fmt.Errorf("■ ■ i18n ■ ■ no message files found in dirs: %v", m.config.DocDirs)
+		return fmt.Errorf("■ ■ i18n ■ ■ 没有发现文件: %v", m.config.DocDirs)
 	}
 	m.config.OnInfo("■ ■ i18n ■ ■ 本地化加载文件 ", map[string]any{"files": files})
 
@@ -124,22 +125,20 @@ func (m *Manager) loadMessageFiles() error {
 	m.langs = make([]string, 0, len(files))
 	for _, file := range files {
 		if _, err := m.bundle.LoadMessageFile(file); err != nil {
-			return fmt.Errorf("■ ■ i18n ■ ■ load message file %s failed: %w", file, err)
+			return fmt.Errorf("■ ■ i18n ■ ■ 加载文件 %s 失败: %w", file, err)
 		}
-		m.langs = append(m.langs, extractLangFromFilename(file))
+
+		lang := extractLangFromFilename(file)
+		m.langs = append(m.langs, lang)
+		m.langsMap[lang] = true
 	}
 	m.config.OnInfo("■ ■ i18n ■ ■ 本地化加载语言 ", map[string]any{"languages": m.langs})
 
 	// 确保默认语言存在
-	hasDefault := false
-	for _, lang := range m.langs {
-		if lang == m.config.DefaultLang {
-			hasDefault = true
-			break
+	if !m.langsMap[m.config.DefaultLang] {
+		if m.config.OnErr != nil {
+			m.config.OnErr("■ ■ i18n ■ ■ 本地化默认文件不存在 ", map[string]any{"lang": m.config.DefaultLang})
 		}
-	}
-	if !hasDefault {
-		m.config.OnErr("■ ■ i18n ■ ■ 本地化默认文件不存在 ", map[string]any{"lang": m.config.DefaultLang})
 	}
 
 	// 预缓存默认Localizer
@@ -178,14 +177,14 @@ func (m *Manager) getLocalizers(lang string) []*i18n.Localizer {
 	// 构建语言标签列表，实现回退链
 	var tags []string
 
-	if HasLang(lang) {
+	if m.langsMap[lang] {
 		tags = append(tags, lang)
 	}
 
 	// 添加基本语言标签（如 "en" 从 "en-US"）
 	if parts := strings.Split(lang, "-"); len(parts) > 1 {
 		base := parts[0]
-		if (base != lang) && HasLang(base) {
+		if base != lang && m.langsMap[base] {
 			tags = append(tags, base)
 		}
 	}
@@ -210,11 +209,11 @@ func (m *Manager) getLocalizers(lang string) []*i18n.Localizer {
 	return localizers
 }
 
-func (m *Manager) localize(lang, msgID string, data map[string]any, nilBackId bool) string {
+func (m *Manager) localize(lang, msgID string, data map[string]any, fallbackToID bool) string {
 	// 构建语言标签列表，实现回退链
 	localizers := m.getLocalizers(lang)
 
-	// 循环开找
+	// 循环查找
 	var msg string
 	var err error
 	for _, localizer := range localizers {
@@ -231,17 +230,17 @@ func (m *Manager) localize(lang, msgID string, data map[string]any, nilBackId bo
 		}
 	}
 
-	// default
+	// 处理未找到消息的情况
 	if (len(msg) == 0) && (err != nil) {
-		if nilBackId {
+		if fallbackToID {
 			msg = msgID
 		} else {
 			msg = unknownError
 		}
 	}
 
-	// error
-	if !nilBackId && (err != nil) && (m.config.OnErr != nil) {
+	// 记录错误
+	if !fallbackToID && (err != nil) && (m.config.OnErr != nil) {
 		m.config.OnErr("■ ■ i18n ■ ■ 本地化未找到: ", map[string]any{
 			"msgID": msgID, "lang": lang, "error": err})
 	}

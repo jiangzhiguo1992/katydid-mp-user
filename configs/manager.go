@@ -1,6 +1,7 @@
 package configs
 
 import (
+	"encoding/json"
 	"fmt"
 	"github.com/fsnotify/fsnotify"
 	"github.com/google/uuid"
@@ -145,7 +146,7 @@ func (m *Manager) load(confDir string) error {
 	}
 
 	// 打印配置
-	m.logSettings("", m.main.AllSettings())
+	m.logSettings("本地", m.main.AllSettings())
 
 	// debug模式下打印配置
 	if !m.config.IsProd() {
@@ -328,7 +329,7 @@ func (m *Manager) loadRemoteConfig() error {
 	}
 
 	// 打印远程配置
-	m.logSettings("remote_", m.main.AllSettings())
+	m.logSettings("远程", m.main.AllSettings())
 
 	// 启动远程配置监听
 	go m.watchRemoteConfig()
@@ -424,18 +425,7 @@ func (m *Manager) notifySubscribers(prevConfig map[string]interface{}) {
 }
 
 // logSettings 打印配置
-func (m *Manager) logSettings(group string, settings map[string]any) {
-	for k, v := range settings {
-		if vs, ok := v.(map[string]any); ok {
-			nextGroup := k
-			if group != "" {
-				nextGroup = group + k
-			}
-			m.logSettings(nextGroup+".", vs)
-			continue
-		}
-		key := group + k
-		val := slog.Any("", v).Value.String()
-		slog.Info(fmt.Sprintf("■ ■ Conf ■ ■ ---> %s = %s", key, val))
-	}
+func (m *Manager) logSettings(source string, settings map[string]any) {
+	marshal, _ := json.MarshalIndent(settings, "", "\t")
+	slog.Info(fmt.Sprintf("■ ■ Conf ■ ■ (%s) ---> %s", source, marshal))
 }
