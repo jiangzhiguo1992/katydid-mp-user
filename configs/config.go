@@ -79,13 +79,15 @@ type (
 			User   string `toml:"user" mapstructure:"user"`
 			Pwd    string `toml:"pwd" mapstructure:"pwd"`
 		} `mapstructure:",squash"`
-		Read *struct {
-			Host   []string `toml:"host" mapstructure:"host"`
-			Port   []int    `toml:"port" mapstructure:"port"`
-			DBName []string `toml:"db_name" mapstructure:"db_name"`
-			User   []string `toml:"user" mapstructure:"user"`
-			Pwd    []string `toml:"pwd" mapstructure:"pwd"`
-		} `toml:"read"`
+		// cluster
+		Reads *struct {
+			Host   []string            `toml:"host" mapstructure:"host"`
+			Port   []int               `toml:"port" mapstructure:"port"`
+			User   []string            `toml:"user" mapstructure:"user"`
+			Pwd    []string            `toml:"pwd" mapstructure:"pwd"`
+			Weight []int               `toml:"weight" mapstructure:"weight"`
+			Params []map[string]string `toml:"params" mapstructure:"params"`
+		} `toml:"reads"`
 		// retry
 		MaxRetries    int `toml:"max_retries" mapstructure:"max_retries"`
 		RetryDelay    int `toml:"retry_delay" mapstructure:"retry_delay"`

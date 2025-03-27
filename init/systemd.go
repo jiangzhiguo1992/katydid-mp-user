@@ -66,70 +66,91 @@ func init() {
 
 	// pgsql
 	if PgSql := config.PgSql; PgSql != nil {
-		// 配置
-		getConf := func(host string, port int, dbName, user, pwd string) storage.DBConfig {
-			return storage.DBConfig{
-				Kind:   storage.DBKindPgSQL,
-				Logger: &StoreLogger{},
-				// db
-				Host: host, Port: port, DBName: dbName, User: user, Password: pwd,
-				// retry
-				MaxRetries: PgSql.MaxRetries,
-				RetryDelay: PgSql.RetryDelay,
-				// pool
-				MaxOpen:     PgSql.MaxOpen,
-				MaxIdle:     PgSql.MaxIdle,
-				MaxLifeTime: time.Duration(PgSql.MaxLifeMin) * time.Minute,
-				MaxIdleTime: time.Duration(PgSql.MaxIdleMin) * time.Minute,
-				// health
-				HealthCheckInterval: time.Duration(PgSql.HealthCheckInterval) * time.Minute,
-				AutoReconnect:       PgSql.AutoReconnect,
-				QueryTimeout:        time.Duration(PgSql.QueryTimeout) * time.Second,
-				// extra
-				Params: map[string]string{
-					"sslmode":  PgSql.SSLMode,
-					"TimeZone": PgSql.TimeZone,
-				},
-			}
+		dbConfig := storage.DBConfig{
+			Kind:   storage.DBKindPgSQL,
+			Logger: &StoreLogger{},
+			// db
+			Host:     PgSql.Write.Host,
+			Port:     PgSql.Write.Port,
+			DBName:   PgSql.Write.DBName,
+			User:     PgSql.Write.User,
+			Password: PgSql.Write.Pwd,
+			// cluster
+			OnlyMaster: true,
+			Replicas:   make([]storage.ReplicaConfig, 0),
+			// retry
+			MaxRetries:    PgSql.MaxRetries,
+			RetryDelay:    PgSql.RetryDelay,
+			RetryMaxDelay: PgSql.RetryMaxDelay,
+			// pool
+			MaxOpen:     PgSql.MaxOpen,
+			MaxIdle:     PgSql.MaxIdle,
+			MaxLifeTime: time.Duration(PgSql.MaxLifeMin) * time.Minute,
+			MaxIdleTime: time.Duration(PgSql.MaxIdleMin) * time.Minute,
+			// health
+			HealthCheckInterval: time.Duration(PgSql.HealthCheckInterval) * time.Minute,
+			AutoReconnect:       PgSql.AutoReconnect,
+			QueryTimeout:        time.Duration(PgSql.QueryTimeout) * time.Second,
+			// extra
+			Params: map[string]string{
+				"sslmode":       PgSql.SSLMode,
+				"TimeZone":      PgSql.TimeZone,
+				"read_timeout":  "1", // pgsql
+				"write_timeout": "1", // pgsql
+			},
 		}
-		// 主数据库
-		write := getConf(PgSql.Write.Host, PgSql.Write.Port,
-			PgSql.Write.DBName, PgSql.Write.User, PgSql.Write.Pwd)
-		name := "pgsql.main.write"
-		_, err = storage.InitConnect(name, write)
+		if PgSql.Reads != nil {
+			for index, host := range PgSql.Reads.Host {
+				if len(host) <= 0 {
+					continue
+				}
+				port := 0
+				if len(PgSql.Reads.Port) > index {
+					port = PgSql.Reads.Port[index]
+				} else if len(PgSql.Reads.Port) > 0 {
+					port = PgSql.Reads.Port[0]
+				}
+				user := ""
+				if len(PgSql.Reads.User) > index {
+					user = PgSql.Reads.User[index]
+				} else if len(PgSql.Reads.User) > 0 {
+					user = PgSql.Reads.User[0]
+				}
+				pwd := ""
+				if len(PgSql.Reads.Pwd) > index {
+					pwd = PgSql.Reads.Pwd[index]
+				} else if len(PgSql.Reads.Pwd) > 0 {
+					pwd = PgSql.Reads.Pwd[0]
+				}
+				weight := 0
+				if len(PgSql.Reads.Weight) > index {
+					weight = PgSql.Reads.Weight[index]
+				} else if len(PgSql.Reads.Weight) > 0 {
+					weight = PgSql.Reads.Weight[0]
+				}
+				params := map[string]string{}
+				if len(PgSql.Reads.Params) > index {
+					params = PgSql.Reads.Params[index]
+				} else if len(PgSql.Reads.Params) > 0 {
+					params = PgSql.Reads.Params[0]
+				}
+
+				dbConfig.Replicas = append(dbConfig.Replicas, storage.ReplicaConfig{
+					Host: host, Port: port, User: user, Password: pwd,
+					Weight: weight, Params: params,
+				})
+			}
+			dbConfig.OnlyMaster = len(dbConfig.Replicas) <= 0
+		}
+		name := "pgsql.main" // TODO:GG 放哪里
+		_, err = storage.InitConnect(name, dbConfig)
 		if err != nil {
 			log.Fatal(fmt.Sprintf("storage %s", name), log.FError(err))
-		}
-		// 从数据库
-		if PgSql.Read != nil {
-			for index, host := range PgSql.Read.Host {
-				port := PgSql.Read.Port[0]
-				if len(PgSql.Read.Port) > index {
-					port = PgSql.Read.Port[index]
-				}
-				dbName := PgSql.Read.DBName[0]
-				if len(PgSql.Read.DBName) > index {
-					dbName = PgSql.Read.DBName[index]
-				}
-				user := PgSql.Read.User[0]
-				if len(PgSql.Read.User) > index {
-					user = PgSql.Read.User[index]
-				}
-				pwd := PgSql.Read.Pwd[0]
-				if len(PgSql.Read.Pwd) > index {
-					pwd = PgSql.Read.Pwd[index]
-				}
-				read := getConf(host, port, dbName, user, pwd)
-				name := fmt.Sprintf("pgsql.main.read.%d", index)
-				_, err = storage.InitConnect(name, read)
-				if err != nil {
-					log.Fatal(fmt.Sprintf("storage %s", name), log.FError(err))
-				}
-			}
 		}
 	}
 }
 
+// StoreLogger 实现了gorm.Logger接口
 type StoreLogger struct{}
 
 func (s *StoreLogger) LogMode(logger.LogLevel) logger.Interface {
@@ -149,7 +170,25 @@ func (s *StoreLogger) Error(ctx context.Context, msg string, params ...interface
 }
 
 func (s *StoreLogger) Trace(ctx context.Context, begin time.Time, fc func() (sql string, rowsAffected int64), err error) {
-	sql, _ := fc()
-	log.Warn("这他妈是什么错?")
-	log.Error(sql, log.FError(err))
+	elapsed := time.Since(begin)
+	sql, rows := fc()
+
+	// 构建日志字段
+	fields := []log.Field{
+		log.FDuration("耗时", elapsed),
+		log.FString("语句", sql),
+		log.FInt64("结果", rows),
+	}
+
+	// 根据错误状态和执行时间选择日志级别
+	if err != nil {
+		fields = append(fields, log.FError(err))
+		log.Error("SQL执行失败", fields...)
+	} else if elapsed > time.Second {
+		// 慢查询警告阈值，可以根据需要调整
+		log.Warn("SQL执行过慢", fields...)
+	} else {
+		// 正常查询可以选择记录为Debug级别或Info级别
+		log.Debug("SQL执行成功", fields...)
+	}
 }

@@ -11,11 +11,8 @@ db_name = "katydid_base"
 user="jiang"
 pwd=""
 
-timezone = "Asia/Shanghai" # 时区
-ssl_mode = "disable" # ssl模式
-
 max_retries = 3 # 连接失败重试次数
-retry_delay = 2 # 连接失败重试间隔
+retry_delay = 2 # 连接失败重试间隔(*1.5)
 retry_max_delay = 30 # 连接失败最大重试间隔
 
 max_open = 1000 # 连接池最大连接数
@@ -24,8 +21,19 @@ max_life_min  = 3 # 连接池最大存活时间
 max_idle_min = 1 # 连接池最大空闲时间
 
 health_check_interval = 10 # 健康检查间隔(m)
-auto_reconnect = true # 自动重连
+auto_reconnect = true # 是否自动重连
 query_timeout = 5 # 查询超时时间(s)
+
+timezone = "Asia/Shanghai" # 时区 (params)
+ssl_mode = "disable" # ssl模式 (params)
+
+[pgsql.reads]
+host = []
+port = []
+user = []
+pwd = []
+weight = []
+params = []
 
 #[redis]
 #address = "r-2zegwp14leh0qyqzrs.redis.rds.aliyuncs.com"
