@@ -102,8 +102,7 @@ type (
 		AutoReconnect       bool `toml:"auto_reconnect" mapstructure:"auto_reconnect"`
 		QueryTimeout        int  `toml:"query_timeout" mapstructure:"query_timeout"`
 		// extra
-		TimeZone string `toml:"timezone" mapstructure:"timezone"`
-		SSLMode  string `toml:"ssl_mode" mapstructure:"ssl_mode"`
+		Params map[string]string `toml:"params" mapstructure:"params"`
 	}
 
 	RedisConf struct {

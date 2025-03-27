@@ -92,12 +92,7 @@ func init() {
 			AutoReconnect:       PgSql.AutoReconnect,
 			QueryTimeout:        time.Duration(PgSql.QueryTimeout) * time.Second,
 			// extra
-			Params: map[string]string{
-				"sslmode":       PgSql.SSLMode,
-				"TimeZone":      PgSql.TimeZone,
-				"read_timeout":  "1", // pgsql
-				"write_timeout": "1", // pgsql
-			},
+			Params: PgSql.Params,
 		}
 		if PgSql.Reads != nil {
 			for index, host := range PgSql.Reads.Host {

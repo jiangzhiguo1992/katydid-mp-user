@@ -24,16 +24,15 @@ health_check_interval = 10 # 健康检查间隔(m)
 auto_reconnect = true # 是否自动重连
 query_timeout = 5 # 查询超时时间(s)
 
-timezone = "Asia/Shanghai" # 时区 (params)
-ssl_mode = "disable" # ssl模式 (params)
+params = { connect_timeout = 10, TimeZone = "Asia/Shanghai", sslmode = "disable" }
 
 [pgsql.reads]
-host = []
-port = []
-user = []
-pwd = []
-weight = []
-params = []
+host = [] # 必填
+port = [] # 选填 默认==master
+user = [] # 选填 默认==master
+pwd = [] # 选填 默认==master
+weight = [] # 选填 默认==1
+params = [] # 选填
 
 #[redis]
 #address = "r-2zegwp14leh0qyqzrs.redis.rds.aliyuncs.com"
