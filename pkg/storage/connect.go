@@ -75,7 +75,7 @@ func InitConnect(name string, config DBConfig) (*gorm.DB, error) {
 	defer dbMutex.Unlock()
 
 	// 打印配置
-	marshal, _ := json.Marshal(config)
+	marshal, _ := json.MarshalIndent(config, "", "\t")
 	config.Logger.Info(context.Background(), fmt.Sprintf("■ ■ Storage ■ ■ 数据库-连接配置:%s :\n%s", name, marshal))
 
 	// 检查是否已存在同名连接
@@ -172,8 +172,9 @@ func buildMySQLDSN(config DBConfig) string {
 
 // 构建PostgreSQL DSN
 func buildPgSQLDSN(config DBConfig) string {
-	dsn := fmt.Sprintf("host=%s port=%d user=%s password=%s dbname=%s",
-		config.Host, config.Port, config.User, config.Password, config.DBName)
+	// 注意params先后顺序
+	dsn := fmt.Sprintf("host=%s port=%d database=%s user=%s password=%s",
+		config.Host, config.Port, config.DBName, config.User, config.Password)
 
 	// 添加额外参数
 	for k, v := range config.Params {
@@ -224,7 +225,7 @@ func connectWithRetries(dialector gorm.Dialector, config *gorm.Config, maxRetrie
 	for i := 0; i < maxRetries; i++ {
 		db, err = gorm.Open(dialector, config)
 		if err == nil && db != nil {
-			return db, nil
+			return db, err
 		}
 		config.Logger.Warn(context.Background(), fmt.Sprintf("■ ■ Storage ■ ■ 数据库-连接重试(%d/%d):%s\n%v", i+1, maxRetries, dialector, err))
 

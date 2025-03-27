@@ -22,9 +22,9 @@ max_idle = 500 # 连接池最大空闲连接数
 max_life_min  = 3 # 连接池最大存活时间
 max_idle_min = 1 # 连接池最大空闲时间
 
-health_check_interval = 10 # 健康检查间隔
+health_check_interval = 1 # 健康检查间隔(m)
 auto_reconnect = true # 自动重连
-query_timeout = 5 # 查询超时时间
+query_timeout = 5 # 查询超时时间(s)
 
 #[redis]
 #address = "r-2zegwp14leh0qyqzrs.redis.rds.aliyuncs.com"
