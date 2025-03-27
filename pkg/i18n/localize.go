@@ -7,7 +7,6 @@ import (
 	"github.com/nicksnyder/go-i18n/v2/i18n"
 	"golang.org/x/text/language"
 	"gopkg.in/yaml.v3"
-	"log/slog"
 	"os"
 	"path/filepath"
 	"strings"
@@ -24,8 +23,8 @@ var defaultManager *Manager
 type Config struct {
 	DefaultLang string
 	DocDirs     []string
-	OnInfo      func(string, map[string]any)
-	OnErr       func(string, map[string]any)
+	OnInfo      func(string, map[string]any) `json:"-"`
+	OnErr       func(string, map[string]any) `json:"-"`
 }
 
 type Manager struct {
@@ -39,7 +38,7 @@ type Manager struct {
 
 func Init(cfg Config) error {
 	marshal, _ := json.MarshalIndent(cfg, "", "\t")
-	slog.Info(fmt.Sprintf("■ ■ i18n ■ ■ 配置 ---> %s", marshal))
+	cfg.OnInfo(fmt.Sprintf("■ ■ i18n ■ ■ 配置 ---> %s", marshal), nil)
 
 	m, err := newManager(cfg)
 	if err != nil {
@@ -119,7 +118,8 @@ func (m *Manager) loadMessageFiles() error {
 	if len(files) == 0 {
 		return fmt.Errorf("■ ■ i18n ■ ■ 没有发现文件: %v", m.config.DocDirs)
 	}
-	m.config.OnInfo("■ ■ i18n ■ ■ 本地化加载文件 ", map[string]any{"files": files})
+	marshal, _ := json.MarshalIndent(map[string]any{"files": files}, "", "\t")
+	m.config.OnInfo(fmt.Sprintf("■ ■ i18n ■ ■ 本地化加载文件: %s", marshal), nil)
 
 	// 加载文件并提取消息ID
 	m.langs = make([]string, 0, len(files))
@@ -132,7 +132,8 @@ func (m *Manager) loadMessageFiles() error {
 		m.langs = append(m.langs, lang)
 		m.langsMap[lang] = true
 	}
-	m.config.OnInfo("■ ■ i18n ■ ■ 本地化加载语言 ", map[string]any{"languages": m.langs})
+	marshal2, _ := json.MarshalIndent(map[string]any{"languages": m.langs}, "", "\t")
+	m.config.OnInfo(fmt.Sprintf("■ ■ i18n ■ ■ 本地化加载语言: %s", marshal2), nil)
 
 	// 确保默认语言存在
 	if !m.langsMap[m.config.DefaultLang] {
