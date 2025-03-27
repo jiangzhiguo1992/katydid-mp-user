@@ -116,6 +116,17 @@ func Get() *Validator {
 	return v
 }
 
+// RegisterFieldRule 注册字段验证规则
+func RegisterFieldRule(fieldRules FieldValidRule) {
+	v := Get()
+	// 注册字段验证规则
+	for tag, rule := range fieldRules {
+		_ = v.validate.RegisterValidation(string(tag), func(fl validator.FieldLevel) bool {
+			return rule(fl.Field(), fl.Param())
+		})
+	}
+}
+
 // Check 根据场景执行验证，并返回本地化错误信息
 func Check(obj any, scene Scene) []*MsgErr {
 	v := Get()

@@ -2,6 +2,7 @@ package init
 
 import (
 	"context"
+	"fmt"
 	"gorm.io/gorm/logger"
 	"katydid-mp-user/configs"
 	"katydid-mp-user/internal/pkg/msg"
@@ -63,36 +64,69 @@ func init() {
 	//	LogEnable: true,
 	//})
 
-	// storage
-	_, err = storage.InitConnect("pgsql", storage.DBConfig{
-		Kind:   storage.DBKindPgSQL,
-		Logger: &StoreLogger{},
-		// db
-		Host:     config.PgSql.Write.Host,
-		Port:     config.PgSql.Write.Port,
-		DBName:   config.PgSql.Write.DBName,
-		User:     config.PgSql.Write.User,
-		Password: config.PgSql.Write.Pwd,
-		// retry
-		MaxRetries: config.PgSql.MaxRetries,
-		RetryDelay: config.PgSql.RetryDelay,
-		// pool
-		MaxOpen:     config.PgSql.MaxOpen,
-		MaxIdle:     config.PgSql.MaxIdle,
-		MaxLifeTime: time.Duration(config.PgSql.MaxLifeMin) * time.Minute,
-		MaxIdleTime: time.Duration(config.PgSql.MaxIdleMin) * time.Minute,
-		// health
-		HealthCheckInterval: time.Duration(config.PgSql.HealthCheckInterval) * time.Minute,
-		AutoReconnect:       config.PgSql.AutoReconnect,
-		QueryTimeout:        time.Duration(config.PgSql.QueryTimeout) * time.Second,
-		// extra
-		Params: map[string]string{
-			"sslmode":  config.PgSql.SSLMode,
-			"TimeZone": config.PgSql.TimeZone,
-		},
-	})
-	if err != nil {
-		log.Fatal("storage", log.FError(err))
+	// pgsql
+	if PgSql := config.PgSql; PgSql != nil {
+		// 配置
+		getConf := func(host string, port int, dbName, user, pwd string) storage.DBConfig {
+			return storage.DBConfig{
+				Kind:   storage.DBKindPgSQL,
+				Logger: &StoreLogger{},
+				// db
+				Host: host, Port: port, DBName: dbName, User: user, Password: pwd,
+				// retry
+				MaxRetries: PgSql.MaxRetries,
+				RetryDelay: PgSql.RetryDelay,
+				// pool
+				MaxOpen:     PgSql.MaxOpen,
+				MaxIdle:     PgSql.MaxIdle,
+				MaxLifeTime: time.Duration(PgSql.MaxLifeMin) * time.Minute,
+				MaxIdleTime: time.Duration(PgSql.MaxIdleMin) * time.Minute,
+				// health
+				HealthCheckInterval: time.Duration(PgSql.HealthCheckInterval) * time.Minute,
+				AutoReconnect:       PgSql.AutoReconnect,
+				QueryTimeout:        time.Duration(PgSql.QueryTimeout) * time.Second,
+				// extra
+				Params: map[string]string{
+					"sslmode":  PgSql.SSLMode,
+					"TimeZone": PgSql.TimeZone,
+				},
+			}
+		}
+		// 主数据库
+		write := getConf(PgSql.Write.Host, PgSql.Write.Port,
+			PgSql.Write.DBName, PgSql.Write.User, PgSql.Write.Pwd)
+		name := "pgsql.main.write"
+		_, err = storage.InitConnect(name, write)
+		if err != nil {
+			log.Fatal(fmt.Sprintf("storage %s", name), log.FError(err))
+		}
+		// 从数据库
+		if PgSql.Read != nil {
+			for index, host := range PgSql.Read.Host {
+				port := PgSql.Read.Port[0]
+				if len(PgSql.Read.Port) > index {
+					port = PgSql.Read.Port[index]
+				}
+				dbName := PgSql.Read.DBName[0]
+				if len(PgSql.Read.DBName) > index {
+					dbName = PgSql.Read.DBName[index]
+				}
+				user := PgSql.Read.User[0]
+				if len(PgSql.Read.User) > index {
+					user = PgSql.Read.User[index]
+				}
+				pwd := PgSql.Read.Pwd[0]
+				if len(PgSql.Read.Pwd) > index {
+					pwd = PgSql.Read.Pwd[index]
+				}
+				read := getConf(host, port, dbName, user, pwd)
+				name := fmt.Sprintf("pgsql.main.read.%d", index)
+				_, err = storage.InitConnect(name, read)
+				if err != nil {
+					log.Fatal(fmt.Sprintf("storage %s", name), log.FError(err))
+				}
+			}
+		}
 	}
 }
 

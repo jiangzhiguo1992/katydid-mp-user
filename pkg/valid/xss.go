@@ -62,12 +62,9 @@ type XSSValidator struct {
 
 // NewXSSValidator 返回一个配置好的XSS验证器
 func NewXSSValidator(strict bool) *XSSValidator {
-	validator := &XSSValidator{
-		patterns: make([]*regexp.Regexp, len(xssPatterns)),
-	}
 	// 编译所有正则表达式模式
-	for i, pattern := range xssPatterns {
-		validator.patterns[i] = pattern
+	validator := &XSSValidator{
+		patterns: xssPatterns,
 	}
 
 	if strict {
@@ -91,12 +88,15 @@ func (v *XSSValidator) HasXSS(text string) bool {
 	if text == "" {
 		return false
 	}
+
+	// 首先使用正则检测
 	for _, pattern := range v.patterns {
 		if pattern.MatchString(text) {
 			return true
 		}
 	}
-	// 也可以通过比较sanitized后的结果是否与原文本相同来判断
+
+	// 如果正则没有匹配到，再通过sanitize比较作为补充检测
 	return v.SanitizeXSS(text) != text
 }
 

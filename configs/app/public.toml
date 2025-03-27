@@ -7,12 +7,12 @@ api_https_port = 8080
 [pgsql]
 host = "localhost"
 port = 5432
-db_name = "postgres"
+db_name = "katydid_base"
 user="jiang"
 pwd=""
 
 timezone = "Asia/Shanghai" # 时区
-ssl_mode = "app_disable" # ssl模式
+ssl_mode = "disable" # ssl模式
 
 max_retries = 3 # 连接失败重试次数
 retry_delay = 3 # 连接失败重试间隔
