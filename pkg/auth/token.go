@@ -134,7 +134,7 @@ func (t *Token) generateJWTToken(secret string, tokenID *string) error {
 
 	// 更新令牌的Claims
 	t.Claims = claims
-	return err
+	return nil
 }
 
 // GenerateJWTToken 使用提供的密钥生成JWT令牌
@@ -163,6 +163,7 @@ func generateSecureRandomString(length int) (string, error) {
 	if _, err := rand.Read(bytes); err != nil {
 		return "", err
 	}
+
 	encoded := base64.URLEncoding.EncodeToString(bytes)
 	if len(encoded) < length {
 		return "", fmt.Errorf("token_too_short")
@@ -181,7 +182,7 @@ func ParseJWT(tokenStr string, secret string, checkExpire bool) (*TokenClaims, b
 	parser := jwt.NewParser(parserOptions...)
 
 	token, err := parser.ParseWithClaims(tokenStr, &TokenClaims{}, func(token *jwt.Token) (any, error) {
-		// 确保token的签名方法是我们期望的
+		// 确保token的签名方法是我们期望的 (SigningMethodHS256 属于 SigningMethodHMAC 类型)
 		if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
 			return nil, fmt.Errorf("invalid_token_sign_method") // token.Header["alg"]
 		}
