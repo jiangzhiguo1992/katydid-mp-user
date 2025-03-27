@@ -41,12 +41,13 @@ type (
 		DBName   string // 数据库名称
 		User     string // 用户名
 		Password string // 密码
-		// cluster - 增加集群支持
+		// cluster
 		OnlyMaster bool            // 始终使用主库（即使有只读查询）
 		Replicas   []ReplicaConfig // 只读副本配置
 		// retry
-		MaxRetries int // 重试次数 (自动纠正<=0)
-		RetryDelay int // 重试间隔，单位秒 (自动纠正<=0)
+		MaxRetries    int // 重试次数 (<=0自动纠正到3)
+		RetryDelay    int // 重试间隔，单位秒 (<=0自动纠正到2s)
+		RetryMaxDelay int // 最大重试间隔，单位秒 (<=0自动纠正到30s)
 		// pool
 		MaxOpen     int           // 最大连接数，一般=1000 (看数据库性能)
 		MaxIdle     int           // 最大空闲连接数，一般==Open
@@ -73,14 +74,15 @@ type (
 
 	// DBInstance 封装数据库实例和相关元数据
 	DBInstance struct {
-		DB           *gorm.DB     // 主数据库连接
-		ReadReplicas []*gorm.DB   // 只读副本连接
-		Name         string       // 实例名称
-		Config       *DBConfig    // 配置信息
-		CreatedAt    time.Time    // 创建时间
-		LastPingTime time.Time    // 最后一次Ping时间
-		Healthy      bool         // 健康状态
-		mutex        sync.RWMutex // 用于保护本实例内部并发访问
+		Name          string         // 实例名称
+		Config        *DBConfig      // 配置信息
+		CreatedAt     time.Time      // 创建时间
+		DB            *gorm.DB       // 主数据库连接
+		ReadReplicas  []*gorm.DB     // 只读副本连接
+		ReplicasCount map[string]int // 副本连接的访问计数
+		Healthy       bool           // 健康状态
+		LastPingTime  time.Time      // 最后一次Ping时间
+		mutex         sync.RWMutex   // 用于保护本实例内部并发访问
 	}
 )
 
@@ -90,7 +92,10 @@ func InitConnect(name string, config DBConfig) (*gorm.DB, error) {
 	defer dbMutex.Unlock()
 
 	// 打印配置
-	marshal, _ := json.MarshalIndent(config, "", "\t")
+	marshal, err := json.MarshalIndent(config, "", "\t")
+	if err != nil {
+		return nil, fmt.Errorf("■ ■ Storage ■ ■ 数据库-序列化配置失败: %s, %w", name, err)
+	}
 	config.Logger.Info(context.Background(), fmt.Sprintf("■ ■ Storage ■ ■ 数据库-连接配置:%s :\n%s", name, marshal))
 
 	// 检查是否已存在同名连接
@@ -109,7 +114,10 @@ func InitConnect(name string, config DBConfig) (*gorm.DB, error) {
 	gormConfig := createGormConfig(config)
 
 	// 重试连接逻辑
-	db, err := connectWithRetries(dialector, gormConfig, config.MaxRetries, time.Duration(config.RetryDelay)*time.Second)
+	db, err := connectWithRetries(
+		dialector, gormConfig, config.MaxRetries,
+		time.Duration(config.RetryDelay)*time.Second,
+		time.Duration(config.RetryMaxDelay)*time.Second)
 	if err != nil {
 		return nil, fmt.Errorf("■ ■ Storage ■ ■ 数据库-连接失败: %s, %w", name, err)
 	}
@@ -126,13 +134,14 @@ func InitConnect(name string, config DBConfig) (*gorm.DB, error) {
 	// 保存到实例map中
 	now := time.Now()
 	dbInstances[name] = &DBInstance{
-		DB:           db,
-		ReadReplicas: []*gorm.DB{},
-		Name:         name,
-		Config:       &config,
-		CreatedAt:    now,
-		LastPingTime: now,
-		Healthy:      true,
+		Name:          name,
+		Config:        &config,
+		CreatedAt:     now,
+		DB:            db,
+		ReadReplicas:  []*gorm.DB{},
+		ReplicasCount: make(map[string]int),
+		Healthy:       true,
+		LastPingTime:  now,
 	}
 
 	// 初始化副本连接
@@ -140,7 +149,9 @@ func InitConnect(name string, config DBConfig) (*gorm.DB, error) {
 		for i, replica := range config.Replicas {
 			replicaConfig := config
 			replicaConfig.Host = replica.Host
-			replicaConfig.Port = replica.Port
+			if replica.Port != 0 {
+				replicaConfig.Port = replica.Port
+			}
 			if replica.User != "" {
 				replicaConfig.User = replica.User
 			}
@@ -157,7 +168,10 @@ func InitConnect(name string, config DBConfig) (*gorm.DB, error) {
 				continue
 			}
 
-			replicaDB, err := connectWithRetries(replicaDialector, gormConfig, config.MaxRetries, time.Duration(config.RetryDelay)*time.Second)
+			replicaDB, err := connectWithRetries(
+				replicaDialector, gormConfig, config.MaxRetries,
+				time.Duration(config.RetryDelay)*time.Second,
+				time.Duration(config.RetryMaxDelay)*time.Second)
 			if err != nil {
 				config.Logger.Warn(context.Background(), fmt.Sprintf("■ ■ Storage ■ ■ 数据库-副本连接失败: %d, %v", i, err))
 				continue
@@ -266,7 +280,7 @@ func createGormConfig(config DBConfig) *gorm.Config {
 }
 
 // 连接重试
-func connectWithRetries(dialector gorm.Dialector, config *gorm.Config, maxRetries int, retryInterval time.Duration) (*gorm.DB, error) {
+func connectWithRetries(dialector gorm.Dialector, config *gorm.Config, maxRetries int, retryDelay, retryMaxDelay time.Duration) (*gorm.DB, error) {
 	ctx := context.Background()
 	var db *gorm.DB
 	var err error
@@ -274,29 +288,37 @@ func connectWithRetries(dialector gorm.Dialector, config *gorm.Config, maxRetrie
 	if maxRetries <= 0 {
 		maxRetries = 3 // 默认重试3次
 	}
-	if retryInterval <= 0 {
-		retryInterval = 3 * time.Second // 默认重试间隔3秒
+	if retryDelay <= 0 {
+		retryDelay = 2 * time.Second // 默认重试间隔2秒
+	}
+	if retryMaxDelay <= 0 {
+		retryMaxDelay = 30 * time.Second // 默认最大重试间隔30秒
 	}
 
 	for i := 0; i < maxRetries; i++ {
 		db, err = gorm.Open(dialector, config)
 		if err == nil && db != nil {
-			return db, err
+			return db, nil
+		} else if err == nil && db == nil {
+			err = fmt.Errorf("■ ■ Storage ■ ■ 数据库-连接成功但实例为空")
 		}
 		config.Logger.Warn(ctx, fmt.Sprintf("■ ■ Storage ■ ■ 数据库-连接重试(%d/%d):%v\n%v", i+1, maxRetries, dialector, err))
 
+		// 指数退避
+		retryDelay = time.Duration(float64(retryDelay) * 1.5)
+		if retryDelay > retryMaxDelay {
+			retryDelay = retryMaxDelay // 设置最大退避时间
+		}
+
 		select {
-		case <-time.After(retryInterval):
+		case <-time.After(retryDelay):
 		case <-ctx.Done():
 			return nil, ctx.Err()
 		}
 	}
 	config.Logger.Error(ctx, fmt.Sprintf("■ ■ Storage ■ ■ 数据库-连接重试用尽(%d):%v\n%v", maxRetries, dialector, err))
 
-	if err != nil {
-		return nil, err
-	}
-	return nil, fmt.Errorf("■ ■ Storage ■ ■ 数据库-连接失败: 达到最大重试次数")
+	return nil, err
 }
 
 // 配置连接池
@@ -386,11 +408,10 @@ func reconnectMainDB(instance *DBInstance, now time.Time) bool {
 	}
 
 	db, reconnectErr := connectWithRetries(
-		dialector,
-		createGormConfig(*instance.Config),
+		dialector, createGormConfig(*instance.Config),
 		instance.Config.MaxRetries,
 		time.Duration(instance.Config.RetryDelay)*time.Second,
-	)
+		time.Duration(instance.Config.RetryMaxDelay)*time.Second)
 
 	if reconnectErr == nil {
 		sqlDB, _ := db.DB()
@@ -411,7 +432,7 @@ func reconnectMainDB(instance *DBInstance, now time.Time) bool {
 
 // 重新连接副本数据库
 func reconnectReplica(instance *DBInstance, replicaIndex int) bool {
-	if replicaIndex >= len(instance.Config.Replicas) || replicaIndex >= len(instance.ReadReplicas) {
+	if replicaIndex < 0 || replicaIndex >= len(instance.Config.Replicas) || replicaIndex >= len(instance.ReadReplicas) {
 		return false
 	}
 
@@ -444,11 +465,10 @@ func reconnectReplica(instance *DBInstance, replicaIndex int) bool {
 	}
 
 	newDB, err := connectWithRetries(
-		dialector,
-		createGormConfig(replicaConfig),
+		dialector, createGormConfig(replicaConfig),
 		replicaConfig.MaxRetries,
 		time.Duration(replicaConfig.RetryDelay)*time.Second,
-	)
+		time.Duration(replicaConfig.RetryMaxDelay)*time.Second)
 
 	if err == nil && newDB != nil {
 		// 配置连接池
@@ -502,7 +522,7 @@ func GetReadDB(name string) *gorm.DB {
 	}
 
 	// 简单轮询负载均衡（可优化为加权轮询）
-	index := int(time.Now().UnixNano()) % replicaCount
+	index := instance.getWeightedRoundRobinIndex()
 	return instance.ReadReplicas[index]
 }
 
@@ -605,4 +625,62 @@ func Stats(name string) (sql.DBStats, error) {
 		return sql.DBStats{}, err
 	}
 	return sqlDB.Stats(), nil
+}
+
+// getWeightedRoundRobinIndex 实现加权轮询算法
+func (ins *DBInstance) getWeightedRoundRobinIndex() int {
+	replicaCount := len(ins.ReadReplicas)
+	if replicaCount == 0 {
+		return 0
+	}
+
+	// 所有副本权重相同或只有一个副本时，使用简单轮询
+	if replicaCount == 1 {
+		return 0
+	}
+
+	// 确保配置与副本数量匹配
+	if len(ins.Config.Replicas) != replicaCount {
+		return int(time.Now().UnixNano()) % replicaCount // 回退到简单轮询
+	}
+
+	// 计算总权重
+	totalWeight := 0
+	for _, cfg := range ins.Config.Replicas {
+		weight := cfg.Weight
+		if weight <= 0 {
+			weight = 1 // 默认权重为1
+		}
+		totalWeight += weight
+	}
+	if totalWeight == 0 {
+		return 0 // 防止除零错误
+	}
+
+	// 生成副本集合的唯一标识
+	key := fmt.Sprintf("%p", &ins.ReadReplicas)
+
+	ins.mutex.Lock()
+	defer ins.mutex.Unlock()
+
+	// 获取当前计数
+	currentCount := ins.ReplicasCount[key]
+	currentCount = (currentCount + 1) % totalWeight
+	ins.ReplicasCount[key] = currentCount
+
+	// 选择副本
+	for i, cfg := range ins.Config.Replicas {
+		weight := cfg.Weight
+		if weight <= 0 {
+			weight = 1
+		}
+
+		if currentCount < weight {
+			return i
+		}
+		currentCount -= weight
+	}
+
+	// 安全回退
+	return 0
 }

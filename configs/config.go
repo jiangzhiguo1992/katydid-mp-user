@@ -87,8 +87,9 @@ type (
 			Pwd    []string `toml:"pwd" mapstructure:"pwd"`
 		} `toml:"read"`
 		// retry
-		MaxRetries int `toml:"max_retries" mapstructure:"max_retries"`
-		RetryDelay int `toml:"retry_delay" mapstructure:"retry_delay"`
+		MaxRetries    int `toml:"max_retries" mapstructure:"max_retries"`
+		RetryDelay    int `toml:"retry_delay" mapstructure:"retry_delay"`
+		RetryMaxDelay int `toml:"retry_max_delay" mapstructure:"retry_max_delay"`
 		// pool
 		MaxOpen    int `toml:"max_open" mapstructure:"max_open"`
 		MaxIdle    int `toml:"max_idle" mapstructure:"max_idle"`
