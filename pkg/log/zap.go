@@ -326,7 +326,9 @@ func log(level zapcore.Level, output *bool, msg string, fields ...zap.Field) {
 		lg.Warn(msg, fields...)
 	case zapcore.ErrorLevel:
 		lg.Error(msg, fields...)
-	case zapcore.DPanicLevel, zapcore.PanicLevel:
+	case zapcore.DPanicLevel:
+		lg.DPanic(msg, fields...)
+	case zapcore.PanicLevel:
 		lg.Panic(msg, fields...)
 	case zapcore.FatalLevel:
 		lg.Fatal(msg, fields...)
@@ -397,6 +399,22 @@ func ErrorFmt(msg string, a ...any) {
 
 func ErrorFmtOutput(msg string, output bool, a ...any) {
 	log(zapcore.ErrorLevel, &output, fmt.Sprintf(msg, a...))
+}
+
+func DPanic(msg string, fields ...Field) {
+	log(zapcore.DPanicLevel, nil, msg, toZapFields(fields)...)
+}
+
+func DPanicOutput(msg string, output bool, fields ...Field) {
+	log(zapcore.DPanicLevel, &output, msg, toZapFields(fields)...)
+}
+
+func DPanicFmt(msg string, a ...any) {
+	log(zapcore.DPanicLevel, nil, fmt.Sprintf(msg, a...))
+}
+
+func DPanicFmtOutput(msg string, output bool, a ...any) {
+	log(zapcore.DPanicLevel, &output, fmt.Sprintf(msg, a...))
 }
 
 func Panic(msg string, fields ...Field) {

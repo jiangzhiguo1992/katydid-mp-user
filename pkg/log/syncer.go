@@ -67,6 +67,9 @@ func (d *DateWriteSyncer) triggerCleanup() {
 }
 
 func (d *DateWriteSyncer) cleanOldLogs() error {
+	d.Lock()
+	defer d.Unlock()
+
 	if d.maxAge <= 0 {
 		return nil
 	}
