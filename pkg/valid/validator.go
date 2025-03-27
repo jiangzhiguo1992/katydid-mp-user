@@ -97,11 +97,13 @@ func Get() *Validator {
 		opts := []validator.Option{
 			validator.WithRequiredStructEnabled(),
 		}
+
 		v = &Validator{
 			validate: validator.New(opts...),
 			regTypes: &sync.Map{},
 			regLocs:  &sync.Map{},
 		}
+
 		// 设置Tag <- 默认json标签
 		//validate.RegisterTagNameFunc(func(fld reflect.StructField) string {
 		//	name := fld.Tag.Get("json")
@@ -129,29 +131,34 @@ func Check(obj any, scene Scene) []*MsgErr {
 
 	// -- 执行验证(有缓存) --
 	if e := v.validate.Struct(obj); e != nil {
-		return v.handleValidationError(obj, typ, scene, e)
+		return v.handleValidationError(obj, scene, e)
 	}
 	return nil
 }
 
+// registerValidations 注册验证规则
 func (v *Validator) registerValidations(obj any, scene Scene) error {
 	// -- 字段验证注册 --
 	if e := v.validFields(obj, scene); e != nil {
 		return e
 	}
+
 	v.validate.RegisterStructValidation(func(sl validator.StructLevel) {
 		cObj := sl.Current().Addr().Interface()
+
 		// -- 额外验证注册 --
 		v.validExtra(cObj, sl, scene)
+
 		// -- 结构验证注册 --
 		v.validStruct(cObj, sl, scene)
 	}, obj)
 	return nil
 }
 
+// validFields 注册字段验证规则
 func (v *Validator) validFields(obj any, scene Scene) error {
 	// 处理嵌入字段的验证规则
-	if e := v.registerEmbeddedValidations(obj, reflect.TypeOf(obj), scene, 1, nil); e != nil {
+	if e := v.processEmbeddedValidations(obj, scene, 1, nil); e != nil {
 		return e
 	}
 
@@ -160,21 +167,28 @@ func (v *Validator) validFields(obj any, scene Scene) error {
 		return nil
 	}
 
+	// 获取验证规则
 	sceneRules := fv.ValidFieldRules()
 	if sceneRules == nil {
 		return nil
 	}
 	tagRules := make(map[Tag]FieldValidRuleFn)
+
+	// 注册全局验证规则
 	if tRules := sceneRules[SceneAll]; tRules != nil {
 		for tag, rule := range tRules {
 			tagRules[tag] = rule
 		}
 	}
+
+	// 注册当前场景验证规则
 	if tRules := sceneRules[scene]; tRules != nil {
 		for tag, rule := range tRules {
 			tagRules[tag] = rule
 		}
 	}
+
+	// 注册验证规则
 	for tag, rule := range tagRules {
 		if e := v.validate.RegisterValidation(string(tag), func(fl validator.FieldLevel) bool {
 			return rule(fl.Field(), fl.Param())
@@ -185,30 +199,38 @@ func (v *Validator) validFields(obj any, scene Scene) error {
 	return nil
 }
 
+// validExtra 注册额外验证规则
 func (v *Validator) validExtra(obj any, sl validator.StructLevel, scene Scene) {
 	// 处理嵌入字段的验证规则
-	_ = v.registerEmbeddedValidations(obj, reflect.TypeOf(obj), scene, 2, sl)
+	_ = v.processEmbeddedValidations(obj, scene, 2, sl)
 
 	ev, ok := obj.(IExtraValidator)
 	if !ok {
 		return
 	}
 
+	// 获取验证规则
 	extra, sceneRules := ev.ValidExtraRules()
 	if (extra == nil) || (sceneRules == nil) {
 		return
 	}
 	tagRules := make(map[Tag]ExtraValidRuleInfo)
+
+	// 注册全局验证规则
 	if tRules := sceneRules[SceneAll]; tRules != nil {
 		for tag, rule := range tRules {
 			tagRules[tag] = rule
 		}
 	}
+
+	// 注册当前场景验证规则
 	if tRules := sceneRules[scene]; tRules != nil {
 		for tag, rule := range tRules {
 			tagRules[tag] = rule
 		}
 	}
+
+	// 注册验证规则
 	for tag, rule := range tagRules {
 		value, exists := extra[string(tag)]
 		if (tag == TagRequired) && !exists {
@@ -221,16 +243,18 @@ func (v *Validator) validExtra(obj any, sl validator.StructLevel, scene Scene) {
 	}
 }
 
+// validStruct 注册结构体验证规则
 func (v *Validator) validStruct(obj any, sl validator.StructLevel, scene Scene) {
-	// 处理嵌入字段的验证规则
-	_ = v.registerEmbeddedValidations(obj, reflect.TypeOf(obj), SceneAll, 3, sl)
-	_ = v.registerEmbeddedValidations(obj, reflect.TypeOf(obj), scene, 3, sl)
+	// 处理嵌入字段的验证规则(全局+当前)
+	_ = v.processEmbeddedValidations(obj, SceneAll, 3, sl)
+	_ = v.processEmbeddedValidations(obj, scene, 3, sl)
 
 	sv, ok := obj.(IStructValidator)
 	if !ok {
 		return
 	}
 
+	// 获取验证规则(全局+当前)
 	sv.ValidStructRules(SceneAll, func(field any, fieldName FieldName, tag Tag, param string) {
 		sl.ReportError(field, string(fieldName), string(fieldName), string(tag), param)
 	})
@@ -239,15 +263,13 @@ func (v *Validator) validStruct(obj any, sl validator.StructLevel, scene Scene) 
 	})
 }
 
-// registerEmbeddedValidations 递归注册组合类型的验证规则
-func (v *Validator) registerEmbeddedValidations(
-	obj any,
-	typ reflect.Type,
-	scene Scene,
-	ttt int,
-	sl validator.StructLevel,
+// processEmbeddedValidations 递归注册组合类型的验证规则
+func (v *Validator) processEmbeddedValidations(
+	obj any, scene Scene,
+	ttt int, sl validator.StructLevel,
 ) error {
 	val := reflect.ValueOf(obj)
+	typ := reflect.TypeOf(obj)
 	if val.Kind() == reflect.Ptr {
 		val = val.Elem()
 		typ = typ.Elem()
@@ -299,45 +321,47 @@ func (v *Validator) registerEmbeddedValidations(
 	return nil
 }
 
+// handleValidationError 处理验证错误
 func (v *Validator) handleValidationError(
-	obj any,
-	typ reflect.Type,
-	scene Scene,
-	e error,
+	obj any, scene Scene, e error,
 ) []*MsgErr {
 	var invalidErr *validator.InvalidValidationError
 	if errors.As(e, &invalidErr) {
 		// -- 验证失败 --
 		return []*MsgErr{{Err: e, Msg: "invalid_object_validation"}}
 	}
+
 	var validateErrs validator.ValidationErrors
 	if errors.As(e, &validateErrs) {
 		// -- 本地化错误注册 --
 		if rl, ok := obj.(ILocalizeValidator); ok {
-			return v.validLocalize(scene, typ, obj, rl, validateErrs, true)
+			return v.validLocalize(scene, obj, rl, validateErrs, true)
 		}
 	}
 	return []*MsgErr{{Err: e, Msg: "unknown_validator_err"}}
 }
 
+// validLocalize 验证本地化错误
 func (v *Validator) validLocalize(
-	scene Scene,
-	typ reflect.Type,
-	obj any,
+	scene Scene, obj any,
 	rl ILocalizeValidator,
 	validateErrs validator.ValidationErrors,
 	first bool,
 ) []*MsgErr {
 	var msgErrs []*MsgErr
 	// 处理组合类型的验证规则
-	if msgEs := v.registerEmbeddedLocalizes(scene, typ, obj, validateErrs); msgEs != nil {
+	if msgEs := v.processEmbeddedLocalizes(scene, obj, validateErrs); msgEs != nil {
 		msgErrs = append(msgErrs, msgEs...)
 	}
 
-	tagFieldRules := make(map[Tag]map[FieldName]LocalizeValidRuleParam)
-	tagRules := make(map[Tag]LocalizeValidRuleParam)
+	var localRule LocalizeValidRule
+	typ := reflect.TypeOf(obj)
 	cacheRules, ok := v.regLocs.Load(typ)
 	if !ok {
+		// 没有就缓存，注册本地化规则
+		tagFieldRules := make(map[Tag]map[FieldName]LocalizeValidRuleParam)
+		tagRules := make(map[Tag]LocalizeValidRuleParam)
+
 		sceneRules := rl.ValidLocalizeRules()
 		if sceneRules == nil {
 			return msgErrs
@@ -362,15 +386,16 @@ func (v *Validator) validLocalize(
 				tagRules[tag] = rule
 			}
 		}
-		v.regLocs.Store(typ, LocalizeValidRule{tagFieldRules, tagRules})
+		localRule = LocalizeValidRule{Rule1: tagFieldRules, Rule2: tagRules}
+		v.regLocs.Store(typ, localRule)
 	} else {
-		tagFieldRules = cacheRules.(LocalizeValidRule).Rule1
-		tagRules = cacheRules.(LocalizeValidRule).Rule2
+		// 有就直接使用
+		localRule = cacheRules.(LocalizeValidRule)
 	}
 
 	for _, ee := range validateErrs {
 		// -- 本地化错误注册(Tag+Field) --
-		for tag, fieldRules := range tagFieldRules {
+		for tag, fieldRules := range localRule.Rule1 {
 			if ee.Tag() == string(tag) {
 				for field, rules := range fieldRules {
 					if ee.Field() == string(field) {
@@ -387,7 +412,7 @@ func (v *Validator) validLocalize(
 			}
 		}
 		// -- 本地化错误注册(Tag) --
-		for tag, rules := range tagRules {
+		for tag, rules := range localRule.Rule2 {
 			if ee.Tag() == string(tag) {
 				var params []any
 				if rules[2] != nil {
@@ -400,20 +425,23 @@ func (v *Validator) validLocalize(
 			}
 		}
 	}
+
+	// 找不到就返回默认
 	if (len(msgErrs) <= 0) && first {
 		msgErrs = append(msgErrs, &MsgErr{Msg: "unknown_validator_err"})
 	}
 	return msgErrs
 }
 
-// registerEmbeddedLocalizes 递归注册组合类型的本地化规则
-func (v *Validator) registerEmbeddedLocalizes(
-	scene Scene,
-	typ reflect.Type,
-	obj any,
+// processEmbeddedLocalizes 递归注册组合类型的本地化规则
+func (v *Validator) processEmbeddedLocalizes(
+	scene Scene, obj any,
 	validateErrs validator.ValidationErrors,
 ) []*MsgErr {
+	var allMsgErrs []*MsgErr
+
 	val := reflect.ValueOf(obj)
+	typ := reflect.TypeOf(obj)
 	if val.Kind() == reflect.Ptr {
 		val = val.Elem()
 		typ = typ.Elem()
@@ -447,18 +475,25 @@ func (v *Validator) registerEmbeddedLocalizes(
 		if fieldType.Kind() != reflect.Struct || embedObj == nil {
 			continue
 		}
+
 		if embedLocValidator, ok := embedObj.(ILocalizeValidator); ok {
+			// 如果嵌入字段实现了ILocalizeValidator接口
 			if msgErrs := v.validLocalize(
 				scene,
-				reflect.TypeOf(embedObj),
 				embedObj,
 				embedLocValidator,
 				validateErrs,
 				false,
 			); msgErrs != nil {
-				return msgErrs
+				allMsgErrs = append(allMsgErrs, msgErrs...)
+			}
+		} else {
+			// 递归处理嵌入字段的本地化规则
+			if embedMsgErrs := v.processEmbeddedLocalizes(scene, embedObj, validateErrs); embedMsgErrs != nil {
+				allMsgErrs = append(allMsgErrs, embedMsgErrs...)
 			}
 		}
 	}
-	return nil
+
+	return allMsgErrs
 }
