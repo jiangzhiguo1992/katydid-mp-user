@@ -14,19 +14,25 @@ var (
 
 // Matcher 错误匹配器
 type Matcher struct {
-	codeLocIds map[int][]string
-	patterns   map[string]string
-	onWarn     func(string)
-	mu         sync.RWMutex // 仅用于保护 codeLocIds 和 patterns 的并发读取
+	codeLocIds map[int][]string  // 错误码到本地化ID列表的映射
+	patterns   map[string]string // 错误模式到本地化ID的映射
+	onWarn     func(string)      // 警告回调函数
+	mu         sync.RWMutex      // 用于保护 codeLocIds 和 patterns 的并发读取
 
 	patternCache sync.Map // 缓存已匹配的错误信息和对应的locId
 	codeCache    sync.Map // 缓存locId和对应的code
-	//commonErrorCache sync.Map // 缓存常见错误消息的结果
 }
 
 // Init 初始化错误匹配器
 func Init(codes map[int][]string, patterns map[string]string, onWarn func(string)) {
 	once.Do(func() {
+		if codes == nil {
+			codes = make(map[int][]string)
+		}
+		if patterns == nil {
+			patterns = make(map[string]string)
+		}
+
 		matcher = &Matcher{
 			codeLocIds: codes,
 			patterns:   patterns,
@@ -36,13 +42,15 @@ func Init(codes map[int][]string, patterns map[string]string, onWarn func(string
 		// 预热缓存：将locId到code的映射预先计算并缓存
 		for code, locIds := range codes {
 			for _, locId := range locIds {
-				matcher.codeCache.Store(locId, code)
+				if locId != "" {
+					matcher.codeCache.Store(locId, code)
+				}
 			}
 		}
 	})
 }
 
-// MatchErr 匹配错误
+// MatchErr 匹配错误并转换为 CodeErrs
 func MatchErr(err error) *CodeErrs {
 	if err == nil {
 		return nil
@@ -109,7 +117,7 @@ func (m *Matcher) findLocId(errMsg string) (string, bool) {
 
 	// 从patterns中查找匹配的本地化ID
 	for pattern, msgID := range m.patterns {
-		if strings.Contains(errMsg, pattern) {
+		if pattern != "" && strings.Contains(errMsg, pattern) {
 			// 缓存结果
 			m.patternCache.Store(errMsg, msgID)
 			return msgID, true

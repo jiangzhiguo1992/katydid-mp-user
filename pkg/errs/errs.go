@@ -5,7 +5,7 @@ import (
 	"strings"
 )
 
-// CodeErrs 定义多错误结构
+// CodeErrs 定义带错误码的多错误结构
 type (
 	CodeErrs struct {
 		code      int
@@ -19,6 +19,7 @@ type (
 	}
 )
 
+// New 创建一个新的错误集合，过滤掉nil错误
 func New(errs ...error) *CodeErrs {
 	var validErrs []error
 	for _, err := range errs {
@@ -96,7 +97,7 @@ func (c *CodeErrs) Code() int {
 	return c.code
 }
 
-// Errs 获取错误
+// Errs 获取所有错误
 func (c *CodeErrs) Errs() []error {
 	return c.errs
 }
@@ -130,6 +131,8 @@ func (c *CodeErrs) HasLocales() bool {
 	return len(c.localizes) > 0
 }
 
+// ToLocales 将本地化信息转换为字符串
+// func是将localeId、模板参数转换为本地化消息的函数
 func (c *CodeErrs) ToLocales(fun func(string, []any, map[string]any) string) string {
 	if len(c.localizes) == 0 {
 		return fmt.Sprintf("%d: unknown error(localeIds)", c.code)
