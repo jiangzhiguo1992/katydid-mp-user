@@ -4,9 +4,10 @@ import (
 	"regexp"
 	"sort"
 	"strings"
+	"unicode"
 )
 
-// PhoneCountryCode represents a country phone code
+// PhoneCountryCode 表示国家电话代码
 type PhoneCountryCode struct {
 	Code     string
 	Name     string
@@ -20,7 +21,7 @@ var (
 	// numberOnlyRegex 用于仅验证号码部分(纯数字)
 	numberOnlyRegex = regexp.MustCompile(`^[0-9]{6,15}$`)
 
-	// CountryCodes List of country codes
+	// CountryCodes 国家代码列表
 	CountryCodes = []PhoneCountryCode{
 		{"1", "United States/Canada", []string{"^[2-9]\\d{2}[2-9]\\d{6}$"}},
 		{"7", "Russia", []string{"^9\\d{9}$", "^[1-8]\\d{9}$"}},
@@ -245,7 +246,7 @@ func init() {
 		countryCodeMap[countryCode.Code] = countryCode
 		sortedCountryCodes = append(sortedCountryCodes, countryCode.Code)
 
-		// ���编译模式以提升性能
+		// 预编译模式以提升性能
 		var patterns []*regexp.Regexp
 		for _, pattern := range countryCode.Patterns {
 			patterns = append(patterns, regexp.MustCompile(pattern))
@@ -271,10 +272,7 @@ func IsPhone(phone string) (*PhoneCountryCode, string, bool) {
 		matches := internationalPhoneRegex.FindStringSubmatch(phone)
 		if len(matches) == 3 {
 			code := matches[1]
-			number := strings.ReplaceAll(matches[2], "-", "")
-			number = strings.ReplaceAll(number, "(", "")
-			number = strings.ReplaceAll(number, ")", "")
-			number = strings.ReplaceAll(number, " ", "")
+			number := cleanDigitsOnly(matches[2])
 
 			if countryCode, exists := countryCodeMap[code]; exists {
 				_, _, valid := IsPhoneNumber(code, number)
@@ -298,7 +296,7 @@ func IsPhone(phone string) (*PhoneCountryCode, string, bool) {
 // IsPhoneNumber 验证特定国家代码的电话号码
 func IsPhoneNumber(code, number string) (*PhoneCountryCode, string, bool) {
 	// 清理号码，移除非数字字符
-	number = regexp.MustCompile(`\D`).ReplaceAllString(cleanPhoneNumber(number), "")
+	number = cleanDigitsOnly(cleanPhoneNumber(number))
 	if number == "" {
 		return nil, "", false
 	}
@@ -310,8 +308,8 @@ func IsPhoneNumber(code, number string) (*PhoneCountryCode, string, bool) {
 	}
 
 	// 使用预编译的正则表达式验证
-	patterns := compiledPatterns[code]
-	if len(patterns) > 0 {
+	patterns, exists := compiledPatterns[code]
+	if exists && len(patterns) > 0 {
 		for _, re := range patterns {
 			if re.MatchString(number) {
 				return countryCode, number, true
@@ -337,6 +335,9 @@ func IsPhoneCountryCode(code string) (*PhoneCountryCode, bool) {
 
 	// 检查国家代码是否有效
 	countryCode, exists := countryCodeMap[code]
+	if !exists {
+		return nil, false
+	}
 	return &countryCode, exists
 }
 
@@ -344,7 +345,7 @@ func IsPhoneCountryCode(code string) (*PhoneCountryCode, bool) {
 func FormatPhone(phone string) string {
 	code, number, ok := IsPhone(phone)
 	if !ok {
-		return phone
+		return phone // 返回原始输入，因为它不是有效的电话号码
 	}
 
 	// 如果没有国家代码，只返回号码
@@ -376,6 +377,11 @@ func FindPhonesInText(text string) []string {
 
 // FindPhoneCountryByName 通过名称搜索国家代码
 func FindPhoneCountryByName(name string) []PhoneCountryCode {
+	name = strings.TrimSpace(name)
+	if name == "" {
+		return nil
+	}
+
 	name = strings.ToLower(name)
 	var results []PhoneCountryCode
 
@@ -388,12 +394,16 @@ func FindPhoneCountryByName(name string) []PhoneCountryCode {
 	return results
 }
 
-// 查找匹配的国家代码，通过按长度排序后的代码列表提高效率
+// findMatchingCountryCode 查找匹配的国家代码，通过按长度排序后的代码列表提高效率
 func findMatchingCountryCode(phone string) (*PhoneCountryCode, string, bool) {
 	for _, code := range sortedCountryCodes {
 		if strings.HasPrefix(phone, code) {
 			number := phone[len(code):]
-			countryCode := countryCodeMap[code]
+			countryCode, exists := countryCodeMap[code]
+			if !exists {
+				continue
+			}
+
 			_, _, valid := IsPhoneNumber(code, number)
 			return &countryCode, number, valid
 		}
@@ -401,9 +411,18 @@ func findMatchingCountryCode(phone string) (*PhoneCountryCode, string, bool) {
 	return nil, phone, false
 }
 
-// 清理电话号码，移除非必要字符
+// cleanPhoneNumber 清理电话号码，移除所有空白字符
 func cleanPhoneNumber(phone string) string {
 	phone = strings.TrimSpace(phone)
-	phone = strings.ReplaceAll(phone, " ", "")
-	return phone
+	return strings.Map(func(r rune) rune {
+		if unicode.IsSpace(r) {
+			return -1
+		}
+		return r
+	}, phone)
+}
+
+// cleanDigitsOnly 只保留数字字符
+func cleanDigitsOnly(input string) string {
+	return regexp.MustCompile(`\D`).ReplaceAllString(input, "")
 }
