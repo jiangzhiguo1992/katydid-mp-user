@@ -75,7 +75,7 @@ func Subscribe(key string, callback func(value any)) func() {
 		return func() {}
 	}
 	id := uuid.New().String()
-	slog.Info("■ ■ Conf ■ ■ subscribe", slog.String("key", key), slog.String("id", id))
+	slog.Info("■ ■ Conf ■ ■ 订阅", slog.String("key", key), slog.String("id", id))
 
 	manager.mu.Lock()
 	manager.subscribers = append(manager.subscribers, ChangeSubscriber{
@@ -94,7 +94,7 @@ func Subscribe(key string, callback func(value any)) func() {
 			if sub.ID == id {
 				// 删除订阅
 				manager.subscribers = append(manager.subscribers[:i], manager.subscribers[i+1:]...)
-				slog.Info("■ ■ Conf ■ ■ subscribe cancel", slog.String("key", sub.Key), slog.String("id", sub.ID))
+				slog.Info("■ ■ Conf ■ ■ 订阅取消触发", slog.String("key", sub.Key), slog.String("id", sub.ID))
 				break
 			}
 		}
@@ -162,7 +162,7 @@ func (m *Manager) loadConfigs(priority int, confDir string, subs ...string) erro
 	// 读取目录下的所有file
 	files, err := os.ReadDir(dir)
 	if err != nil {
-		return fmt.Errorf("■ ■ Conf ■ ■ read dir %s failed: %w", dir, err)
+		return fmt.Errorf("■ ■ Conf ■ ■ 加载文件夹 %s 失败: %w", dir, err)
 	}
 
 	// files排序，init文件优先处理
@@ -185,7 +185,9 @@ func (m *Manager) loadConfigs(priority int, confDir string, subs ...string) erro
 	for _, file := range files {
 		if file.IsDir() {
 			// 递归处理子目录
-			return m.loadConfigs(priority, filepath.Join(dir, file.Name()))
+			if err = m.loadConfigs(priority, filepath.Join(dir, file.Name())); err != nil {
+				return err
+			}
 		} else {
 			err = m.loadConfig(priority, dir, file.Name())
 			if err != nil {
@@ -197,7 +199,7 @@ func (m *Manager) loadConfigs(priority int, confDir string, subs ...string) erro
 	return nil
 }
 
-// loadConfigs 加载配置文件
+// loadConfig 加载配置文件
 func (m *Manager) loadConfig(priority int, confDir string, fileName string) error {
 	if _, ok := m.subs[priority]; !ok {
 		m.subs[priority] = make(map[string]*viper.Viper)
@@ -239,9 +241,9 @@ func (m *Manager) loadConfig(priority int, confDir string, fileName string) erro
 
 	// 读取配置文件
 	if err := subViper.ReadInConfig(); err != nil {
-		return fmt.Errorf("■ ■ Conf ■ ■ read file %s/%s failed: %w", confDir, fileName, err)
+		return fmt.Errorf("■ ■ Conf ■ ■ 加载文件 %s/%s 失败: %w", confDir, fileName, err)
 	}
-	slog.Info("■ ■ Conf ■ ■ read file success", slog.String("path", subsKey))
+	slog.Info("■ ■ Conf ■ ■ 加载文件成功", slog.String("path", subsKey))
 
 	return nil
 }
@@ -266,7 +268,7 @@ func (m *Manager) parseConfigs() error {
 
 	// 首次解析
 	if err := m.main.Unmarshal(m.config); err != nil {
-		return fmt.Errorf("■ ■ Conf ■ ■ unmarshal failed: %w", err)
+		return fmt.Errorf("■ ■ Conf ■ ■ 解析失败 failed: %w", err)
 	}
 
 	// 设置默认值
@@ -274,7 +276,7 @@ func (m *Manager) parseConfigs() error {
 
 	// 再次解析覆盖默认值
 	if err := m.main.Unmarshal(m.config); err != nil {
-		return fmt.Errorf("■ ■ Conf ■ ■ unmarshal again failed: %w", err)
+		return fmt.Errorf("■ ■ Conf ■ ■ 再次解析失败: %w", err)
 	}
 
 	return nil
@@ -310,19 +312,19 @@ func (m *Manager) loadRemoteConfig() error {
 		m.config.RemoteConf.Path,
 	)
 	if err != nil {
-		return fmt.Errorf("■ ■ Conf ■ ■ add remote provider failed: %w", err)
+		return fmt.Errorf("■ ■ Conf ■ ■ 添加远程提供者失败: %w", err)
 	}
 
 	// 设置远程配置类型
 	m.main.SetConfigType("toml")
 
 	if err = m.main.ReadRemoteConfig(); err != nil {
-		return fmt.Errorf("■ ■ Conf ■ ■ read remote config failed: %w", err)
+		return fmt.Errorf("■ ■ Conf ■ ■ 加载远程提供者失败: %w", err)
 	}
 
 	// 解析远程配置
 	if err = m.parseConfigs(); err != nil {
-		return fmt.Errorf("■ ■ Conf ■ ■ parse remote config failed: %w", err)
+		return fmt.Errorf("■ ■ Conf ■ ■ 解析远程提供者失败: %w", err)
 	}
 
 	// 打印远程配置
@@ -342,26 +344,29 @@ func (m *Manager) watchRemoteConfig() {
 		refreshInterval = 30 * time.Second
 	}
 
-	// TODO:GG 需要改，没有结合channel
+	ticker := time.NewTicker(refreshInterval)
+	defer ticker.Stop()
+
 	for {
-		time.Sleep(refreshInterval)
+		select {
+		case <-ticker.C:
+			// 监听远程配置变化
+			err := m.main.WatchRemoteConfig()
+			if err != nil {
+				slog.Error("■ ■ Conf ■ ■ 监听远程变化失败", slog.Any("err", err))
+				continue
+			}
 
-		// 监听远程配置变化
-		err := m.main.WatchRemoteConfig()
-		if err != nil {
-			slog.Error("■ ■ Conf ■ ■ watch remote failed", slog.Any("err", err))
-			continue
+			// 使用相同的变更处理流程
+			m.handleConfigChange(fsnotify.Event{Op: fsnotify.Write}, "remote")
 		}
-
-		// 使用相同的变更处理流程
-		m.handleConfigChange(fsnotify.Event{Op: fsnotify.Write}, "remote")
 	}
 }
 
 // handleConfigChange 处理配置变更
 func (m *Manager) handleConfigChange(e fsnotify.Event, source string) {
 	slog.Info(
-		"■ ■ Conf ■ ■ on change",
+		"■ ■ Conf ■ ■ 文件改动",
 		slog.String("source", source),
 		slog.String("op", e.Op.String()),
 		slog.String("name", e.Name),
@@ -381,7 +386,7 @@ func (m *Manager) handleConfigChange(e fsnotify.Event, source string) {
 	m.mu.Unlock()
 
 	if err != nil {
-		slog.Error("■ ■ Conf ■ ■ config change failed",
+		slog.Error("■ ■ Conf ■ ■ 改动后解析失败",
 			slog.String("source", source),
 			slog.Any("err", err))
 		return
@@ -409,7 +414,7 @@ func (m *Manager) notifySubscribers(prevConfig map[string]interface{}) {
 		}
 
 		slog.Info(
-			"■ ■ Conf ■ ■ notify subscriber",
+			"■ ■ Conf ■ ■ 通知订阅者",
 			slog.String("key", subscriber.Key),
 			slog.Any("value", newValue),
 		)
@@ -422,18 +427,15 @@ func (m *Manager) notifySubscribers(prevConfig map[string]interface{}) {
 func (m *Manager) logSettings(group string, settings map[string]any) {
 	for k, v := range settings {
 		if vs, ok := v.(map[string]any); ok {
-			nextGroup := ""
-			if len(group) <= 0 {
-				nextGroup = fmt.Sprintf("%s.", k)
-			} else {
-				nextGroup = fmt.Sprintf("%s%s.", group, k)
+			nextGroup := k
+			if group != "" {
+				nextGroup = group + k
 			}
-			m.logSettings(nextGroup, vs)
+			m.logSettings(nextGroup+".", vs)
 			continue
 		}
-		key := fmt.Sprintf("%s%s ", group, k)
+		key := group + k
 		val := slog.Any("", v).Value.String()
-		sprintf := fmt.Sprintf("%s = %s", key, val)
-		slog.Info(fmt.Sprintf("■ ■ Conf ■ ■ ---> %s", sprintf))
+		slog.Info(fmt.Sprintf("■ ■ Conf ■ ■ ---> %s = %s", key, val))
 	}
 }
