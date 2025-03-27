@@ -40,7 +40,15 @@ type (
 	}
 
 	AppConf struct {
+		Server Server `toml:"server" mapstructure:"server"`
+
 		ModuleConf `mapstructure:",squash"`
+	}
+
+	Server struct {
+		ApiDomain    string `toml:"api_domain" mapstructure:"api_domain"`
+		ApiHttpPort  string `toml:"api_http_port" mapstructure:"api_http_port"`
+		ApiHttpsPort string `toml:"api_https_port" mapstructure:"api_https_port"`
 	}
 
 	AuthConf struct {
@@ -56,17 +64,11 @@ type (
 	}
 
 	ModuleConf struct {
-		Enable bool      `toml:"enable" mapstructure:"enable"`
-		Server Server    `toml:"server" mapstructure:"server"`
-		PgSql  PgSqlConf `toml:"pgsql" mapstructure:"pgsql"`
-		Redis  RedisConf `toml:"redis"  mapstructure:"redis"`
-		Mongo  MongoConf `toml:"mongo"  mapstructure:"mongo"`
-	}
-
-	Server struct {
-		ApiDomain    string `toml:"api_domain" mapstructure:"api_domain"`
-		ApiHttpPort  string `toml:"api_http_port" mapstructure:"api_http_port"`
-		ApiHttpsPort string `toml:"api_https_port" mapstructure:"api_https_port"`
+		Enable bool       `toml:"enable" mapstructure:"enable"`
+		PgSql  *PgSqlConf `toml:"pgsql" mapstructure:"pgsql"`
+		Redis  *RedisConf `toml:"redis"  mapstructure:"redis"`
+		Mongo  *MongoConf `toml:"mongo"  mapstructure:"mongo"`
+		// TODO:GG 其他诸如tidb等数据库配置
 	}
 
 	PgSqlConf struct {
@@ -76,8 +78,8 @@ type (
 			DBName string `toml:"db_name" mapstructure:"db_name"`
 			User   string `toml:"user" mapstructure:"user"`
 			Pwd    string `toml:"pwd" mapstructure:"pwd"`
-		} `toml:"write"`
-		Read struct {
+		} `mapstructure:",squash"`
+		Read *struct {
 			Host   []string `toml:"host" mapstructure:"host"`
 			Port   []int    `toml:"port" mapstructure:"port"`
 			DBName []string `toml:"db_name" mapstructure:"db_name"`
@@ -117,18 +119,22 @@ type (
 	}
 )
 
+// IsDebug 调试模式 (本地开发)
 func (m *Config) IsDebug() bool {
 	return (m.Env == "dev") || (m.Env == "fat")
 }
 
+// IsTest 测试模式 (云测试环境)
 func (m *Config) IsTest() bool {
 	return m.Env == "uat"
 }
 
+// IsProd 生产模式 (云线上环境)
 func (m *Config) IsProd() bool {
 	return m.Env == "pro"
 }
 
+// merge 主要是为了覆盖默认配置，不好自动化处理，手动配置
 func (m *Config) merge() {
 	m.Auth.ModuleConf = m.AppConf.ModuleConf
 	m.Client.ModuleConf = m.AppConf.ModuleConf
