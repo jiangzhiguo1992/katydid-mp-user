@@ -303,18 +303,26 @@ func (v *Validator) processEmbeddedValidations(
 		if fieldType.Kind() != reflect.Struct || embedObj == nil {
 			continue
 		}
+
+		// 递归处理嵌入字段
+		if err := v.processEmbeddedValidations(embedObj, scene, ttt, sl); err != nil {
+			return err
+		}
+
 		switch ttt {
 		case 1:
 			if fv, okk := embedObj.(IFieldValidator); okk {
-				return v.validFields(fv, scene)
+				if err := v.validFields(fv, scene); err != nil {
+					return err
+				}
 			}
 		case 2:
-			if _, okk := embedObj.(IExtraValidator); okk {
-				v.validExtra(embedObj, sl, scene)
+			if ev, okk := embedObj.(IExtraValidator); okk {
+				v.validExtra(ev, sl, scene)
 			}
 		case 3:
-			if _, okk := embedObj.(IStructValidator); okk {
-				v.validStruct(embedObj, sl, scene)
+			if sv, okk := embedObj.(IStructValidator); okk {
+				v.validStruct(sv, sl, scene)
 			}
 		}
 	}
@@ -471,13 +479,18 @@ func (v *Validator) processEmbeddedLocalizes(
 			embedObj = fieldVal.Addr().Interface()
 		}
 
-		// 只处理实现了 ILocalizeValidator 接口的组合字段
+		// 只处理结构体类型的组合字段
 		if fieldType.Kind() != reflect.Struct || embedObj == nil {
 			continue
 		}
 
+		// 递归处理嵌入字段的本地化规则（无论是否实现接口）
+		if embedMsgErrs := v.processEmbeddedLocalizes(scene, embedObj, validateErrs); embedMsgErrs != nil {
+			allMsgErrs = append(allMsgErrs, embedMsgErrs...)
+		}
+
+		// 如果嵌入字段实现了ILocalizeValidator接口
 		if embedLocValidator, ok := embedObj.(ILocalizeValidator); ok {
-			// 如果嵌入字段实现了ILocalizeValidator接口
 			if msgErrs := v.validLocalize(
 				scene,
 				embedObj,
@@ -486,11 +499,6 @@ func (v *Validator) processEmbeddedLocalizes(
 				false,
 			); msgErrs != nil {
 				allMsgErrs = append(allMsgErrs, msgErrs...)
-			}
-		} else {
-			// 递归处理嵌入字段的本地化规则
-			if embedMsgErrs := v.processEmbeddedLocalizes(scene, embedObj, validateErrs); embedMsgErrs != nil {
-				allMsgErrs = append(allMsgErrs, embedMsgErrs...)
 			}
 		}
 	}
