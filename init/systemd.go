@@ -40,14 +40,22 @@ func init() {
 		DefaultLang: config.LangConf.Default,
 		DocDirs:     configs.LangDirs,
 		OnInfo: func(msg string, fields map[string]any) {
-			if config.IsDebug() {
-				log.Info(msg, log.FAny("fields", fields))
-			} else {
-				log.InfoOutput(msg, true, log.FAny("fields", fields))
+			var fs []log.Field
+			if fields != nil {
+				for k, v := range fields {
+					fs = append(fs, log.FAny(k, v))
+				}
 			}
+			log.InfoOutput(msg, !config.IsDebug(), fs...)
 		},
 		OnErr: func(msg string, fields map[string]any) {
-			log.Error(msg, log.FAny("fields", fields))
+			var fs []log.Field
+			if fields != nil {
+				for k, v := range fields {
+					fs = append(fs, log.FAny(k, v))
+				}
+			}
+			log.Error(msg, fs...)
 		},
 	})
 	if err != nil {
@@ -153,15 +161,27 @@ func (s *StoreLogger) LogMode(logger.LogLevel) logger.Interface {
 }
 
 func (s *StoreLogger) Info(ctx context.Context, msg string, params ...interface{}) {
-	log.Info(msg, log.FAny("params", params))
+	var field []log.Field
+	if params != nil {
+		field = append(field, log.FAny("params", params))
+	}
+	log.Info(msg, field...)
 }
 
 func (s *StoreLogger) Warn(ctx context.Context, msg string, params ...interface{}) {
-	log.Warn(msg, log.FAny("params", params))
+	var field []log.Field
+	if params != nil {
+		field = append(field, log.FAny("params", params))
+	}
+	log.Warn(msg, field...)
 }
 
 func (s *StoreLogger) Error(ctx context.Context, msg string, params ...interface{}) {
-	log.Error(msg, log.FAny("params", params))
+	var field []log.Field
+	if params != nil {
+		field = append(field, log.FAny("params", params))
+	}
+	log.Error(msg, field...)
 }
 
 func (s *StoreLogger) Trace(ctx context.Context, begin time.Time, fc func() (sql string, rowsAffected int64), err error) {
@@ -180,7 +200,7 @@ func (s *StoreLogger) Trace(ctx context.Context, begin time.Time, fc func() (sql
 		fields = append(fields, log.FError(err))
 		log.Error("SQL执行失败", fields...)
 	} else if elapsed > time.Second {
-		// 慢查询警告阈值，可以根据需要调整
+		// 慢查询警告阈值， TODO:GG 需要调整
 		log.Warn("SQL执行过慢", fields...)
 	} else {
 		// 正常查询可以选择记录为Debug级别或Info级别

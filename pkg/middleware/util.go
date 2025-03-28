@@ -18,7 +18,11 @@ const (
 	AuthKeyAccountID = "accountId"
 )
 
+// ResponseData 统一响应数据
 func ResponseData(c *gin.Context, code int, obj any) {
+	if c == nil {
+		return
+	}
 	accept := c.GetHeader("Accept")
 	if accept == "" || strings.Contains(accept, "*/*") || strings.Contains(accept, "application/*") {
 		accept = binding.MIMEJSON
@@ -38,6 +42,6 @@ func ResponseData(c *gin.Context, code int, obj any) {
 	case strings.Contains(accept, binding.MIMEHTML):
 		c.HTML(code, "", obj)
 	default:
-		c.JSON(code, obj)
+		c.JSON(code, obj) // 默认使用JSON格式
 	}
 }
