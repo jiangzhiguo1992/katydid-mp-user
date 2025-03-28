@@ -46,7 +46,7 @@ func init() {
 					fs = append(fs, log.FAny(k, v))
 				}
 			}
-			log.InfoOutput(msg, !config.IsDebug(), fs...)
+			log.InfoMust(!config.IsDebug(), msg, fs...)
 		},
 		OnErr: func(msg string, fields map[string]any) {
 			var fs []log.Field
@@ -55,16 +55,16 @@ func init() {
 					fs = append(fs, log.FAny(k, v))
 				}
 			}
-			log.Error(msg, fs...)
+			log.ErrorMust(!config.IsDebug(), msg, fs...)
 		},
 	})
 	if err != nil {
-		log.Fatal("i18n", log.FError(err))
+		log.FatalMust(!config.IsDebug(), "i18n", log.FError(err))
 	}
 
 	// error
 	errs.Init(msg.ErrCodePatterns, msg.ErrMsgPatterns, func(msg string) {
-		log.WarnFmt(msg)
+		log.WarnFmtMust(!config.IsDebug(), msg)
 	})
 
 	// TODO:GG role
@@ -76,7 +76,7 @@ func init() {
 	if PgSql := config.PgSql; PgSql != nil {
 		dbConfig := storage.DBConfig{
 			Kind:   storage.DBKindPgSQL,
-			Logger: &StoreLogger{},
+			Logger: &StoreLogger{!config.IsDebug()},
 			// db
 			Host:     PgSql.Write.Host,
 			Port:     PgSql.Write.Port,
@@ -148,13 +148,15 @@ func init() {
 		name := "pgsql.main" // TODO:GG 放哪里
 		_, err = storage.InitConnect(name, dbConfig)
 		if err != nil {
-			log.Fatal(fmt.Sprintf("storage %s", name), log.FError(err))
+			log.FatalMust(!config.IsDebug(), fmt.Sprintf("storage %s", name), log.FError(err))
 		}
 	}
 }
 
 // StoreLogger 实现了gorm.Logger接口
-type StoreLogger struct{}
+type StoreLogger struct {
+	output bool
+}
 
 func (s *StoreLogger) LogMode(logger.LogLevel) logger.Interface {
 	return s
@@ -173,7 +175,7 @@ func (s *StoreLogger) Warn(ctx context.Context, msg string, params ...interface{
 	if params != nil {
 		field = append(field, log.FAny("params", params))
 	}
-	log.Warn(msg, field...)
+	log.WarnMust(s.output, msg, field...)
 }
 
 func (s *StoreLogger) Error(ctx context.Context, msg string, params ...interface{}) {
@@ -181,7 +183,7 @@ func (s *StoreLogger) Error(ctx context.Context, msg string, params ...interface
 	if params != nil {
 		field = append(field, log.FAny("params", params))
 	}
-	log.Error(msg, field...)
+	log.ErrorMust(s.output, msg, field...)
 }
 
 func (s *StoreLogger) Trace(ctx context.Context, begin time.Time, fc func() (sql string, rowsAffected int64), err error) {
@@ -198,10 +200,10 @@ func (s *StoreLogger) Trace(ctx context.Context, begin time.Time, fc func() (sql
 	// 根据错误状态和执行时间选择日志级别
 	if err != nil {
 		fields = append(fields, log.FError(err))
-		log.Error("SQL执行失败", fields...)
+		log.ErrorMust(s.output, "SQL执行失败", fields...)
 	} else if elapsed > time.Second {
 		// 慢查询警告阈值， TODO:GG 需要调整
-		log.Warn("SQL执行过慢", fields...)
+		log.WarnMust(s.output, "SQL执行过慢", fields...)
 	} else {
 		// 正常查询可以选择记录为Debug级别或Info级别
 		log.Debug("SQL执行成功", fields...)
