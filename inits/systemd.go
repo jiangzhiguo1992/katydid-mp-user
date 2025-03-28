@@ -1,4 +1,4 @@
-package init
+package inits
 
 import (
 	"context"
@@ -13,7 +13,8 @@ import (
 	"time"
 )
 
-func init() {
+// System 初始化系统 (需要阻塞)
+func System() {
 	// configs
 	config, err := configs.Init(configs.ConfDir)
 	if err != nil {
@@ -151,6 +152,8 @@ func init() {
 			log.FatalMust(!config.IsDebug(), fmt.Sprintf("storage %s", name), log.FError(err))
 		}
 	}
+
+	log.InfoMust(!config.IsDebug(), "■ ■ System ■ ■ 初始化完成")
 }
 
 // StoreLogger 实现了gorm.Logger接口

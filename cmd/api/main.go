@@ -3,7 +3,7 @@ package main
 import (
 	"fmt"
 	"katydid-mp-user/api"
-	_ "katydid-mp-user/init"
+	"katydid-mp-user/inits"
 	"katydid-mp-user/pkg/log"
 )
 
@@ -65,13 +65,17 @@ import (
 // TODO:GG go-callvis
 // TODO:GG hey + vegeta + Comcast
 // TODO:GG 检查所有的json response
+// TODO:GG 性能/测试
 
 func main() {
+	// 初始化
+	inits.System()
+
 	// 写一个channel，让main挂起来
-	log.Debug("这里是debug")
-	log.Info("这里是info")
-	log.Warn("这里是warn")
-	//log.Error("这里是error")
+	log.Debug("main -> 这里是debug")
+	log.Info("main -> 这里是info")
+	log.Warn("main -> 这里是warn")
+	log.Error("main -> 这里是error")
 
 	defer func() {
 		err := log.Close()
