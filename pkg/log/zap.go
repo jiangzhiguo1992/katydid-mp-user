@@ -350,11 +350,11 @@ func DebugMust(output bool, msg string, fields ...Field) {
 	log(zapcore.DebugLevel, &output, msg, toZapFields(fields)...)
 }
 
-func DebugFmt(msg string, a ...any) {
+func Debugf(msg string, a ...any) {
 	log(zapcore.DebugLevel, nil, fmt.Sprintf(msg, a...))
 }
 
-func DebugFmtMust(output bool, msg string, a ...any) {
+func DebugMustf(output bool, msg string, a ...any) {
 	log(zapcore.DebugLevel, &output, fmt.Sprintf(msg, a...))
 }
 
@@ -366,11 +366,11 @@ func InfoMust(output bool, msg string, fields ...Field) {
 	log(zapcore.InfoLevel, &output, msg, toZapFields(fields)...)
 }
 
-func InfoFmt(msg string, a ...any) {
+func Infof(msg string, a ...any) {
 	log(zapcore.InfoLevel, nil, fmt.Sprintf(msg, a...))
 }
 
-func InfoFmtMust(output bool, msg string, a ...any) {
+func InfoMustf(output bool, msg string, a ...any) {
 	log(zapcore.InfoLevel, &output, fmt.Sprintf(msg, a...))
 }
 
@@ -382,11 +382,11 @@ func WarnMust(output bool, msg string, fields ...Field) {
 	log(zapcore.WarnLevel, &output, msg, toZapFields(fields)...)
 }
 
-func WarnFmt(msg string, a ...any) {
+func Warnf(msg string, a ...any) {
 	log(zapcore.WarnLevel, nil, fmt.Sprintf(msg, a...))
 }
 
-func WarnFmtMust(output bool, msg string, a ...any) {
+func WarnMustf(output bool, msg string, a ...any) {
 	log(zapcore.WarnLevel, &output, fmt.Sprintf(msg, a...))
 }
 
@@ -398,11 +398,11 @@ func ErrorMust(output bool, msg string, fields ...Field) {
 	log(zapcore.ErrorLevel, &output, msg, toZapFields(fields)...)
 }
 
-func ErrorFmt(msg string, a ...any) {
+func Errorf(msg string, a ...any) {
 	log(zapcore.ErrorLevel, nil, fmt.Sprintf(msg, a...))
 }
 
-func ErrorFmtMust(output bool, msg string, a ...any) {
+func ErrorMustf(output bool, msg string, a ...any) {
 	log(zapcore.ErrorLevel, &output, fmt.Sprintf(msg, a...))
 }
 
@@ -414,11 +414,11 @@ func DPanicMust(output bool, msg string, fields ...Field) {
 	log(zapcore.DPanicLevel, &output, msg, toZapFields(fields)...)
 }
 
-func DPanicFmt(msg string, a ...any) {
+func DPanicf(msg string, a ...any) {
 	log(zapcore.DPanicLevel, nil, fmt.Sprintf(msg, a...))
 }
 
-func DPanicFmtMust(output bool, msg string, a ...any) {
+func DPanicMustf(output bool, msg string, a ...any) {
 	log(zapcore.DPanicLevel, &output, fmt.Sprintf(msg, a...))
 }
 
@@ -430,11 +430,11 @@ func PanicMust(output bool, msg string, fields ...Field) {
 	log(zapcore.PanicLevel, &output, msg, toZapFields(fields)...)
 }
 
-func PanicFmt(msg string, a ...any) {
+func Panicf(msg string, a ...any) {
 	log(zapcore.PanicLevel, nil, fmt.Sprintf(msg, a...))
 }
 
-func PanicFmtMust(output bool, msg string, a ...any) {
+func PanicMustf(output bool, msg string, a ...any) {
 	log(zapcore.PanicLevel, &output, fmt.Sprintf(msg, a...))
 }
 
@@ -446,10 +446,10 @@ func FatalMust(output bool, msg string, fields ...Field) {
 	log(zapcore.FatalLevel, &output, msg, toZapFields(fields)...)
 }
 
-func FatalFmt(msg string, a ...any) {
+func Fatalf(msg string, a ...any) {
 	log(zapcore.FatalLevel, nil, fmt.Sprintf(msg, a...))
 }
 
-func FatalFmtMust(output bool, msg string, a ...any) {
+func FatalMustf(output bool, msg string, a ...any) {
 	log(zapcore.FatalLevel, &output, fmt.Sprintf(msg, a...))
 }

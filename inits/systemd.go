@@ -64,8 +64,8 @@ func System() {
 	}
 
 	// error
-	errs.Init(msg.ErrCodePatterns, msg.ErrMsgPatterns, func(msg string) {
-		log.WarnFmtMust(!config.IsDebug(), msg)
+	errs.InitMatch(msg.ErrCodePatterns, msg.ErrMsgPatterns, func(msg string) {
+		log.WarnMustf(!config.IsDebug(), msg)
 	})
 
 	// TODO:GG role
