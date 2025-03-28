@@ -6,19 +6,21 @@ import (
 	"strings"
 )
 
-var translate func(templateID string, data map[string]any, params ...any) string
+var translate = func(templateID string, data map[string]any, params ...any) string {
+	return fmt.Sprintf("%v, %v, %v", templateID, data, params)
+}
 
 type (
 	Error struct {
 		// source 不会返回给client
 		cause  error    // 触发错误的源
 		stack  *stack   // 错误栈
-		traces []string // 链路
-		errs   []error  // 多error
+		traces []string // 链路 需外部主动append
+		errs   []error  // 多error 需外部主动append
 		// message 会返回给client
-		code    int       // 错误码
-		msg     string    // 错误信息
-		locales []*locale // 多国际化
+		code    int       // 错误码 new/match的时候确定
+		msg     string    // 错误信息 new/match的时候确定
+		locales []*locale // 多国际化 match会确定，也可以外部主动append
 	}
 
 	locale struct {
@@ -31,7 +33,9 @@ type (
 func Init(
 	trans func(templateID string, data map[string]any, params ...any) string,
 ) {
-	translate = trans
+	if trans != nil {
+		translate = trans
+	}
 }
 
 func New(cause error) *Error {
@@ -173,6 +177,9 @@ func (e *Error) Wash() *Error {
 // Translate 返回国际化信息
 func (e *Error) Translate() string {
 	if (translate == nil) || (len(e.locales) == 0) {
+		if e.msg != "" {
+			return translate(e.msg, nil)
+		}
 		return ""
 	}
 
