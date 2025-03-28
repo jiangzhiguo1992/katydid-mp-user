@@ -6,9 +6,13 @@ import (
 	"strings"
 )
 
-var translate = func(templateID string, data map[string]any, params ...any) string {
-	return fmt.Sprintf("%v, %v, %v", templateID, data, params)
-}
+var (
+	defLang = "zh"
+
+	translate = func(lang, templateID string, data map[string]any, params ...any) string {
+		return fmt.Sprintf("%v, %v, %v", templateID, data, params)
+	}
+)
 
 type (
 	Error struct {
@@ -31,7 +35,7 @@ type (
 )
 
 func Init(
-	trans func(templateID string, data map[string]any, params ...any) string,
+	trans func(lang, templateID string, data map[string]any, params ...any) string,
 ) {
 	if trans != nil {
 		translate = trans
@@ -134,7 +138,7 @@ func (e *Error) Error() string {
 		builder.WriteString(fmt.Sprintf("\nlocales (%d):", len(e.locales)))
 		for _, loc := range e.locales {
 			builder.WriteString("\n\t- ")
-			res := translate(loc.templateID, loc.data, loc.params)
+			res := translate(defLang, loc.templateID, loc.data, loc.params)
 			builder.WriteString(res)
 		}
 	}
@@ -175,10 +179,10 @@ func (e *Error) Wash() *Error {
 }
 
 // Translate 返回国际化信息
-func (e *Error) Translate() string {
+func (e *Error) Translate(lang string) string {
 	if (translate == nil) || (len(e.locales) == 0) {
 		if e.msg != "" {
-			return translate(e.msg, nil)
+			return translate(lang, e.msg, nil)
 		}
 		return ""
 	}
@@ -186,7 +190,7 @@ func (e *Error) Translate() string {
 	if len(e.locales) == 1 {
 		v := e.locales[0]
 		if v.templateID != "" {
-			return translate(v.templateID, v.data, v.params)
+			return translate(lang, v.templateID, v.data, v.params)
 		}
 		return ""
 	}
@@ -196,7 +200,7 @@ func (e *Error) Translate() string {
 		if v.templateID == "" {
 			continue
 		}
-		msg := translate(v.templateID, v.data, v.params)
+		msg := translate(lang, v.templateID, v.data, v.params)
 		builder.WriteString(msg)
 		if k < len(e.locales)-1 {
 			builder.WriteString("\n")
