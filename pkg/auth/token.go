@@ -61,12 +61,12 @@ func NewToken(
 		Token:     "", // 将由GenerateJWT方法填充
 		ExpireSec: expireSec,
 	}
-	token.Claims = NewTokenClaims(ownKind, ownID, accountID, userID, issuer, expireSec)
+	token.Claims = newTokenClaims(ownKind, ownID, accountID, userID, issuer, expireSec)
 	return token
 }
 
-// NewTokenClaims 创建令牌声明
-func NewTokenClaims(
+// newTokenClaims 创建令牌声明
+func newTokenClaims(
 	ownKind int16, ownID uint64, accountID uint64, userID *uint64,
 	issuer string, expireSec int64,
 ) *TokenClaims {
@@ -112,7 +112,7 @@ func (t *Token) GenerateJWTTokens(secret string, oldToken *string) error {
 
 // generateJWTToken 生成访问令牌
 func (t *Token) generateJWTToken(secret string, tokenID *string) error {
-	claims := NewTokenClaims(
+	claims := newTokenClaims(
 		t.Claims.OwnKind, t.Claims.OwnID,
 		t.Claims.AccountID, t.Claims.UserID,
 		t.Claims.Issuer, t.ExpireSec,

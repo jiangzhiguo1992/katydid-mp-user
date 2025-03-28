@@ -149,7 +149,7 @@ func System() {
 		name := "pgsql.main" // TODO:GG 放哪里
 		_, err = storage.InitConnect(name, dbConfig)
 		if err != nil {
-			log.FatalMust(!config.IsDebug(), fmt.Sprintf("storage %s", name), log.FError(err))
+			log.FatalMust(!config.IsDebug(), fmt.Sprintf("storage: %s", name), log.FError(err))
 		}
 	}
 
