@@ -26,21 +26,22 @@ type Matcher struct {
 // InitMatch 初始化错误匹配器
 func InitMatch(codes map[int][]string, patterns map[string]string, onWarn func(string)) {
 	once.Do(func() {
-		if codes == nil {
-			codes = make(map[int][]string)
-		}
-		if patterns == nil {
-			patterns = make(map[string]string)
-		}
-
 		matcher = &Matcher{
 			codeLocIds:  codes,
 			msgPatterns: patterns,
 			onWarn:      onWarn,
 		}
 
+		// 初始化空映射
+		if matcher.codeLocIds == nil {
+			matcher.codeLocIds = make(map[int][]string)
+		}
+		if matcher.msgPatterns == nil {
+			matcher.msgPatterns = make(map[string]string)
+		}
+
 		// 预热缓存：将locId到code的映射预先计算并缓存
-		for code, locIds := range codes {
+		for code, locIds := range matcher.codeLocIds {
 			for _, locId := range locIds {
 				if locId != "" {
 					matcher.codeCache.Store(locId, code)
@@ -68,14 +69,14 @@ func MatchErr(err error) *Error {
 	}
 
 	// 先从patterns里找locId
-	locId, ok1 := matcher.findLocId(errMsg)
+	locId, found := matcher.findLocId(errMsg)
 
 	// 再从codeLocIds里找code
-	code, ok2 := matcher.findCode(locId)
+	code, hasCode := matcher.findCode(locId)
 
-	if ok2 {
+	if hasCode {
 		return New(err).WithCode(code).AppendLocale(locId, nil).Wash()
-	} else if !ok1 && matcher.onWarn != nil {
+	} else if !found && matcher.onWarn != nil {
 		matcher.onWarn(fmt.Sprintf("■ ■ Err ■ ■错误匹配err失败, msgID: %s", locId))
 	}
 
@@ -85,24 +86,26 @@ func MatchErr(err error) *Error {
 
 // MatchMsg 匹配错误消息
 func MatchMsg(msg string) *Error {
-	if msg == "" || matcher == nil {
+	if msg == "" {
 		return nil
+	} else if matcher == nil {
+		return New(nil).WithMsg(msg).Wash()
 	}
 
 	// 先从patterns里找locId
-	locId, ok1 := matcher.findLocId(msg)
+	locId, found := matcher.findLocId(msg)
 
 	// 再从codeLocIds里找code
-	code, ok2 := matcher.findCode(locId)
+	code, hasCode := matcher.findCode(locId)
 
-	if ok2 {
+	if hasCode {
 		return New(nil).WithCode(code).WithMsg(msg).AppendLocale(locId, nil).Wash()
-	} else if !ok1 && matcher.onWarn != nil {
+	} else if !found && matcher.onWarn != nil {
 		matcher.onWarn(fmt.Sprintf("■ ■ Err ■ ■ 错误匹配msg失败, msgID: %s", locId))
 	}
 
-	// 未匹配到，返回通用错误，可以返回msg
-	return New(nil).AppendLocale(msg, nil).Wash()
+	// 未匹配到，返回带原始消息的错误，可以返回msg
+	return New(nil).WithMsg(msg).Wash()
 }
 
 // findLocId 寻找匹配的本地化ID

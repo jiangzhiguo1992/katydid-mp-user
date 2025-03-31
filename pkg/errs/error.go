@@ -45,7 +45,7 @@ func Init(
 func New(cause error) *Error {
 	return &Error{
 		cause: cause, stack: callers(),
-		code: 0, msg: cause.Error(),
+		code: 0, msg: "",
 	}
 }
 

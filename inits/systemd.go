@@ -66,6 +66,7 @@ func System() {
 	// error
 	errs.Init(func(lang, templateID string, data map[string]any, params ...any) string {
 		format := i18n.LocalizeTry(lang, templateID, data)
+		// TODO:GG params要翻译吗?
 		return fmt.Sprintf(format, params...)
 	})
 	errs.InitMatch(msg.ErrCodePatterns, msg.ErrMsgPatterns, func(msg string) {
