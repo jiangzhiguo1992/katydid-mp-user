@@ -5,13 +5,13 @@ import (
 	"encoding/json"
 	"fmt"
 	"github.com/gin-gonic/gin"
-	"github.com/gin-gonic/gin/binding"
 	"github.com/google/uuid"
 	"io"
 	"katydid-mp-user/pkg/log"
 	"katydid-mp-user/pkg/str"
 	"net/http"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -46,54 +46,6 @@ var (
 		},
 	}
 )
-
-// LoggerConfig 定义ZapLogger的配置选项
-type LoggerConfig struct {
-	// trace
-	ServiceName     string        // 当前服务名称
-	TraceIDHeader   string        // 自定义跟踪ID头部字段名
-	TracePathHeader string        // 需要跟踪的路径头部字段名
-	TraceIDFunc     func() string `json:"-"` // 自定义跟踪ID生成函数(一般是网关生成)
-	// info
-	TimeFormat  string // 时间格式
-	LogParams   bool   // 是否记录请求参数
-	LogHeaders  bool   // 是否记录请求头
-	LogBody     bool   // 是否记录请求体
-	LogResponse bool   // 是否记录响应体
-	MaxBodySize int    // 记录的最大请求/返回体大小
-	// skip
-	SkipPaths        []string // 需要跳过的路径
-	SkipExtensions   []string // 需要跳过的文件扩展名
-	HeaderFilter     []string // 要记录的请求头字段(为空时记录所有)
-	HeaderSkip       []string // 要跳过的请求头字段
-	BodyTypes        []string // 要记录的请求体内容类型(为空时记录所有)
-	HeaderSensitives []string // 敏感信息关键词列表
-}
-
-// LoggerDefaultConfig 返回默认配置
-func LoggerDefaultConfig(serviceName string, bodyTypes []string) LoggerConfig {
-	return LoggerConfig{
-		// trace
-		ServiceName:     serviceName,
-		TraceIDHeader:   XRequestIDHeader,
-		TracePathHeader: XRequestPathHeader,
-		TraceIDFunc:     func() string { return uuid.New().String() },
-		// info
-		TimeFormat:  "02/Jan/2006 - 15:04:05",
-		LogParams:   true,
-		LogHeaders:  true,
-		LogBody:     true,
-		LogResponse: false,
-		MaxBodySize: maxBodyLogSize,
-		// skip
-		SkipPaths:        []string{"/favicon.ico", "/health", "/metrics"},
-		SkipExtensions:   []string{".css", ".js", ".jpg", ".jpeg", ".png", ".gif", ".ico", ".svg"},
-		HeaderFilter:     []string{}, //[]string{"Content-Type", "User-Agent", "Referer", "Origin", "Authorization"},
-		HeaderSkip:       []string{}, //[]string{"Content-Length", "Host", "Accept-Encoding", "Connection", "Upgrade-Insecure-Requests"},
-		BodyTypes:        bodyTypes,
-		HeaderSensitives: []string{"password", "token", "secret", "Authorization", "Cookie"},
-	}
-}
 
 // loggerStatusColor 根据HTTP状态码返回对应的颜色（带缓存）
 func loggerStatusColor(code int) string {
@@ -153,16 +105,54 @@ func loggerMethodColor(method string) string {
 	return newColor
 }
 
-// ZapLogger 返回一个Gin中间件，使用默认配置记录HTTP请求的日志
-func ZapLogger(serviceName string) gin.HandlerFunc {
-	config := LoggerDefaultConfig(
-		serviceName,
-		[]string{binding.MIMEJSON,
-			binding.MIMEXML,
-			binding.MIMEPOSTForm,
-			binding.MIMEMultipartPOSTForm},
-	)
-	return ZapLoggerWithConfig(config)
+// LoggerConfig 定义ZapLogger的配置选项
+type LoggerConfig struct {
+	// trace
+	ServiceName     string        // 当前服务名称
+	TraceIDHeader   string        // 自定义跟踪ID头部字段名
+	TracePathHeader string        // 需要跟踪的路径头部字段名
+	TraceIDFunc     func() string `json:"-"` // 自定义跟踪ID生成函数(一般是网关生成)
+	// info
+	TimeFormat  string // 时间格式
+	LogParams   bool   // 是否记录请求参数
+	LogHeaders  bool   // 是否记录请求头
+	LogBody     bool   // 是否记录请求体
+	LogResponse bool   // 是否记录响应体
+	MaxBodySize int    // 记录的最大请求/返回体大小
+	// skip
+	SkipStatus     []int    // 需要跳过的状态码
+	SkipPaths      []string // 需要跳过的路径
+	SkipExtensions []string // 需要跳过的文件扩展名
+	Sensitives     []string // 敏感信息关键词列表
+	HeaderFilter   []string // 要记录的请求头字段(为空时记录所有)
+	HeaderSkip     []string // 要跳过的请求头字段
+	BodyTypes      []string // 要记录的请求体内容类型(为空时记录所有)
+}
+
+// LoggerDefaultConfig 返回默认配置
+func LoggerDefaultConfig(serviceName string, status []int, skips, sensitives []string) LoggerConfig {
+	return LoggerConfig{
+		// trace
+		ServiceName:     serviceName,
+		TraceIDHeader:   XRequestIDHeader,
+		TracePathHeader: XRequestPathHeader,
+		TraceIDFunc:     func() string { return uuid.New().String() },
+		// info
+		TimeFormat:  "02/Jan/2006 - 15:04:05",
+		LogParams:   true,
+		LogHeaders:  true,
+		LogBody:     true,
+		LogResponse: false,
+		MaxBodySize: maxBodyLogSize,
+		// skip
+		SkipStatus:     status,
+		SkipPaths:      skips, //[]string{"/favicon.ico", "/health", "/metrics"},
+		SkipExtensions: []string{".css", ".js", ".jpg", ".jpeg", ".png", ".gif", ".ico", ".svg"},
+		Sensitives:     sensitives, //[]string{"password", "token", "secret", "Authorization", "Cookie"},
+		HeaderFilter:   []string{}, //[]string{"Content-Type", "User-Agent", "Referer", "Origin", "Authorization"},
+		HeaderSkip:     []string{}, //[]string{"Content-Length", "Host", "Accept-Encoding", "Connection", "Upgrade-Insecure-Requests"},
+		BodyTypes:      AcceptContentTypes(),
+	}
 }
 
 // ZapLoggerWithConfig 返回一个使用自定义配置的Gin中间件
@@ -222,6 +212,16 @@ func ZapLoggerWithConfig(config LoggerConfig) gin.HandlerFunc {
 
 		// 处理请求
 		c.Next()
+
+		// 检查是否需要跳过状态码
+		status := c.Writer.Status()
+		if len(config.SkipStatus) > 0 {
+			for _, skip := range config.SkipStatus {
+				if status == skip {
+					return
+				}
+			}
+		}
 
 		// 记录日志
 		logHTTPRequest(c, config, start, requestID, fullPath, params, headers, bodyLog, responseBodyBuffer)
@@ -337,7 +337,7 @@ func collectRequestHeaders(c *gin.Context, config LoggerConfig) map[string]strin
 		for k, v := range c.Request.Header {
 			if len(v) > 0 {
 				// 敏感信息处理
-				if containsSensitiveWord(k, config.HeaderSensitives) {
+				if containsSensitiveWord(k, config.Sensitives) {
 					headers[k] = "[REDACTED]"
 				} else {
 					headers[k] = strings.Join(v, ", ")
@@ -348,7 +348,7 @@ func collectRequestHeaders(c *gin.Context, config LoggerConfig) map[string]strin
 		// 只记录过滤后的请求头
 		for _, k := range config.HeaderFilter {
 			if v := c.Request.Header.Get(k); v != "" {
-				if containsSensitiveWord(k, config.HeaderSensitives) {
+				if containsSensitiveWord(k, config.Sensitives) {
 					headers[k] = "[REDACTED]"
 				} else {
 					headers[k] = v
@@ -356,6 +356,14 @@ func collectRequestHeaders(c *gin.Context, config LoggerConfig) map[string]strin
 			}
 		}
 	}
+
+	// 处理跳过的请求头
+	for _, k := range config.HeaderSkip {
+		if _, ok := headers[k]; ok {
+			delete(headers, k)
+		}
+	}
+
 	return headers
 }
 
@@ -401,9 +409,18 @@ func logHTTPRequest(
 	clientIP := c.ClientIP()
 	method := c.Request.Method
 
+	isDebug := gin.Mode() == gin.DebugMode
+	statusStr := strconv.Itoa(status)
+	if isDebug {
+		statusStr = loggerStatusColor(status)
+	}
+	if isDebug {
+		method = loggerMethodColor(method)
+	}
+
 	// 构建日志消息
-	statusCode := fmt.Sprintf("%s %3d %s", loggerStatusColor(status), status, logReset)
-	methodFormatted := fmt.Sprintf("%s %-7s %s", loggerMethodColor(method), method, logReset)
+	statusCode := fmt.Sprintf("%s %3d %s", statusStr, status, logReset)
+	methodFormatted := fmt.Sprintf("%s %-7s %s", method, method, logReset)
 	msg := fmt.Sprintf("[GIN] %s | %s %s | %12v | %15s",
 		statusCode,
 		methodFormatted,
@@ -429,11 +446,11 @@ func logHTTPRequest(
 	}
 
 	// 添加额外字段
-	addParamsToFields(fields, params, config)
-	addHeadersToFields(fields, headers, config)
-	addBodyToFields(fields, bodyLog, config)
-	addResponseToFields(fields, responseBody, config)
-	addErrorsToFields(fields, c)
+	fields = addParamsToFields(fields, params, config)
+	fields = addHeadersToFields(fields, headers, config)
+	fields = addBodyToFields(fields, bodyLog, config)
+	fields = addResponseToFields(fields, responseBody, config)
+	fields = addErrorsToFields(fields, c)
 
 	// 根据状态码选择日志级别
 	logByStatus(msg, status, c.Errors, fields...)
@@ -462,7 +479,7 @@ func addHeadersToFields(fields []log.Field, headers map[string]string, config Lo
 // 添加请求体到日志字段
 func addBodyToFields(fields []log.Field, bodyLog *loggerBodyReader, config LoggerConfig) []log.Field {
 	if config.LogBody && bodyLog != nil {
-		bodyStr := bodyLog.formatBodyString(config.HeaderSensitives...)
+		bodyStr := bodyLog.formatBodyString(config.Sensitives...)
 		if bodyStr != "" {
 			fields = append(fields, log.FString("request_body", bodyStr))
 		}
