@@ -40,10 +40,14 @@ var (
 			return make(map[string]any, 8)
 		},
 	}
-
 	loggerHeadersPool = sync.Pool{
 		New: func() interface{} {
 			return make(map[string]string, 8)
+		},
+	}
+	loggerBufferPool = sync.Pool{
+		New: func() interface{} {
+			return new(bytes.Buffer)
 		},
 	}
 
@@ -183,27 +187,51 @@ func ZapLoggerWithConfig(config LoggerConfig) gin.HandlerFunc {
 		var params map[string]any
 		if config.LogParams {
 			params = logCollectRequestParams(c)
+			defer func() {
+				if params != nil {
+					for k := range params {
+						delete(params, k)
+					}
+					loggerParamsPool.Put(params)
+				}
+			}()
 		}
 
 		// 收集请求头
 		var headers map[string]string
 		if config.LogHeaders {
 			headers = logCollectRequestHeaders(c, config)
+			defer func() {
+				if headers != nil {
+					for k := range headers {
+						delete(headers, k)
+					}
+					loggerHeadersPool.Put(headers)
+				}
+			}()
 		}
 
 		// 收集请求体
 		var bodyLog *loggerBodyReader
 		if config.LogBody {
+			originalBody := c.Request.Body
 			bodyLog, _ = newLoggerBodyReader(c.Request.Body, c.Request.Header.Get("Content-Type"), config.MaxBodySize)
 			if bodyLog != nil && len(bodyLog.body) > 0 {
 				c.Request.Body = io.NopCloser(bytes.NewReader(bodyLog.body))
 			}
+			_ = originalBody.Close() // 添加这行，关闭原始请求体
 		}
 
 		// 设置响应体记录器
 		var responseBodyBuffer *bytes.Buffer
 		if config.LogResponse {
-			responseBodyBuffer = &bytes.Buffer{}
+			responseBodyBuffer = loggerBufferPool.Get().(*bytes.Buffer)
+			responseBodyBuffer.Reset()
+			defer func() {
+				responseBodyBuffer.Reset() // 清空缓冲区
+				loggerBufferPool.Put(responseBodyBuffer)
+			}()
+
 			c.Writer = &loggerResponseBodyWriter{
 				ResponseWriter: c.Writer,
 				body:           responseBodyBuffer,
@@ -226,20 +254,6 @@ func ZapLoggerWithConfig(config LoggerConfig) gin.HandlerFunc {
 
 		// 记录日志
 		logHTTPRequest(c, config, start, traceID, tracePath, fullPath, headers, bodyLog, responseBodyBuffer)
-
-		// 回收对象池资源
-		if config.LogParams && params != nil {
-			for k := range params {
-				delete(params, k)
-			}
-			loggerParamsPool.Put(params)
-		}
-		if config.LogHeaders && headers != nil {
-			for k := range headers {
-				delete(headers, k)
-			}
-			loggerHeadersPool.Put(headers)
-		}
 	}
 }
 
@@ -268,20 +282,21 @@ func logExtractOrGenerateRequestID(c *gin.Context, config LoggerConfig) string {
 	requestID := c.GetHeader(config.TraceIDHeader)
 	if requestID == "" {
 		requestID = config.TraceIDFunc()
-		c.Header(config.TraceIDHeader, requestID)
+		c.Header(config.TraceIDHeader, requestID) // header
 	}
-	c.Set(XRequestIDHeader, requestID)
+	c.Set(XRequestIDHeader, requestID) // context
 	return requestID
 }
 
 // 提取或生成请求路径
 func logExtractOrGenerateRequestPaths(c *gin.Context, config LoggerConfig) string {
 	requestPath := c.GetHeader(config.TracePathHeader)
+	requestPath = requestPath + ">" + config.ServiceName
 	if requestPath == "" {
-		c.Header(config.TracePathHeader, config.ServiceName)
+		c.Header(config.TracePathHeader, requestPath) // header
 	}
-	c.Set(XRequestPathHeader, requestPath+">"+config.ServiceName)
-	return c.GetString(XRequestPathHeader)
+	c.Set(XRequestPathHeader, requestPath) // context
+	return requestPath
 }
 
 // 构建完整路径（含查询参数）
@@ -380,36 +395,50 @@ func logHTTPRequest(
 	method := c.Request.Method
 
 	isDebug := gin.Mode() == gin.DebugMode
-	statusCode := strconv.Itoa(status)
+	var statusCode string
 	if isDebug {
 		statusCode = fmt.Sprintf("%s %3d %s", loggerStatusColor(status), status, logReset)
+	} else {
+		statusCode = strconv.Itoa(status)
 	}
-	methodFormatted := method
+
+	var methodFormatted string
 	if isDebug {
 		methodFormatted = fmt.Sprintf("%s %-7s %s", loggerMethodColor(method), method, logReset)
+	} else {
+		methodFormatted = method
 	}
 
 	// 构建日志消息
-	msg := fmt.Sprintf(
+	var msgBuilder strings.Builder
+	msgBuilder.Grow(512) // 预分配空间
+
+	_, _ = fmt.Fprintf(&msgBuilder,
 		"[GIN] %s | %12v | %15s | %4s %s \n\ttraceID: %s, tracePath: %s \n\theader: %v",
 		statusCode, latency, clientIP,
 		methodFormatted, fullPath,
 		traceID, tracePath, headers,
 	)
 	if bodyLog != nil {
-		bodyString := bodyLog.formatBodyString(config.Sensitives...)
-		msg = msg + fmt.Sprintf("\n\trequest_body: %s", bodyString)
+		if s := bodyLog.formatBodyString(config.Sensitives...); s != "" {
+			_, _ = fmt.Fprintf(&msgBuilder, "\n\trequest_body: %s", s)
+		}
 	}
-	if responseBody != nil {
+
+	if responseBody != nil && responseBody.Len() > 0 {
+		w := c.Writer.(*loggerResponseBodyWriter)
+		w.mu.Lock()
 		bodyString := responseBody.String()
+		w.mu.Unlock()
+
 		if len(bodyString) > config.MaxBodySize {
 			bodyString = bodyString[:config.MaxBodySize] + "... [truncated]"
 		}
-		msg = msg + fmt.Sprintf("\n\tresponse_body(%d): %s", size, bodyString)
+		_, _ = fmt.Fprintf(&msgBuilder, "\n\tresponse_body(%d): %s", size, bodyString)
 	}
 
 	// 根据状态码选择日志级别
-	logByStatus(msg, status, c.Errors)
+	logByStatus(msgBuilder.String(), status, c.Errors)
 }
 
 // logByStatus logs the message with appropriate log level based on status code
@@ -441,7 +470,23 @@ type loggerBodyReader struct {
 // newLoggerBodyReader 创建一个新的bodyLogReader
 func newLoggerBodyReader(body io.ReadCloser, contentType string, maxSize int) (*loggerBodyReader, error) {
 	if body == nil {
-		return &loggerBodyReader{body: []byte{}}, nil
+		return &loggerBodyReader{body: []byte{}, maxSize: maxSize}, nil
+	}
+
+	// 只对可能需要记录的内容类型进行读取
+	needRead := strings.Contains(contentType, "json") ||
+		strings.Contains(contentType, "xml") ||
+		strings.Contains(contentType, "text") ||
+		strings.Contains(contentType, "form") ||
+		contentType == ""
+
+	if !needRead {
+		// 对于二进制内容，不读取实际内容，只记录类型和大小
+		return &loggerBodyReader{
+			body:        []byte{},
+			contentType: contentType,
+			maxSize:     maxSize,
+		}, nil
 	}
 
 	data, err := io.ReadAll(io.LimitReader(body, int64(maxSize+1)))
@@ -474,6 +519,10 @@ func (b *loggerBodyReader) formatBodyString(sensitiveFields ...string) string {
 
 	// 使用正则表达式进行更精确的敏感信息替换
 	for _, field := range sensitiveFields {
+		if !strings.Contains(bodyStr, field) {
+			continue // 跳过不存在的字段名
+		}
+
 		// JSON 格式敏感字段
 		pattern := fmt.Sprintf(`("%s"\s*:\s*)(\"[^\"]*\"|\d+|true|false|null)`, regexp.QuoteMeta(field))
 		re, err := logGetCachedRegexp(pattern)
@@ -540,10 +589,12 @@ type loggerResponseBodyWriter struct {
 	gin.ResponseWriter
 	body   *bytes.Buffer
 	maxLen int
+	mu     sync.Mutex
 }
 
 func (w *loggerResponseBodyWriter) Write(b []byte) (int, error) {
 	if w.body != nil && w.body.Len() < w.maxLen {
+		w.mu.Lock()
 		// 只记录到最大长度
 		remaining := w.maxLen - w.body.Len()
 		if remaining > len(b) {
@@ -551,12 +602,14 @@ func (w *loggerResponseBodyWriter) Write(b []byte) (int, error) {
 		} else if remaining > 0 {
 			w.body.Write(b[:remaining])
 		}
+		w.mu.Unlock()
 	}
 	return w.ResponseWriter.Write(b)
 }
 
 func (w *loggerResponseBodyWriter) WriteString(s string) (int, error) {
 	if w.body != nil && w.body.Len() < w.maxLen {
+		w.mu.Lock()
 		// 只记录到最大长度
 		remaining := w.maxLen - w.body.Len()
 		if remaining > len(s) {
@@ -564,6 +617,7 @@ func (w *loggerResponseBodyWriter) WriteString(s string) (int, error) {
 		} else if remaining > 0 {
 			w.body.WriteString(s[:remaining])
 		}
+		w.mu.Unlock()
 	}
 	return w.ResponseWriter.WriteString(s)
 }
@@ -586,16 +640,17 @@ func (w *loggerResponseBodyWriter) Flush() {
 	}
 }
 
-func (w *loggerResponseBodyWriter) CloseNotify() <-chan bool {
-	if notifier, ok := w.ResponseWriter.(http.CloseNotifier); ok {
-		return notifier.CloseNotify()
-	}
-	return nil
-}
-
 func (w *loggerResponseBodyWriter) Push(target string, opts *http.PushOptions) error {
 	if pusher, ok := w.ResponseWriter.(http.Pusher); ok {
 		return pusher.Push(target, opts)
 	}
 	return http.ErrNotSupported
+}
+
+func (w *loggerResponseBodyWriter) Header() http.Header {
+	return w.ResponseWriter.Header()
+}
+
+func (w *loggerResponseBodyWriter) WriteHeader(statusCode int) {
+	w.ResponseWriter.WriteHeader(statusCode)
 }
