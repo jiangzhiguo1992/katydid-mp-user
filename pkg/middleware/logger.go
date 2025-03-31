@@ -18,13 +18,12 @@ import (
 )
 
 const (
-	logGreen       = "\033[97;42m"
-	logWhite       = "\033[90;47m"
-	logYellow      = "\033[90;43m"
-	logRed         = "\033[97;41m"
-	logBlue        = "\033[97;44m"
-	logReset       = "\033[0m"
-	maxBodyLogSize = 4096 // 最大日志记录的请求体大小(字节)
+	logGreen  = "\033[97;42m"
+	logWhite  = "\033[90;47m"
+	logYellow = "\033[90;43m"
+	logRed    = "\033[97;41m"
+	logBlue   = "\033[97;44m"
+	logReset  = "\033[0m"
 )
 
 var (
@@ -113,12 +112,11 @@ type LoggerConfig struct {
 	TracePathHeader string        // 需要跟踪的路径头部字段名
 	TraceIDFunc     func() string `json:"-"` // 自定义跟踪ID生成函数(一般是网关生成)
 	// info
-	TimeFormat  string // 时间格式
-	LogParams   bool   // 是否记录请求参数
-	LogHeaders  bool   // 是否记录请求头
-	LogBody     bool   // 是否记录请求体
-	LogResponse bool   // 是否记录响应体
-	MaxBodySize int    // 记录的最大请求/返回体大小
+	LogParams   bool // 是否记录请求参数
+	LogHeaders  bool // 是否记录请求头
+	LogBody     bool // 是否记录请求体
+	LogResponse bool // 是否记录响应体
+	MaxBodySize int  // 记录的最大请求/返回体大小
 	// skip
 	SkipStatus     []int    // 需要跳过的状态码
 	SkipPaths      []string // 需要跳过的路径
@@ -126,11 +124,10 @@ type LoggerConfig struct {
 	Sensitives     []string // 敏感信息关键词列表
 	HeaderFilter   []string // 要记录的请求头字段(为空时记录所有)
 	HeaderSkip     []string // 要跳过的请求头字段
-	BodyTypes      []string // 要记录的请求体内容类型(为空时记录所有)
 }
 
 // LoggerDefaultConfig 返回默认配置
-func LoggerDefaultConfig(serviceName string, status []int, skips, sensitives []string) LoggerConfig {
+func LoggerDefaultConfig(serviceName string, status []int, skips, sensitives []string, size int) LoggerConfig {
 	return LoggerConfig{
 		// trace
 		ServiceName:     serviceName,
@@ -138,12 +135,11 @@ func LoggerDefaultConfig(serviceName string, status []int, skips, sensitives []s
 		TracePathHeader: XRequestPathHeader,
 		TraceIDFunc:     func() string { return uuid.New().String() },
 		// info
-		TimeFormat:  "02/Jan/2006 - 15:04:05",
 		LogParams:   true,
 		LogHeaders:  true,
 		LogBody:     true,
-		LogResponse: false,
-		MaxBodySize: maxBodyLogSize,
+		LogResponse: true,
+		MaxBodySize: size,
 		// skip
 		SkipStatus:     status,
 		SkipPaths:      skips, //[]string{"/favicon.ico", "/health", "/metrics"},
@@ -151,7 +147,6 @@ func LoggerDefaultConfig(serviceName string, status []int, skips, sensitives []s
 		Sensitives:     sensitives, //[]string{"password", "token", "secret", "Authorization", "Cookie"},
 		HeaderFilter:   []string{}, //[]string{"Content-Type", "User-Agent", "Referer", "Origin", "Authorization"},
 		HeaderSkip:     []string{}, //[]string{"Content-Length", "Host", "Accept-Encoding", "Connection", "Upgrade-Insecure-Requests"},
-		BodyTypes:      AcceptContentTypes(),
 	}
 }
 
@@ -169,30 +164,30 @@ func ZapLoggerWithConfig(config LoggerConfig) gin.HandlerFunc {
 		}
 
 		// 添加或提取请求ID
-		requestID := logExtractOrGenerateRequestID(c, config)
-		_ = extractOrGenerateRequestPaths(c, config)
+		traceID := logExtractOrGenerateRequestID(c, config)
+		tracePath := logExtractOrGenerateRequestPaths(c, config)
 
 		// 记录开始时间
 		start := time.Now()
 
 		// 准备路径和查询参数
-		fullPath := buildFullPath(c)
+		fullPath := logBuildFullPath(c)
 
 		// 收集请求参数
 		var params map[string]any
 		if config.LogParams {
-			params = collectRequestParams(c)
+			params = logCollectRequestParams(c)
 		}
 
 		// 收集请求头
 		var headers map[string]string
 		if config.LogHeaders {
-			headers = collectRequestHeaders(c, config)
+			headers = logCollectRequestHeaders(c, config)
 		}
 
 		// 收集请求体
 		var bodyLog *loggerBodyReader
-		if config.LogBody && shouldLogRequestBody(c.Request.Header.Get("Content-Type"), config.BodyTypes) {
+		if config.LogBody {
 			bodyLog, _ = newLoggerBodyReader(c.Request.Body, c.Request.Header.Get("Content-Type"), config.MaxBodySize)
 			if bodyLog != nil && len(bodyLog.body) > 0 {
 				c.Request.Body = io.NopCloser(bytes.NewReader(bodyLog.body))
@@ -224,7 +219,7 @@ func ZapLoggerWithConfig(config LoggerConfig) gin.HandlerFunc {
 		}
 
 		// 记录日志
-		logHTTPRequest(c, config, start, requestID, fullPath, params, headers, bodyLog, responseBodyBuffer)
+		logHTTPRequest(c, config, start, traceID, tracePath, fullPath, headers, bodyLog, responseBodyBuffer)
 
 		// 回收对象池资源
 		if config.LogParams && params != nil {
@@ -274,7 +269,7 @@ func logExtractOrGenerateRequestID(c *gin.Context, config LoggerConfig) string {
 }
 
 // 提取或生成请求路径
-func extractOrGenerateRequestPaths(c *gin.Context, config LoggerConfig) string {
+func logExtractOrGenerateRequestPaths(c *gin.Context, config LoggerConfig) string {
 	requestPath := c.GetHeader(config.TracePathHeader)
 	if requestPath == "" {
 		c.Header(config.TracePathHeader, config.ServiceName)
@@ -284,7 +279,7 @@ func extractOrGenerateRequestPaths(c *gin.Context, config LoggerConfig) string {
 }
 
 // 构建完整路径（含查询参数）
-func buildFullPath(c *gin.Context) string {
+func logBuildFullPath(c *gin.Context) string {
 	fullPath := c.Request.URL.Path
 	query := c.Request.URL.RawQuery
 	if query != "" {
@@ -293,11 +288,9 @@ func buildFullPath(c *gin.Context) string {
 	return fullPath
 }
 
-// collectRequestParams 收集请求参数
-func collectRequestParams(c *gin.Context) map[string]any {
+// logCollectRequestParams 收集请求参数
+func logCollectRequestParams(c *gin.Context) map[string]any {
 	params := loggerParamsPool.Get().(map[string]any)
-
-	// URL查询参数
 	for k, v := range c.Request.URL.Query() {
 		if len(v) > 1 {
 			params[k] = v
@@ -305,31 +298,11 @@ func collectRequestParams(c *gin.Context) map[string]any {
 			params[k] = v[0]
 		}
 	}
-
-	// POST表单参数
-	if c.Request.Method != http.MethodGet {
-		// 对于POST/PUT请求，尝试解析表单
-		_ = c.Request.ParseMultipartForm(32 << 20)
-		if c.Request.Form != nil {
-			for k, v := range c.Request.Form {
-				if len(v) > 1 {
-					params[k] = v
-				} else if len(v) == 1 {
-					params[k] = v[0]
-				}
-			}
-		}
-
-		// 路径参数
-		for _, param := range c.Params {
-			params[param.Key] = param.Value
-		}
-	}
 	return params
 }
 
 // 优化的收集请求头函数
-func collectRequestHeaders(c *gin.Context, config LoggerConfig) map[string]string {
+func logCollectRequestHeaders(c *gin.Context, config LoggerConfig) map[string]string {
 	headers := loggerHeadersPool.Get().(map[string]string)
 
 	if len(config.HeaderFilter) == 0 {
@@ -337,7 +310,7 @@ func collectRequestHeaders(c *gin.Context, config LoggerConfig) map[string]strin
 		for k, v := range c.Request.Header {
 			if len(v) > 0 {
 				// 敏感信息处理
-				if containsSensitiveWord(k, config.Sensitives) {
+				if logContainsSensitiveWord(k, config.Sensitives) {
 					headers[k] = "[REDACTED]"
 				} else {
 					headers[k] = strings.Join(v, ", ")
@@ -348,7 +321,7 @@ func collectRequestHeaders(c *gin.Context, config LoggerConfig) map[string]strin
 		// 只记录过滤后的请求头
 		for _, k := range config.HeaderFilter {
 			if v := c.Request.Header.Get(k); v != "" {
-				if containsSensitiveWord(k, config.Sensitives) {
+				if logContainsSensitiveWord(k, config.Sensitives) {
 					headers[k] = "[REDACTED]"
 				} else {
 					headers[k] = v
@@ -367,25 +340,8 @@ func collectRequestHeaders(c *gin.Context, config LoggerConfig) map[string]strin
 	return headers
 }
 
-// shouldLogRequestBody 检查是否应该记录请求体
-func shouldLogRequestBody(contentType string, allowedTypes []string) bool {
-	if contentType == "" {
-		return false
-	} else if len(allowedTypes) <= 0 {
-		return true
-	}
-
-	contentType = strings.ToLower(contentType)
-	for _, allowed := range allowedTypes {
-		if strings.Contains(contentType, strings.ToLower(allowed)) {
-			return true
-		}
-	}
-	return false
-}
-
 // 检查是否包含敏感词
-func containsSensitiveWord(key string, sensitiveWords []string) bool {
+func logContainsSensitiveWord(key string, sensitiveWords []string) bool {
 	lowKey := strings.ToLower(key)
 	for _, word := range sensitiveWords {
 		if strings.Contains(lowKey, strings.ToLower(word)) {
@@ -398,8 +354,8 @@ func containsSensitiveWord(key string, sensitiveWords []string) bool {
 // 记录HTTP请求日志（抽取复杂逻辑）
 func logHTTPRequest(
 	c *gin.Context, config LoggerConfig,
-	start time.Time, requestID, fullPath string,
-	params map[string]any, headers map[string]string,
+	start time.Time, traceID, tracePath string,
+	fullPath string, headers map[string]string,
 	bodyLog *loggerBodyReader, responseBody *bytes.Buffer,
 ) {
 	// 计算延迟及获取响应信息
@@ -410,111 +366,47 @@ func logHTTPRequest(
 	method := c.Request.Method
 
 	isDebug := gin.Mode() == gin.DebugMode
-	statusStr := strconv.Itoa(status)
+	statusCode := strconv.Itoa(status)
 	if isDebug {
-		statusStr = loggerStatusColor(status)
+		statusCode = fmt.Sprintf("%s %3d %s", loggerStatusColor(status), status, logReset)
 	}
+	methodFormatted := method
 	if isDebug {
-		method = loggerMethodColor(method)
+		methodFormatted = fmt.Sprintf("%s %-7s %s", loggerMethodColor(method), method, logReset)
 	}
 
 	// 构建日志消息
-	statusCode := fmt.Sprintf("%s %3d %s", statusStr, status, logReset)
-	methodFormatted := fmt.Sprintf("%s %-7s %s", method, method, logReset)
-	msg := fmt.Sprintf("[GIN] %s | %s %s | %12v | %15s",
-		statusCode,
-		methodFormatted,
-		fullPath,
-		latency,
-		clientIP,
+	msg := fmt.Sprintf(
+		"[GIN] %s | %12v | %15s | %4s %s \n\ttraceID: %s, tracePath: %s \n\theader: %v",
+		statusCode, latency, clientIP,
+		methodFormatted, fullPath,
+		traceID, tracePath, headers,
 	)
-
-	// 构建结构化日志字段
-	fields := []log.Field{
-		log.FInt("status", status),
-		log.FString("method", method),
-		log.FString("path", c.Request.URL.Path),
-		log.FString("ip", clientIP),
-		log.FString("request-id", requestID),
-		log.FDuration("latency", latency),
-		log.FInt("size", size),
+	if bodyLog != nil {
+		bodyString := bodyLog.formatBodyString(config.Sensitives...)
+		msg = msg + fmt.Sprintf("\n\trequest_body: %s", bodyString)
 	}
-
-	// 添加用户代理
-	if ua := c.Request.UserAgent(); ua != "" {
-		fields = append(fields, log.FString("user-agent", ua))
+	if responseBody != nil {
+		bodyString := responseBody.String()
+		if len(bodyString) > config.MaxBodySize {
+			bodyString = bodyString[:config.MaxBodySize] + "... [truncated]"
+		}
+		msg = msg + fmt.Sprintf("\n\tresponse_body(%d): %s", size, bodyString)
 	}
-
-	// 添加额外字段
-	fields = addParamsToFields(fields, params, config)
-	fields = addHeadersToFields(fields, headers, config)
-	fields = addBodyToFields(fields, bodyLog, config)
-	fields = addResponseToFields(fields, responseBody, config)
-	fields = addErrorsToFields(fields, c)
 
 	// 根据状态码选择日志级别
-	logByStatus(msg, status, c.Errors, fields...)
-}
-
-// 添加参数到日志字段
-func addParamsToFields(fields []log.Field, params map[string]any, config LoggerConfig) []log.Field {
-	if config.LogParams && len(params) > 0 {
-		for k, v := range params {
-			fields = append(fields, log.FString("param_"+k, fmt.Sprintf("%v", v)))
-		}
-	}
-	return fields
-}
-
-// 添加头部到日志字段
-func addHeadersToFields(fields []log.Field, headers map[string]string, config LoggerConfig) []log.Field {
-	if config.LogHeaders && len(headers) > 0 {
-		for k, v := range headers {
-			fields = append(fields, log.FString("header_"+k, v))
-		}
-	}
-	return fields
-}
-
-// 添加请求体到日志字段
-func addBodyToFields(fields []log.Field, bodyLog *loggerBodyReader, config LoggerConfig) []log.Field {
-	if config.LogBody && bodyLog != nil {
-		bodyStr := bodyLog.formatBodyString(config.Sensitives...)
-		if bodyStr != "" {
-			fields = append(fields, log.FString("request_body", bodyStr))
-		}
-	}
-	return fields
-}
-
-// 添加响应体到日志字段
-func addResponseToFields(fields []log.Field, responseBody *bytes.Buffer, config LoggerConfig) []log.Field {
-	if config.LogResponse && responseBody != nil && responseBody.Len() > 0 {
-		respStr := responseBody.String()
-		if len(respStr) > config.MaxBodySize {
-			respStr = respStr[:config.MaxBodySize] + "... [truncated]"
-		}
-		fields = append(fields, log.FString("response_body", respStr))
-	}
-	return fields
-}
-
-// addErrorsToFields adds any errors from the context to the log fields
-func addErrorsToFields(fields []log.Field, c *gin.Context) []log.Field {
-	if len(c.Errors) > 0 {
-		errMsgs := make([]string, len(c.Errors))
-		for i, err := range c.Errors {
-			errMsgs[i] = err.Error()
-		}
-		fields = append(fields, log.FStrings("errors", errMsgs))
-	}
-	return fields
+	logByStatus(msg, status, c.Errors)
 }
 
 // logByStatus logs the message with appropriate log level based on status code
 func logByStatus(msg string, status int, errors []*gin.Error, fields ...log.Field) {
 	switch {
 	case len(errors) > 0:
+		errMsgs := make([]string, len(errors))
+		for i, err := range errors {
+			errMsgs[i] = err.Error()
+		}
+		fields = append(fields, log.FStrings("errors", errMsgs))
 		log.ErrorMust(gin.Mode() != gin.DebugMode, msg, fields...)
 	case status >= http.StatusInternalServerError:
 		log.ErrorMust(gin.Mode() != gin.DebugMode, msg, fields...)
@@ -566,14 +458,14 @@ func (b *loggerBodyReader) formatBodyString(sensitiveFields ...string) string {
 	// In a real implementation, you might want to use regex to mask sensitive fields
 	lowerBody := strings.ToLower(bodyStr)
 
-	for _, field := range sensitiveFields {
-		if strings.Contains(lowerBody, field) {
+	for _, sensitive := range sensitiveFields {
+		if strings.Contains(lowerBody, sensitive) {
 			// Very basic masking - in production you'd want more sophisticated regex-based replacement
-			indexStart := strings.Index(lowerBody, field)
+			indexStart := strings.Index(lowerBody, sensitive)
 			if indexStart >= 0 {
 				// Find the value portion and mask it
 				// This is a simplified approach - real implementation would be more robust
-				valueStart := strings.IndexAny(bodyStr[indexStart+len(field):], ":\"'") + indexStart + len(field) + 1
+				valueStart := strings.IndexAny(bodyStr[indexStart+len(sensitive):], ":\"'") + indexStart + len(sensitive) + 1
 				valueEnd := strings.IndexAny(bodyStr[valueStart:], ",}\"'")
 				if valueEnd > 0 {
 					valueEnd += valueStart
@@ -584,6 +476,9 @@ func (b *loggerBodyReader) formatBodyString(sensitiveFields ...string) string {
 			}
 		}
 	}
+
+	bodyStr = strings.Replace(bodyStr, "\n", "\n\t", -1)
+
 	return bodyStr
 }
 
@@ -613,6 +508,10 @@ type loggerResponseBodyWriter struct {
 	gin.ResponseWriter
 	body   *bytes.Buffer
 	maxLen int
+}
+
+func (b *loggerBodyReader) Body() []byte {
+	return b.body
 }
 
 func (r *loggerResponseBodyWriter) Write(b []byte) (int, error) {
