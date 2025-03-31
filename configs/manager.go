@@ -146,7 +146,7 @@ func (m *Manager) load(confDir string) error {
 	}
 
 	// 打印配置
-	m.logSettings("本地", m.main.AllSettings())
+	//m.logSettings("本地", m.main.AllSettings())
 
 	// debug模式下打印配置
 	if !m.config.IsProd() {

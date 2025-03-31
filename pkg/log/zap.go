@@ -1,11 +1,9 @@
 package log
 
 import (
-	"encoding/json"
 	"fmt"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
-	"log/slog"
 	"os"
 	"path"
 	"sync"
@@ -131,8 +129,8 @@ func NewDefaultConfig(conLevels, outLevels []int) Config {
 
 // Init 初始化日志
 func Init(cfg Config) {
-	marshal, _ := json.MarshalIndent(cfg, "", "\t")
-	slog.Info(fmt.Sprintf("■ ■ Log ■ ■ 配置 ---> %s", marshal))
+	//marshal, _ := json.MarshalIndent(cfg, "", "\t")
+	//slog.Info(fmt.Sprintf("■ ■ Log ■ ■ 配置 ---> %s", marshal))
 
 	once.Do(func() {
 		logger = newLogger(cfg)

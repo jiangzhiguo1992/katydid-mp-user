@@ -4,7 +4,6 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
-	"github.com/goccy/go-json"
 	"gorm.io/driver/mysql"
 	"gorm.io/driver/postgres"
 	"gorm.io/driver/sqlite"
@@ -91,12 +90,12 @@ func InitConnect(name string, config DBConfig) (*gorm.DB, error) {
 	dbMutex.Lock()
 	defer dbMutex.Unlock()
 
-	// 打印配置
-	marshal, err := json.MarshalIndent(config, "", "\t")
-	if err != nil {
-		return nil, fmt.Errorf("■ ■ Storage ■ ■ 数据库-序列化配置失败: %s, %w", name, err)
-	}
-	config.Logger.Info(context.Background(), fmt.Sprintf("■ ■ Storage ■ ■ 数据库-连接配置:%s :\n%s", name, marshal))
+	//// 打印配置
+	//marshal, err := json.MarshalIndent(config, "", "\t")
+	//if err != nil {
+	//	return nil, fmt.Errorf("■ ■ Storage ■ ■ 数据库-序列化配置失败: %s, %w", name, err)
+	//}
+	//config.Logger.Info(context.Background(), fmt.Sprintf("■ ■ Storage ■ ■ 数据库-连接配置:%s :\n%s", name, marshal))
 
 	// 检查是否已存在同名连接
 	if _, exists := dbInstances[name]; exists {

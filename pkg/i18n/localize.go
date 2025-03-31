@@ -37,8 +37,8 @@ type Manager struct {
 }
 
 func Init(cfg Config) error {
-	marshal, _ := json.MarshalIndent(cfg, "", "\t")
-	cfg.OnInfo(fmt.Sprintf("■ ■ i18n ■ ■ 配置 ---> %s", marshal), nil)
+	//marshal, _ := json.MarshalIndent(cfg, "", "\t")
+	//cfg.OnInfo(fmt.Sprintf("■ ■ i18n ■ ■ 配置 ---> %s", marshal), nil)
 
 	m, err := newManager(cfg)
 	if err != nil {
