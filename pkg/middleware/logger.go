@@ -2,11 +2,14 @@ package middleware
 
 import (
 	"bytes"
+	"encoding/json"
 	"fmt"
 	"github.com/gin-gonic/gin"
+	"github.com/gin-gonic/gin/binding"
 	"github.com/google/uuid"
 	"io"
 	"katydid-mp-user/pkg/log"
+	"katydid-mp-user/pkg/str"
 	"net/http"
 	"path/filepath"
 	"strings"
@@ -46,37 +49,49 @@ var (
 
 // LoggerConfig 定义ZapLogger的配置选项
 type LoggerConfig struct {
-	SkipPaths      []string      // 需要跳过的路径
-	SkipExtensions []string      // 需要跳过的文件扩展名
-	TimeFormat     string        // 时间格式
-	LogParams      bool          // 是否记录请求参数
-	LogHeaders     bool          // 是否记录请求头
-	LogBody        bool          // 是否记录请求体
-	LogResponse    bool          // 是否记录响应体
-	MaxBodySize    int           // 记录的最大请求体大小
-	BodyTypes      []string      // 要记录的请求体内容类型(为空时记录所有)
-	HeaderFilter   []string      // 要记录的请求头字段(为空时记录所有)
-	TraceIDFunc    func() string // 自定义跟踪ID生成函数
-	TraceIDHeader  string        // 自定义跟踪ID头部字段名
-	SensitiveWords []string      // 敏感信息关键词列表
+	// trace
+	ServiceName     string        // 当前服务名称
+	TraceIDHeader   string        // 自定义跟踪ID头部字段名
+	TracePathHeader string        // 需要跟踪的路径头部字段名
+	TraceIDFunc     func() string `json:"-"` // 自定义跟踪ID生成函数(一般是网关生成)
+	// info
+	TimeFormat  string // 时间格式
+	LogParams   bool   // 是否记录请求参数
+	LogHeaders  bool   // 是否记录请求头
+	LogBody     bool   // 是否记录请求体
+	LogResponse bool   // 是否记录响应体
+	MaxBodySize int    // 记录的最大请求/返回体大小
+	// skip
+	SkipPaths        []string // 需要跳过的路径
+	SkipExtensions   []string // 需要跳过的文件扩展名
+	HeaderFilter     []string // 要记录的请求头字段(为空时记录所有)
+	HeaderSkip       []string // 要跳过的请求头字段
+	BodyTypes        []string // 要记录的请求体内容类型(为空时记录所有)
+	HeaderSensitives []string // 敏感信息关键词列表
 }
 
-// DefaultLoggerConfig 返回默认配置
-func DefaultLoggerConfig() LoggerConfig {
+// LoggerDefaultConfig 返回默认配置
+func LoggerDefaultConfig(serviceName string, bodyTypes []string) LoggerConfig {
 	return LoggerConfig{
-		SkipPaths:      []string{"/favicon.ico", "/health", "/metrics"},
-		SkipExtensions: []string{".css", ".js", ".jpg", ".jpeg", ".png", ".gif", ".ico", ".svg"},
-		TimeFormat:     "02/Jan/2006 - 15:04:05",
-		LogParams:      true,
-		LogHeaders:     true,
-		LogBody:        true,
-		LogResponse:    false,
-		MaxBodySize:    maxBodyLogSize,
-		BodyTypes:      []string{}, //[]string{"application/json", "application/xml", "application/x-www-form-urlencoded", "multipart/form-data"},
-		HeaderFilter:   []string{}, //[]string{"Content-Type", "User-Agent", "Referer", "Origin", "Authorization"},
-		TraceIDFunc:    func() string { return uuid.New().String() },
-		TraceIDHeader:  XRequestIDHeader,
-		SensitiveWords: []string{"password", "token", "secret", "Authorization", "Cookie"},
+		// trace
+		ServiceName:     serviceName,
+		TraceIDHeader:   XRequestIDHeader,
+		TracePathHeader: XRequestPathHeader,
+		TraceIDFunc:     func() string { return uuid.New().String() },
+		// info
+		TimeFormat:  "02/Jan/2006 - 15:04:05",
+		LogParams:   true,
+		LogHeaders:  true,
+		LogBody:     true,
+		LogResponse: false,
+		MaxBodySize: maxBodyLogSize,
+		// skip
+		SkipPaths:        []string{"/favicon.ico", "/health", "/metrics"},
+		SkipExtensions:   []string{".css", ".js", ".jpg", ".jpeg", ".png", ".gif", ".ico", ".svg"},
+		HeaderFilter:     []string{}, //[]string{"Content-Type", "User-Agent", "Referer", "Origin", "Authorization"},
+		HeaderSkip:       []string{}, //[]string{"Content-Length", "Host", "Accept-Encoding", "Connection", "Upgrade-Insecure-Requests"},
+		BodyTypes:        bodyTypes,
+		HeaderSensitives: []string{"password", "token", "secret", "Authorization", "Cookie"},
 	}
 }
 
@@ -138,68 +153,34 @@ func loggerMethodColor(method string) string {
 	return newColor
 }
 
-// bodyLogReader 是一个用于读取和重放请求体的结构
-type bodyLogReader struct {
-	body        []byte
-	contentType string
-	maxSize     int
-}
-
-// 优化的响应体记录器
-type responseBodyWriter struct {
-	gin.ResponseWriter
-	body   *bytes.Buffer
-	maxLen int
-}
-
-func (r *responseBodyWriter) Write(b []byte) (int, error) {
-	if r.body != nil && r.body.Len() < r.maxLen {
-		r.body.Write(b)
-	}
-	return r.ResponseWriter.Write(b)
-}
-
-// newBodyLogReader 创建一个新的bodyLogReader
-func newBodyLogReader(body io.ReadCloser, contentType string, maxSize int) (*bodyLogReader, error) {
-	if body == nil {
-		return &bodyLogReader{body: []byte{}}, nil
-	}
-
-	data, err := io.ReadAll(io.LimitReader(body, int64(maxSize+1)))
-	if err != nil {
-		return nil, err
-	}
-
-	return &bodyLogReader{
-		body:        data,
-		contentType: contentType,
-		maxSize:     maxSize,
-	}, nil
-}
-
-// GetReader 返回一个新的读取器用于请求体
-func (b *bodyLogReader) GetReader() io.ReadCloser {
-	return io.NopCloser(bytes.NewReader(b.body))
-}
-
 // ZapLogger 返回一个Gin中间件，使用默认配置记录HTTP请求的日志
-func ZapLogger() gin.HandlerFunc {
-	config := DefaultLoggerConfig()
+func ZapLogger(serviceName string) gin.HandlerFunc {
+	config := LoggerDefaultConfig(
+		serviceName,
+		[]string{binding.MIMEJSON,
+			binding.MIMEXML,
+			binding.MIMEPOSTForm,
+			binding.MIMEMultipartPOSTForm},
+	)
 	return ZapLoggerWithConfig(config)
 }
 
 // ZapLoggerWithConfig 返回一个使用自定义配置的Gin中间件
 func ZapLoggerWithConfig(config LoggerConfig) gin.HandlerFunc {
+	marshal, _ := json.MarshalIndent(config, "", "\t")
+	log.InfoMustf(gin.Mode() != gin.DebugMode, "■ ■ Log(中间件) ■ ■ 配置 ---> %s", marshal)
+
 	return func(c *gin.Context) {
 		// 检查是否需要跳过日志记录
 		path := c.Request.URL.Path
-		if shouldSkipPath(path, config) {
+		if loggerShouldSkipPath(path, config) {
 			c.Next()
 			return
 		}
 
 		// 添加或提取请求ID
-		requestID := extractOrGenerateRequestID(c, config)
+		requestID := logExtractOrGenerateRequestID(c, config)
+		_ = extractOrGenerateRequestPaths(c, config)
 
 		// 记录开始时间
 		start := time.Now()
@@ -220,9 +201,9 @@ func ZapLoggerWithConfig(config LoggerConfig) gin.HandlerFunc {
 		}
 
 		// 收集请求体
-		var bodyLog *bodyLogReader
+		var bodyLog *loggerBodyReader
 		if config.LogBody && shouldLogRequestBody(c.Request.Header.Get("Content-Type"), config.BodyTypes) {
-			bodyLog, _ = newBodyLogReader(c.Request.Body, c.Request.Header.Get("Content-Type"), config.MaxBodySize)
+			bodyLog, _ = newLoggerBodyReader(c.Request.Body, c.Request.Header.Get("Content-Type"), config.MaxBodySize)
 			if bodyLog != nil && len(bodyLog.body) > 0 {
 				c.Request.Body = io.NopCloser(bytes.NewReader(bodyLog.body))
 			}
@@ -232,7 +213,7 @@ func ZapLoggerWithConfig(config LoggerConfig) gin.HandlerFunc {
 		var responseBodyBuffer *bytes.Buffer
 		if config.LogResponse {
 			responseBodyBuffer = &bytes.Buffer{}
-			c.Writer = &responseBodyWriter{
+			c.Writer = &loggerResponseBodyWriter{
 				ResponseWriter: c.Writer,
 				body:           responseBodyBuffer,
 				maxLen:         config.MaxBodySize,
@@ -261,22 +242,17 @@ func ZapLoggerWithConfig(config LoggerConfig) gin.HandlerFunc {
 	}
 }
 
-// shouldSkipPath 检查是否应该跳过日志记录
-func shouldSkipPath(path string, config LoggerConfig) bool {
+// loggerShouldSkipPath 检查是否应该跳过日志记录
+func loggerShouldSkipPath(path string, config LoggerConfig) bool {
 	// 检查完全匹配的路径
-	for _, p := range config.SkipPaths {
-		if p == path {
-			return true
-		}
-		// 支持路径前缀匹配，如 /api/*
-		if strings.HasSuffix(p, "/*") && strings.HasPrefix(path, p[:len(p)-1]) {
+	for _, pattern := range config.SkipPaths {
+		if str.MatchURLPath(path, pattern) {
 			return true
 		}
 	}
 
 	// 检查文件扩展名
-	ext := filepath.Ext(path)
-	if ext != "" {
+	if ext := filepath.Ext(path); ext != "" {
 		for _, skipExt := range config.SkipExtensions {
 			if skipExt == ext {
 				return true
@@ -287,16 +263,24 @@ func shouldSkipPath(path string, config LoggerConfig) bool {
 }
 
 // 提取或生成请求ID
-func extractOrGenerateRequestID(c *gin.Context, config LoggerConfig) string {
+func logExtractOrGenerateRequestID(c *gin.Context, config LoggerConfig) string {
 	requestID := c.GetHeader(config.TraceIDHeader)
 	if requestID == "" {
 		requestID = config.TraceIDFunc()
-		c.Set(RequestIDKey, requestID)
 		c.Header(config.TraceIDHeader, requestID)
-	} else {
-		c.Set(RequestIDKey, requestID)
 	}
+	c.Set(XRequestIDHeader, requestID)
 	return requestID
+}
+
+// 提取或生成请求路径
+func extractOrGenerateRequestPaths(c *gin.Context, config LoggerConfig) string {
+	requestPath := c.GetHeader(config.TracePathHeader)
+	if requestPath == "" {
+		c.Header(config.TracePathHeader, config.ServiceName)
+	}
+	c.Set(XRequestPathHeader, requestPath+">"+config.ServiceName)
+	return c.GetString(XRequestPathHeader)
 }
 
 // 构建完整路径（含查询参数）
@@ -353,7 +337,7 @@ func collectRequestHeaders(c *gin.Context, config LoggerConfig) map[string]strin
 		for k, v := range c.Request.Header {
 			if len(v) > 0 {
 				// 敏感信息处理
-				if containsSensitiveWord(k, config.SensitiveWords) {
+				if containsSensitiveWord(k, config.HeaderSensitives) {
 					headers[k] = "[REDACTED]"
 				} else {
 					headers[k] = strings.Join(v, ", ")
@@ -364,7 +348,7 @@ func collectRequestHeaders(c *gin.Context, config LoggerConfig) map[string]strin
 		// 只记录过滤后的请求头
 		for _, k := range config.HeaderFilter {
 			if v := c.Request.Header.Get(k); v != "" {
-				if containsSensitiveWord(k, config.SensitiveWords) {
+				if containsSensitiveWord(k, config.HeaderSensitives) {
 					headers[k] = "[REDACTED]"
 				} else {
 					headers[k] = v
@@ -408,7 +392,7 @@ func logHTTPRequest(
 	c *gin.Context, config LoggerConfig,
 	start time.Time, requestID, fullPath string,
 	params map[string]any, headers map[string]string,
-	bodyLog *bodyLogReader, responseBody *bytes.Buffer,
+	bodyLog *loggerBodyReader, responseBody *bytes.Buffer,
 ) {
 	// 计算延迟及获取响应信息
 	latency := time.Since(start)
@@ -476,9 +460,9 @@ func addHeadersToFields(fields []log.Field, headers map[string]string, config Lo
 }
 
 // 添加请求体到日志字段
-func addBodyToFields(fields []log.Field, bodyLog *bodyLogReader, config LoggerConfig) []log.Field {
+func addBodyToFields(fields []log.Field, bodyLog *loggerBodyReader, config LoggerConfig) []log.Field {
 	if config.LogBody && bodyLog != nil {
-		bodyStr := formatBodyString(bodyLog)
+		bodyStr := bodyLog.formatBodyString(config.HeaderSensitives...)
 		if bodyStr != "" {
 			fields = append(fields, log.FString("request_body", bodyStr))
 		}
@@ -514,30 +498,55 @@ func addErrorsToFields(fields []log.Field, c *gin.Context) []log.Field {
 func logByStatus(msg string, status int, errors []*gin.Error, fields ...log.Field) {
 	switch {
 	case len(errors) > 0:
-		log.Error(msg, fields...)
+		log.ErrorMust(gin.Mode() != gin.DebugMode, msg, fields...)
 	case status >= http.StatusInternalServerError:
-		log.Error(msg, fields...)
+		log.ErrorMust(gin.Mode() != gin.DebugMode, msg, fields...)
 	case status >= http.StatusBadRequest:
-		log.Warn(msg, fields...)
+		log.WarnMust(gin.Mode() != gin.DebugMode, msg, fields...)
 	default:
-		log.Info(msg, fields...)
+		log.Debug(msg, fields...)
 	}
 }
 
-// formatBodyString formats the request body for logging, handling sensitive data
-func formatBodyString(bodyLog *bodyLogReader) string {
-	if bodyLog == nil {
-		return ""
+// loggerBodyReader 是一个用于读取和重放请求体的结构
+type loggerBodyReader struct {
+	body        []byte
+	contentType string
+	maxSize     int
+}
+
+// newLoggerBodyReader 创建一个新的bodyLogReader
+func newLoggerBodyReader(body io.ReadCloser, contentType string, maxSize int) (*loggerBodyReader, error) {
+	if body == nil {
+		return &loggerBodyReader{body: []byte{}}, nil
 	}
 
-	bodyStr := bodyLog.String()
+	data, err := io.ReadAll(io.LimitReader(body, int64(maxSize+1)))
+	if err != nil {
+		return nil, err
+	}
+
+	return &loggerBodyReader{
+		body:        data,
+		contentType: contentType,
+		maxSize:     maxSize,
+	}, nil
+}
+
+// GetReader 返回一个新的读取器用于请求体
+func (b *loggerBodyReader) GetReader() io.ReadCloser {
+	return io.NopCloser(bytes.NewReader(b.body))
+}
+
+// formatBodyString formats the request body for logging, handling sensitive data
+func (b *loggerBodyReader) formatBodyString(sensitiveFields ...string) string {
+	bodyStr := b.String()
 	if bodyStr == "" {
 		return ""
 	}
 
 	// Very simplified sensitive data redaction
 	// In a real implementation, you might want to use regex to mask sensitive fields
-	sensitiveFields := []string{"password", "token", "secret", "authorization", "cookie"}
 	lowerBody := strings.ToLower(bodyStr)
 
 	for _, field := range sensitiveFields {
@@ -562,7 +571,7 @@ func formatBodyString(bodyLog *bodyLogReader) string {
 }
 
 // String 返回请求体的字符串表示
-func (b *bodyLogReader) String() string {
+func (b *loggerBodyReader) String() string {
 	if len(b.body) == 0 {
 		return ""
 	}
@@ -580,4 +589,18 @@ func (b *bodyLogReader) String() string {
 	}
 
 	return fmt.Sprintf("[非文本请求体: %s, %d bytes]", b.contentType, len(b.body))
+}
+
+// 优化的响应体记录器
+type loggerResponseBodyWriter struct {
+	gin.ResponseWriter
+	body   *bytes.Buffer
+	maxLen int
+}
+
+func (r *loggerResponseBodyWriter) Write(b []byte) (int, error) {
+	if r.body != nil && r.body.Len() < r.maxLen {
+		r.body.Write(b)
+	}
+	return r.ResponseWriter.Write(b)
 }
