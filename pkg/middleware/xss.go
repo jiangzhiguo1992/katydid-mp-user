@@ -5,7 +5,7 @@ import (
 )
 
 // XSS 跨站脚本攻击
-// 1.所有返回HTML的页面都需要检验是否安全，有内嵌脚本
+// 1.所有返回HTML的页面都需要检验是否安全，可能有内嵌脚本
 // 2.就不检验所有的入库/展示文本了，不是HTML不用做XSS防护
 func XSS() gin.HandlerFunc {
 	return func(c *gin.Context) {
