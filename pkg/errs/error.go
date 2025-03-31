@@ -49,6 +49,11 @@ func New(cause error) *Error {
 	}
 }
 
+func (e *Error) ResetCause(err error) *Error {
+	e.cause = err
+	return e
+}
+
 func (e *Error) ResetStack() *Error {
 	e.stack = callers()
 	return e
@@ -207,4 +212,8 @@ func (e *Error) Translate(lang string) string {
 		}
 	}
 	return builder.String()
+}
+
+func (e *Error) Code() int {
+	return e.code
 }
