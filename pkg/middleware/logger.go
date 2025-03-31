@@ -5,7 +5,6 @@ import (
 	"bytes"
 	"fmt"
 	"github.com/gin-gonic/gin"
-	"github.com/google/uuid"
 	"io"
 	"katydid-mp-user/pkg/log"
 	"katydid-mp-user/pkg/str"
@@ -116,18 +115,11 @@ func loggerMethodColor(method string) string {
 
 // LoggerConfig 定义ZapLogger的配置选项
 type LoggerConfig struct {
-	// trace
-	ServiceName     string        // 当前服务名称
-	TraceIDHeader   string        // 自定义跟踪ID头部字段名
-	TracePathHeader string        // 需要跟踪的路径头部字段名
-	TraceIDFunc     func() string `json:"-"` // 自定义跟踪ID生成函数(一般是网关生成)
-	// info
-	LogParams   bool // 是否记录请求参数
-	LogHeaders  bool // 是否记录请求头
-	LogBody     bool // 是否记录请求体
-	LogResponse bool // 是否记录响应体
-	MaxBodySize int  // 记录的最大请求/返回体大小
-	// skip
+	LogParams      bool     // 是否记录请求参数
+	LogHeaders     bool     // 是否记录请求头
+	LogBody        bool     // 是否记录请求体
+	LogResponse    bool     // 是否记录响应体
+	MaxBodySize    int      // 记录的最大请求/返回体大小
 	SkipStatus     []int    // 需要跳过的状态码
 	SkipPaths      []string // 需要跳过的路径
 	SkipExtensions []string // 需要跳过的文件扩展名
@@ -137,22 +129,15 @@ type LoggerConfig struct {
 }
 
 // LoggerDefaultConfig 返回默认配置
-func LoggerDefaultConfig(serviceName string, status []int, skips, sensitives []string, size int) LoggerConfig {
+func LoggerDefaultConfig(skipStatus []int, skipPaths, sensitives []string, size int) LoggerConfig {
 	return LoggerConfig{
-		// trace
-		ServiceName:     serviceName,
-		TraceIDHeader:   XRequestIDHeader,
-		TracePathHeader: XRequestPathHeader,
-		TraceIDFunc:     func() string { return uuid.New().String() },
-		// info
-		LogParams:   true,
-		LogHeaders:  true,
-		LogBody:     true,
-		LogResponse: true,
-		MaxBodySize: size,
-		// skip
-		SkipStatus:     status,
-		SkipPaths:      skips, //[]string{"/favicon.ico", "/health", "/metrics"},
+		LogParams:      true,
+		LogHeaders:     true,
+		LogBody:        true,
+		LogResponse:    true,
+		MaxBodySize:    size,
+		SkipStatus:     skipStatus,
+		SkipPaths:      skipPaths, //[]string{"/favicon.ico", "/health", "/metrics"},
 		SkipExtensions: []string{".css", ".js", ".jpg", ".jpeg", ".png", ".gif", ".ico", ".svg"},
 		Sensitives:     sensitives, //[]string{"password", "token", "secret", "Authorization", "Cookie"},
 		HeaderFilter:   []string{}, //[]string{"Content-Type", "User-Agent", "Referer", "Origin", "Authorization"},
@@ -172,10 +157,6 @@ func ZapLoggerWithConfig(config LoggerConfig) gin.HandlerFunc {
 			c.Next()
 			return
 		}
-
-		// 添加或提取请求ID
-		traceID := logExtractOrGenerateRequestID(c, config)
-		tracePath := logExtractOrGenerateRequestPaths(c, config)
 
 		// 记录开始时间
 		start := time.Now()
@@ -253,7 +234,7 @@ func ZapLoggerWithConfig(config LoggerConfig) gin.HandlerFunc {
 		}
 
 		// 记录日志
-		logHTTPRequest(c, config, start, traceID, tracePath, fullPath, headers, bodyLog, responseBodyBuffer)
+		logHTTPRequest(c, config, start, fullPath, headers, bodyLog, responseBodyBuffer)
 	}
 }
 
@@ -275,28 +256,6 @@ func loggerShouldSkipPath(path string, config LoggerConfig) bool {
 		}
 	}
 	return false
-}
-
-// 提取或生成请求ID
-func logExtractOrGenerateRequestID(c *gin.Context, config LoggerConfig) string {
-	requestID := c.GetHeader(config.TraceIDHeader)
-	if requestID == "" {
-		requestID = config.TraceIDFunc()
-		c.Header(config.TraceIDHeader, requestID) // header
-	}
-	c.Set(XRequestIDHeader, requestID) // context
-	return requestID
-}
-
-// 提取或生成请求路径
-func logExtractOrGenerateRequestPaths(c *gin.Context, config LoggerConfig) string {
-	requestPath := c.GetHeader(config.TracePathHeader)
-	requestPath = requestPath + ">" + config.ServiceName
-	if requestPath == "" {
-		c.Header(config.TracePathHeader, requestPath) // header
-	}
-	c.Set(XRequestPathHeader, requestPath) // context
-	return requestPath
 }
 
 // 构建完整路径（含查询参数）
@@ -383,8 +342,7 @@ func logContainsSensitiveWord(key string, sensitiveWords []string) bool {
 // 记录HTTP请求日志（抽取复杂逻辑）
 func logHTTPRequest(
 	c *gin.Context, config LoggerConfig,
-	start time.Time, traceID, tracePath string,
-	fullPath string, headers map[string]string,
+	start time.Time, fullPath string, headers map[string]string,
 	bodyLog *loggerBodyReader, responseBody *bytes.Buffer,
 ) {
 	// 计算延迟及获取响应信息
@@ -408,6 +366,9 @@ func logHTTPRequest(
 	} else {
 		methodFormatted = method
 	}
+
+	traceID := c.GetString(XRequestIDHeader)
+	tracePath := c.GetString(XRequestPathHeader)
 
 	// 构建日志消息
 	var msgBuilder strings.Builder
