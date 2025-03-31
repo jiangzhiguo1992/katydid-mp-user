@@ -10,6 +10,8 @@ type (
 		LogConf  `toml:"log" mapstructure:"log"`
 		LangConf `toml:"lang" mapstructure:"lang"`
 
+		MiddleWareConf `toml:"middleware" mapstructure:"middleware"`
+
 		AppConf `mapstructure:",squash"`
 
 		Auth   AuthConf   `toml:"auth" mapstructure:"auth"`
@@ -39,6 +41,16 @@ type (
 		Default string `toml:"default" mapstructure:"default"`
 	}
 
+	MiddleWareConf struct {
+		Logger struct {
+			Enable     bool     `toml:"enable" mapstructure:"enable"`
+			SkipStatus []int    `toml:"skip_status" mapstructure:"skip_status"`
+			SkipPaths  []string `toml:"skip_paths" mapstructure:"skip_paths"`
+			Sensitives []string `toml:"sensitives" mapstructure:"sensitives"`
+			MaxSize    int      `toml:"max_size" mapstructure:"max_size"`
+		} `toml:"logger" mapstructure:"logger"`
+	}
+
 	AppConf struct {
 		Server Server `toml:"server" mapstructure:"server"`
 
@@ -46,6 +58,7 @@ type (
 	}
 
 	Server struct {
+		Name         string `toml:"name" mapstructure:"name"`
 		ApiDomain    string `toml:"api_domain" mapstructure:"api_domain"`
 		ApiHttpPort  string `toml:"api_http_port" mapstructure:"api_http_port"`
 		ApiHttpsPort string `toml:"api_https_port" mapstructure:"api_https_port"`
@@ -87,7 +100,7 @@ type (
 			Pwd    []string            `toml:"pwd" mapstructure:"pwd"`
 			Weight []int               `toml:"weight" mapstructure:"weight"`
 			Params []map[string]string `toml:"params" mapstructure:"params"`
-		} `toml:"reads"`
+		} `toml:"reads"  mapstructure:"reads"`
 		// retry
 		MaxRetries    int `toml:"max_retries" mapstructure:"max_retries"`
 		RetryDelay    int `toml:"retry_delay" mapstructure:"retry_delay"`

@@ -1,5 +1,6 @@
 
 [server]
+name = "katydid_user"
 api_domain = "user.katydid.com"
 api_http_port = 80
 api_https_port = 8080
@@ -42,3 +43,11 @@ params = [] # 选填
 #MaxIdle = 30
 #MaxActive = 30
 #IdleTimeout = 200
+
+
+[middleware.logger]
+enable = true
+skip_status = [] # 需要跳过的状态码, 401, 404
+skip_paths = ["/favicon.ico", "/health", "/metrics"]
+sensitives = ["password", "token", "secret", "Authorization", "Cookie"]
+max_size = 4096 # 日志大小限制, -1表示不限制

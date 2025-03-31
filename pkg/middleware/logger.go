@@ -392,7 +392,7 @@ func logHTTPRequest(
 		bodyString := responseBody.String()
 		w.mu.Unlock()
 
-		if len(bodyString) > config.MaxBodySize {
+		if config.MaxBodySize >= 0 && len(bodyString) > config.MaxBodySize {
 			bodyString = bodyString[:config.MaxBodySize] + "... [truncated]"
 		}
 		_, _ = fmt.Fprintf(&msgBuilder, "\n\tresponse_body(%d): %s", size, bodyString)
@@ -450,7 +450,13 @@ func newLoggerBodyReader(body io.ReadCloser, contentType string, maxSize int) (*
 		}, nil
 	}
 
-	data, err := io.ReadAll(io.LimitReader(body, int64(maxSize+1)))
+	var data []byte
+	var err error
+	if maxSize >= 0 {
+		data, err = io.ReadAll(io.LimitReader(body, int64(maxSize+1)))
+	} else {
+		data, err = io.ReadAll(body)
+	}
 	if err != nil {
 		return nil, err
 	}
@@ -558,7 +564,7 @@ func (w *loggerResponseBodyWriter) Write(b []byte) (int, error) {
 		w.mu.Lock()
 		// 只记录到最大长度
 		remaining := w.maxLen - w.body.Len()
-		if remaining > len(b) {
+		if remaining > len(b) || w.maxLen < 0 {
 			w.body.Write(b)
 		} else if remaining > 0 {
 			w.body.Write(b[:remaining])
@@ -573,7 +579,7 @@ func (w *loggerResponseBodyWriter) WriteString(s string) (int, error) {
 		w.mu.Lock()
 		// 只记录到最大长度
 		remaining := w.maxLen - w.body.Len()
-		if remaining > len(s) {
+		if remaining > len(s) || w.maxLen < 0 {
 			w.body.WriteString(s)
 		} else if remaining > 0 {
 			w.body.WriteString(s[:remaining])
