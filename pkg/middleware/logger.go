@@ -1,16 +1,18 @@
 package middleware
 
 import (
+	"bufio"
 	"bytes"
-	"encoding/json"
 	"fmt"
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 	"io"
 	"katydid-mp-user/pkg/log"
 	"katydid-mp-user/pkg/str"
+	"net"
 	"net/http"
 	"path/filepath"
+	"regexp"
 	"strconv"
 	"strings"
 	"sync"
@@ -44,6 +46,10 @@ var (
 			return make(map[string]string, 8)
 		},
 	}
+
+	// 添加正则表达式缓存
+	logRegexpCache      = make(map[string]*regexp.Regexp)
+	logRegexpCacheMutex sync.RWMutex
 )
 
 // loggerStatusColor 根据HTTP状态码返回对应的颜色（带缓存）
@@ -152,8 +158,8 @@ func LoggerDefaultConfig(serviceName string, status []int, skips, sensitives []s
 
 // ZapLoggerWithConfig 返回一个使用自定义配置的Gin中间件
 func ZapLoggerWithConfig(config LoggerConfig) gin.HandlerFunc {
-	marshal, _ := json.MarshalIndent(config, "", "\t")
-	log.InfoMustf(gin.Mode() != gin.DebugMode, "■ ■ Log(中间件) ■ ■ 配置 ---> %s", marshal)
+	//marshal, _ := json.MarshalIndent(config, "", "\t")
+	//log.InfoMustf(gin.Mode() != gin.DebugMode, "■ ■ Log(中间件) ■ ■ 配置 ---> %s", marshal)
 
 	return func(c *gin.Context) {
 		// 检查是否需要跳过日志记录
@@ -291,6 +297,11 @@ func logBuildFullPath(c *gin.Context) string {
 // logCollectRequestParams 收集请求参数
 func logCollectRequestParams(c *gin.Context) map[string]any {
 	params := loggerParamsPool.Get().(map[string]any)
+	// 确保map是空的
+	for k := range params {
+		delete(params, k)
+	}
+
 	for k, v := range c.Request.URL.Query() {
 		if len(v) > 1 {
 			params[k] = v
@@ -304,6 +315,11 @@ func logCollectRequestParams(c *gin.Context) map[string]any {
 // 优化的收集请求头函数
 func logCollectRequestHeaders(c *gin.Context, config LoggerConfig) map[string]string {
 	headers := loggerHeadersPool.Get().(map[string]string)
+
+	// 确保map是空的
+	for k := range headers {
+		delete(headers, k)
+	}
 
 	if len(config.HeaderFilter) == 0 {
 		// 记录所有请求头
@@ -332,9 +348,7 @@ func logCollectRequestHeaders(c *gin.Context, config LoggerConfig) map[string]st
 
 	// 处理跳过的请求头
 	for _, k := range config.HeaderSkip {
-		if _, ok := headers[k]; ok {
-			delete(headers, k)
-		}
+		delete(headers, k)
 	}
 
 	return headers
@@ -449,37 +463,33 @@ func (b *loggerBodyReader) GetReader() io.ReadCloser {
 
 // formatBodyString formats the request body for logging, handling sensitive data
 func (b *loggerBodyReader) formatBodyString(sensitiveFields ...string) string {
-	bodyStr := b.String()
-	if bodyStr == "" {
+	if b == nil || len(b.body) == 0 {
 		return ""
 	}
 
-	// Very simplified sensitive data redaction
-	// In a real implementation, you might want to use regex to mask sensitive fields
-	lowerBody := strings.ToLower(bodyStr)
+	bodyStr := b.String()
+	if len(bodyStr) > b.maxSize {
+		bodyStr = bodyStr[:b.maxSize] + "... [truncated]"
+	}
 
-	for _, sensitive := range sensitiveFields {
-		if strings.Contains(lowerBody, sensitive) {
-			// Very basic masking - in production you'd want more sophisticated regex-based replacement
-			indexStart := strings.Index(lowerBody, sensitive)
-			if indexStart >= 0 {
-				// Find the value portion and mask it
-				// This is a simplified approach - real implementation would be more robust
-				valueStart := strings.IndexAny(bodyStr[indexStart+len(sensitive):], ":\"'") + indexStart + len(sensitive) + 1
-				valueEnd := strings.IndexAny(bodyStr[valueStart:], ",}\"'")
-				if valueEnd > 0 {
-					valueEnd += valueStart
-					// Replace the sensitive value with [REDACTED]
-					bodyStr = bodyStr[:valueStart] + "[REDACTED]" + bodyStr[valueEnd:]
-					lowerBody = strings.ToLower(bodyStr) // Update lowercase version for next iterations
-				}
-			}
+	// 使用正则表达式进行更精确的敏感信息替换
+	for _, field := range sensitiveFields {
+		// JSON 格式敏感字段
+		pattern := fmt.Sprintf(`("%s"\s*:\s*)(\"[^\"]*\"|\d+|true|false|null)`, regexp.QuoteMeta(field))
+		re, err := logGetCachedRegexp(pattern)
+		if err == nil {
+			bodyStr = re.ReplaceAllString(bodyStr, `$1"[REDACTED]"`)
+		}
+
+		// 表单格式敏感字段
+		formPattern := fmt.Sprintf(`(%s=)([^&\s]*)`, regexp.QuoteMeta(field))
+		formRe, err := logGetCachedRegexp(formPattern)
+		if err == nil {
+			bodyStr = formRe.ReplaceAllString(bodyStr, `$1[REDACTED]`)
 		}
 	}
 
-	bodyStr = strings.Replace(bodyStr, "\n", "\n\t", -1)
-
-	return bodyStr
+	return strings.Replace(bodyStr, "\n", "\n\t", -1)
 }
 
 // String 返回请求体的字符串表示
@@ -503,6 +513,28 @@ func (b *loggerBodyReader) String() string {
 	return fmt.Sprintf("[非文本请求体: %s, %d bytes]", b.contentType, len(b.body))
 }
 
+// 获取缓存的正则表达式
+func logGetCachedRegexp(pattern string) (*regexp.Regexp, error) {
+	logRegexpCacheMutex.RLock()
+	re, exists := logRegexpCache[pattern]
+	logRegexpCacheMutex.RUnlock()
+
+	if exists {
+		return re, nil
+	}
+
+	compiled, err := regexp.Compile(pattern)
+	if err != nil {
+		return nil, err
+	}
+
+	logRegexpCacheMutex.Lock()
+	logRegexpCache[pattern] = compiled
+	logRegexpCacheMutex.Unlock()
+
+	return compiled, nil
+}
+
 // 优化的响应体记录器
 type loggerResponseBodyWriter struct {
 	gin.ResponseWriter
@@ -510,13 +542,60 @@ type loggerResponseBodyWriter struct {
 	maxLen int
 }
 
-func (b *loggerBodyReader) Body() []byte {
-	return b.body
+func (w *loggerResponseBodyWriter) Write(b []byte) (int, error) {
+	if w.body != nil && w.body.Len() < w.maxLen {
+		// 只记录到最大长度
+		remaining := w.maxLen - w.body.Len()
+		if remaining > len(b) {
+			w.body.Write(b)
+		} else if remaining > 0 {
+			w.body.Write(b[:remaining])
+		}
+	}
+	return w.ResponseWriter.Write(b)
 }
 
-func (r *loggerResponseBodyWriter) Write(b []byte) (int, error) {
-	if r.body != nil && r.body.Len() < r.maxLen {
-		r.body.Write(b)
+func (w *loggerResponseBodyWriter) WriteString(s string) (int, error) {
+	if w.body != nil && w.body.Len() < w.maxLen {
+		// 只记录到最大长度
+		remaining := w.maxLen - w.body.Len()
+		if remaining > len(s) {
+			w.body.WriteString(s)
+		} else if remaining > 0 {
+			w.body.WriteString(s[:remaining])
+		}
 	}
-	return r.ResponseWriter.Write(b)
+	return w.ResponseWriter.WriteString(s)
+}
+
+func (w *loggerResponseBodyWriter) Hijack() (net.Conn, *bufio.ReadWriter, error) {
+	if w.ResponseWriter == nil {
+		return nil, nil, fmt.Errorf("ResponseWriter is nil")
+	}
+
+	hijacker, ok := w.ResponseWriter.(http.Hijacker)
+	if !ok {
+		return nil, nil, fmt.Errorf("underlying ResponseWriter does not implement http.Hijacker")
+	}
+	return hijacker.Hijack()
+}
+
+func (w *loggerResponseBodyWriter) Flush() {
+	if flusher, ok := w.ResponseWriter.(http.Flusher); ok {
+		flusher.Flush()
+	}
+}
+
+func (w *loggerResponseBodyWriter) CloseNotify() <-chan bool {
+	if notifier, ok := w.ResponseWriter.(http.CloseNotifier); ok {
+		return notifier.CloseNotify()
+	}
+	return nil
+}
+
+func (w *loggerResponseBodyWriter) Push(target string, opts *http.PushOptions) error {
+	if pusher, ok := w.ResponseWriter.(http.Pusher); ok {
+		return pusher.Push(target, opts)
+	}
+	return http.ErrNotSupported
 }
