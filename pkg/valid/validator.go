@@ -2,8 +2,10 @@ package valid
 
 import (
 	"errors"
+	"fmt"
 	"github.com/go-playground/validator/v10"
 	"reflect"
+	"strings"
 	"sync"
 )
 
@@ -375,6 +377,7 @@ func (v *Validator) validLocalize(
 	first bool,
 ) []*MsgErr {
 	var msgErrs []*MsgErr
+
 	// 处理组合类型的验证规则
 	if msgEs := v.processEmbeddedLocalizes(scene, obj, validateErrs); msgEs != nil {
 		msgErrs = append(msgErrs, msgEs...)
@@ -454,7 +457,18 @@ func (v *Validator) validLocalize(
 
 	// 找不到就返回默认
 	if (len(msgErrs) <= 0) && first {
-		msgErrs = append(msgErrs, &MsgErr{Msg: "unknown_validator_err"})
+		// 提供更具体的错误信息，包括字段和规则
+		fieldErrors := make([]string, 0, len(validateErrs))
+		for _, err := range validateErrs {
+			fieldErrors = append(fieldErrors,
+				fmt.Sprintf("field:%s, tag:%s, param:%s",
+					err.Field(), err.Tag(), err.Param()))
+		}
+
+		msgErrs = append(msgErrs, &MsgErr{
+			Msg:    "validation_failed",
+			Params: []any{strings.Join(fieldErrors, "; ")},
+		})
 	}
 	return msgErrs
 }

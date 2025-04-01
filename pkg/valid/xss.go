@@ -1,13 +1,14 @@
 package valid
 
 import (
-	"github.com/microcosm-cc/bluemonday"
 	"regexp"
 	"strings"
+
+	"github.com/microcosm-cc/bluemonday"
 )
 
 var (
-	// XSS攻击模式检测正则表达式
+	// xssPatterns 包含XSS攻击模式检测的正则表达式
 	xssPatterns = []*regexp.Regexp{
 		// 脚本标签及其变种
 		regexp.MustCompile(`(?i)<\s*script[\s\S]*?>`),
@@ -52,7 +53,17 @@ var (
 
 		// SVG嵌入式脚本
 		regexp.MustCompile(`(?i)<\s*svg[^>]*>.*?<\s*script`),
+
+		// 添加新的检测模式：CSP绕���
+		regexp.MustCompile(`(?i)<\s*meta\s+http-equiv\s*=\s*["']?content-security-policy`),
+
+		// 添加DOM clobbering检测
+		regexp.MustCompile(`(?i)<\s*form\s+id\s*=\s*["']?[\w-]+["']?`),
+		regexp.MustCompile(`(?i)<\s*input\s+name\s*=\s*["']?[\w-]+["']?`),
 	}
+
+	// suspiciousChars 包含可疑的XSS字符
+	suspiciousChars = "<>\"'&;:"
 )
 
 // XSSValidator 提供检测XSS攻击的功能
@@ -91,7 +102,7 @@ func (v *XSSValidator) HasXSS(text string) bool {
 	}
 
 	// 先进行简单快速检查，筛选出明显安全的文本
-	if !strings.ContainsAny(text, "<>\"'&") {
+	if !strings.ContainsAny(text, suspiciousChars) {
 		return false // 明显安全的文本快速通过
 	}
 
@@ -103,7 +114,8 @@ func (v *XSSValidator) HasXSS(text string) bool {
 	}
 
 	// 如果正则没有匹配到，再通过sanitize比较作为补充检测
-	return v.SanitizeXSS(text) != text
+	sanitized := v.SanitizeXSS(text)
+	return sanitized != text
 }
 
 // GetXSSMatches 返回文本中匹配到的所有XSS模式
@@ -111,6 +123,12 @@ func (v *XSSValidator) GetXSSMatches(text string) []string {
 	if text == "" {
 		return nil
 	}
+
+	// 快速检查是否包含可疑字符
+	if !strings.ContainsAny(text, suspiciousChars) {
+		return nil
+	}
+
 	var matches []string
 	for _, pattern := range v.patterns {
 		if found := pattern.FindAllString(text, -1); len(found) > 0 {
@@ -124,7 +142,14 @@ func (v *XSSValidator) GetXSSMatches(text string) []string {
 func (v *XSSValidator) ValidateInput(input string) (bool, []string) {
 	if input == "" {
 		return true, nil
-	} else if v.HasXSS(input) {
+	}
+
+	// 快速检查是否包含可疑字符
+	if !strings.ContainsAny(input, suspiciousChars) {
+		return true, nil
+	}
+
+	if v.HasXSS(input) {
 		return false, v.GetXSSMatches(input)
 	}
 	return true, nil
