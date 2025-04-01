@@ -4,13 +4,13 @@ import (
 	"encoding/json"
 	"fmt"
 	"github.com/BurntSushi/toml"
+	lru "github.com/hashicorp/golang-lru/v2"
 	"github.com/nicksnyder/go-i18n/v2/i18n"
 	"golang.org/x/text/language"
 	"gopkg.in/yaml.v3"
 	"os"
 	"path/filepath"
 	"strings"
-	"sync"
 )
 
 const (
@@ -21,19 +21,20 @@ const (
 var defaultManager *Manager
 
 type Config struct {
-	DefaultLang string
-	DocDirs     []string
-	OnInfo      func(string, map[string]any) `json:"-"`
-	OnErr       func(string, map[string]any) `json:"-"`
+	DefaultLang  string                       // 默认语言
+	CacheMaxSize int                          // 默认1000
+	DocDirs      []string                     // 解析文件夹
+	OnInfo       func(string, map[string]any) `json:"-"`
+	OnErr        func(string, map[string]any) `json:"-"`
 }
 
 type Manager struct {
 	config     Config
 	bundle     *i18n.Bundle
 	langs      []string
-	langsMap   map[string]bool // 用于快速查找语言是否支持
-	localizer  sync.Map        // 缓存常用localizer对象
-	localizers sync.Map        // 缓存常用localizers对象
+	langsMap   map[string]bool                       // 用于快速查找语言是否支持
+	localizer  *lru.Cache[string, *i18n.Localizer]   // 使用LRU缓存代替sync.Map
+	localizers *lru.Cache[string, []*i18n.Localizer] // 使用LRU缓存代替sync.Map
 }
 
 func Init(cfg Config) error {
@@ -84,11 +85,27 @@ func newManager(cfg Config) (*Manager, error) {
 		return nil, fmt.Errorf("■ ■ i18n ■ ■ 解析默认失败: %w", err)
 	}
 
+	// 创建LRU缓存，设置合理的大小限制
+	if cfg.CacheMaxSize <= 0 {
+		cfg.CacheMaxSize = 1000 // 使用合理的默认值
+	}
+	localizerCache, err := lru.New[string, *i18n.Localizer](cfg.CacheMaxSize)
+	if err != nil {
+		return nil, fmt.Errorf("■ ■ i18n ■ ■ 创建localizer缓存失败: %w", err)
+	}
+
+	localizersCache, err := lru.New[string, []*i18n.Localizer](cfg.CacheMaxSize)
+	if err != nil {
+		return nil, fmt.Errorf("■ ■ i18n ■ ■ 创建localizers缓存失败: %w", err)
+	}
+
 	m := &Manager{
-		config:   cfg,
-		bundle:   i18n.NewBundle(defaultTag),
-		langs:    nil,
-		langsMap: make(map[string]bool),
+		config:     cfg,
+		bundle:     i18n.NewBundle(defaultTag),
+		langs:      nil,
+		langsMap:   make(map[string]bool),
+		localizer:  localizerCache,
+		localizers: localizersCache,
 	}
 
 	m.registerUnmarshalFuncs()
@@ -149,7 +166,8 @@ func (m *Manager) loadMessageFiles() error {
 }
 
 func filterMessageFiles(files []string) []string {
-	var result []string
+	result := make([]string, 0, len(files))
+
 	for _, f := range files {
 		if fi, err := os.Stat(f); err == nil && !fi.IsDir() {
 			result = append(result, f)
@@ -163,28 +181,30 @@ func extractLangFromFilename(file string) string {
 	ext := filepath.Ext(base)
 	name := base[:len(base)-len(ext)]
 
-	if parts := strings.Split(name, "."); len(parts) > 1 {
-		return parts[1]
+	// 查找最后一个点的位置
+	if idx := strings.LastIndex(name, "."); idx >= 0 {
+		return name[idx+1:]
 	}
 	return name
 }
 
 // getLocalizers 获取缓存的localizer，如果不存在则创建
 func (m *Manager) getLocalizers(lang string) []*i18n.Localizer {
-	if v, ok := m.localizers.Load(lang); ok {
-		return v.([]*i18n.Localizer)
+	// 从LRU缓存获取
+	if val, ok := m.localizers.Get(lang); ok {
+		return val
 	}
 
 	// 构建语言标签列表，实现回退链
-	var tags []string
+	tags := make([]string, 0, 3) // 大多数情况下不超过3个标签
 
 	if m.langsMap[lang] {
 		tags = append(tags, lang)
 	}
 
 	// 添加基本语言标签（如 "en" 从 "en-US"）
-	if parts := strings.Split(lang, "-"); len(parts) > 1 {
-		base := parts[0]
+	if dashIndex := strings.IndexByte(lang, '-'); dashIndex > 0 {
+		base := lang[:dashIndex]
 		if base != lang && m.langsMap[base] {
 			tags = append(tags, base)
 		}
@@ -198,15 +218,15 @@ func (m *Manager) getLocalizers(lang string) []*i18n.Localizer {
 	localizers := make([]*i18n.Localizer, len(tags))
 	for i := 0; i < len(tags); i++ {
 		tt := strings.Join(tags[i:], "_")
-		if v, ok := m.localizer.Load(tt); ok {
-			localizers[i] = v.(*i18n.Localizer)
+		if val, ok := m.localizer.Get(tt); ok {
+			localizers[i] = val
 			continue
 		}
 		localizer := i18n.NewLocalizer(m.bundle, tags[i:]...)
-		m.localizer.Store(tt, localizer)
+		m.localizer.Add(tt, localizer)
 		localizers[i] = localizer
 	}
-	m.localizers.Store(lang, localizers)
+	m.localizers.Add(lang, localizers)
 	return localizers
 }
 
@@ -215,10 +235,8 @@ func (m *Manager) localize(lang, msgID string, data map[string]any, fallbackToID
 	localizers := m.getLocalizers(lang)
 
 	// 循环查找
-	var msg string
-	var err error
 	for _, localizer := range localizers {
-		msg, err = localizer.Localize(&i18n.LocalizeConfig{
+		msg, err := localizer.Localize(&i18n.LocalizeConfig{
 			MessageID:    msgID,
 			TemplateData: data,
 			DefaultMessage: &i18n.Message{
@@ -226,26 +244,25 @@ func (m *Manager) localize(lang, msgID string, data map[string]any, fallbackToID
 				//Other: unknownError,
 			},
 		})
-		if (len(msg) > 0) && (err == nil) {
-			break
+		if err == nil && len(msg) > 0 {
+			return msg // 找到有效翻译直接返回
 		}
 	}
 
-	// 处理未找到消息的情况
-	if (len(msg) == 0) && (err != nil) {
-		if fallbackToID {
-			msg = msgID
-		} else {
-			msg = unknownError
-		}
+	// 只在最后才处理错误情况
+	if fallbackToID {
+		return msgID
 	}
 
 	// 记录错误
-	if !fallbackToID && (err != nil) && (m.config.OnErr != nil) {
-		m.config.OnErr("■ ■ i18n ■ ■ 本地化未找到: ", map[string]any{
-			"msgID": msgID, "lang": lang, "error": err})
+	if m.config.OnErr != nil {
+		m.config.OnErr(
+			"■ ■ i18n ■ ■ 本地化未找到: ",
+			map[string]any{"msgID": msgID, "lang": lang},
+		)
 	}
-	return msg
+
+	return unknownError
 }
 
 func LocalizeMust(lang, msgID string, data map[string]any) string {
