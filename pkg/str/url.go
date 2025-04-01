@@ -49,7 +49,7 @@ func MatchURLPath(path string, pattern string) bool {
 	}
 
 	// 处理前缀匹配（优先于正则匹配，提高性能）
-	if strings.HasSuffix(pattern, "*") && pattern != "*" {
+	if strings.HasSuffix(pattern, "*") && pattern != "*" && len(pattern) > 1 {
 		prefix := pattern[:len(pattern)-1]
 		if !strings.Contains(prefix, "*") && !strings.Contains(prefix, "?") &&
 			!strings.Contains(prefix, "{") && !strings.Contains(prefix, "[") {
@@ -58,7 +58,7 @@ func MatchURLPath(path string, pattern string) bool {
 	}
 
 	// 处理后缀匹配
-	if strings.HasPrefix(pattern, "*") && pattern != "*" {
+	if strings.HasPrefix(pattern, "*") && pattern != "*" && len(pattern) > 1 {
 		suffix := pattern[1:]
 		if !strings.Contains(suffix, "*") && !strings.Contains(suffix, "?") &&
 			!strings.Contains(suffix, "{") && !strings.Contains(suffix, "[") {
@@ -71,12 +71,17 @@ func MatchURLPath(path string, pattern string) bool {
 	patternSegments := strings.Split(strings.Trim(pattern, "/"), "/")
 
 	// 处理多段通配符 **
-	return matchSegments(pathSegments, patternSegments, 0, 0, make(map[string]string))
+	return matchSegments(pathSegments, patternSegments, 0, 0, make(map[string]string), 0)
 }
 
 // matchSegments 使用递归方式匹配路径段
 // params 用于存储命名参数的值（如果需要使用）
-func matchSegments(pathSegs []string, patternSegs []string, pathIdx, patternIdx int, params map[string]string) bool {
+func matchSegments(pathSegs []string, patternSegs []string, pathIdx, patternIdx int, params map[string]string, depth int) bool {
+	// 防止过深的递归导致栈溢出
+	if depth > 100 {
+		return false
+	}
+
 	// 基本终止条件
 	if patternIdx >= len(patternSegs) {
 		return pathIdx >= len(pathSegs) // 两者都结束才匹配
@@ -94,7 +99,7 @@ func matchSegments(pathSegs []string, patternSegs []string, pathIdx, patternIdx 
 
 		// 尝试匹配0个或多个路径段
 		for i := pathIdx; i <= len(pathSegs); i++ {
-			if matchSegments(pathSegs, patternSegs, i, patternIdx+1, params) {
+			if matchSegments(pathSegs, patternSegs, i, patternIdx+1, params, depth+1) {
 				return true
 			}
 		}
@@ -113,6 +118,11 @@ func matchSegments(pathSegs []string, patternSegs []string, pathIdx, patternIdx 
 		// 提取命名参数内容
 		paramContent := pattern[1 : len(pattern)-1]
 
+		// 检查参数内容是否为空
+		if len(paramContent) == 0 {
+			return false
+		}
+
 		// 检查是否包含正则表达式部分
 		if strings.Contains(paramContent, ":") {
 			paramParts := strings.SplitN(paramContent, ":", 2)
@@ -125,7 +135,7 @@ func matchSegments(pathSegs []string, patternSegs []string, pathIdx, patternIdx 
 					if err == nil && regex.MatchString(pathSeg) {
 						// 存储参数值
 						params[paramName] = pathSeg
-						return matchSegments(pathSegs, patternSegs, pathIdx+1, patternIdx+1, params)
+						return matchSegments(pathSegs, patternSegs, pathIdx+1, patternIdx+1, params, depth+1)
 					}
 				}
 			}
@@ -135,7 +145,7 @@ func matchSegments(pathSegs []string, patternSegs []string, pathIdx, patternIdx 
 			paramName := paramContent
 			if paramName != "" && paramRegex.MatchString(paramName) {
 				params[paramName] = pathSeg
-				return matchSegments(pathSegs, patternSegs, pathIdx+1, patternIdx+1, params)
+				return matchSegments(pathSegs, patternSegs, pathIdx+1, patternIdx+1, params, depth+1)
 			}
 		}
 		return false // 明确返回false，如果参数名为空或无效
@@ -143,7 +153,7 @@ func matchSegments(pathSegs []string, patternSegs []string, pathIdx, patternIdx 
 
 	// 处理单个路径段
 	if matchSegment(pathSeg, pattern) {
-		return matchSegments(pathSegs, patternSegs, pathIdx+1, patternIdx+1, params)
+		return matchSegments(pathSegs, patternSegs, pathIdx+1, patternIdx+1, params, depth+1)
 	}
 
 	return false
@@ -181,11 +191,17 @@ func matchSegment(pathSeg, patternSeg string) bool {
 			return false
 		}
 
+		// 使用 CaptureGroups 来更安全地处理正则匹配
+		matches := brackets.FindAllStringSubmatchIndex(patternSeg, -1)
+		if matches == nil || len(matches) == 0 {
+			return false // 无法正确匹配括号
+		}
+
 		// 将方括号外的内容进行转义处理
 		regexPattern := "^"
 		lastIndex := 0
 
-		for _, match := range brackets.FindAllStringSubmatchIndex(patternSeg, -1) {
+		for _, match := range matches {
 			// 转义方括号前的内容
 			if match[0] > lastIndex {
 				regexPattern += regexp.QuoteMeta(patternSeg[lastIndex:match[0]])
@@ -215,8 +231,8 @@ func matchSegment(pathSeg, patternSeg string) bool {
 			minn, minErr := strconv.Atoi(matches[1])
 			maxx, maxErr := strconv.Atoi(matches[2])
 
-			// 添加额外检查，确保数值合理且防止过大的���值导致性能问题
-			if minErr == nil && maxErr == nil && minn >= 0 && maxx >= 0 && minn <= maxx && maxx-minn <= 100 {
+			// 添加额外检查，确保数值合理且防止过大的范围值导致性能问题
+			if minErr == nil && maxErr == nil && minn >= 0 && maxx >= 0 && minn <= maxx {
 				// 构建一个新的正则表达式模式
 				parts := rangeRegex.Split(patternSeg, -1)
 				regexPattern := "^"
