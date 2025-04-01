@@ -47,8 +47,8 @@ params = [] # 选填
 
 [middleware.trace]
 enable = true
-key_id = "X-Trace-Id"
-key_path = "X-Trace-Path"
+key_id = "X-Trace-Id" # 网关生成并塞入的requestID
+key_path = "X-Trace-Path" # 每层api都会塞入 ">name"
 
 [middleware.logger]
 enable = true

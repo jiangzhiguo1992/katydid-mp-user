@@ -6,22 +6,22 @@ import (
 )
 
 // Trace 分布式追踪相关
-func Trace(serviceName string) gin.HandlerFunc {
+func Trace(serviceName, keyID, keyPath string) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		// id
-		requestID := c.GetHeader(XRequestIDHeader)
+		requestID := c.GetHeader(keyID)
 		if requestID == "" {
 			requestID = uuid.New().String()
-			c.Header(XRequestIDHeader, requestID) // header
+			c.Header(keyID, requestID) // header
 		}
-		c.Set(XRequestIDHeader, requestID) // context
+		c.Set(keyID, requestID) // context
 
 		// path
-		requestPath := c.GetHeader(XRequestPathHeader)
+		requestPath := c.GetHeader(keyPath)
 		requestPath2 := requestPath + ">" + serviceName
 		if requestPath == "" {
-			c.Header(XRequestPathHeader, requestPath2) // header
+			c.Header(keyPath, requestPath2) // header
 		}
-		c.Set(XRequestPathHeader, requestPath2) // context
+		c.Set(keyPath, requestPath2) // context
 	}
 }

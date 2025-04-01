@@ -115,6 +115,8 @@ func loggerMethodColor(method string) string {
 
 // LoggerConfig 定义ZapLogger的配置选项
 type LoggerConfig struct {
+	TraceKeyID     string   // 追踪ID的键
+	TraceKeyPath   string   // 追踪路径的键
 	LogParams      bool     // 是否记录请求参数
 	LogHeaders     bool     // 是否记录请求头
 	LogBody        bool     // 是否记录请求体
@@ -129,8 +131,13 @@ type LoggerConfig struct {
 }
 
 // LoggerDefaultConfig 返回默认配置
-func LoggerDefaultConfig(skipStatus []int, skipPaths, sensitives []string, size int) LoggerConfig {
+func LoggerDefaultConfig(
+	traceKeyID, traceKeyPath string,
+	skipStatus []int, skipPaths, sensitives []string, size int,
+) LoggerConfig {
 	return LoggerConfig{
+		TraceKeyID:     traceKeyID,
+		TraceKeyPath:   traceKeyPath,
 		LogParams:      true,
 		LogHeaders:     true,
 		LogBody:        true,
@@ -367,8 +374,8 @@ func logHTTPRequest(
 		methodFormatted = method
 	}
 
-	traceID := c.GetString(XRequestIDHeader)
-	tracePath := c.GetString(XRequestPathHeader)
+	traceID := c.GetString(config.TraceKeyID)
+	tracePath := c.GetString(config.TraceKeyPath)
 
 	// 构建日志消息
 	var msgBuilder strings.Builder
