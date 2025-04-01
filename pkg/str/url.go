@@ -7,6 +7,10 @@ import (
 	"strings"
 )
 
+var (
+	rangeRegex = regexp.MustCompile(`\{(\d+)-(\d+)\}`)
+)
+
 // MatchURLPath 检查传入的路径是否匹配指定的模式
 // 支持以下通配符规则:
 //   - * : 匹配单个路径段中的任意字符
@@ -39,23 +43,19 @@ func MatchURLPath(path string, pattern string) bool {
 	}
 
 	// 处理前缀匹配（优先于正则匹配，提高性能）
-	if len(pattern) > 1 && strings.HasSuffix(pattern, "*") && !strings.Contains(pattern[:len(pattern)-1], "*") {
+	if strings.HasSuffix(pattern, "*") {
 		prefix := pattern[:len(pattern)-1]
-		return strings.HasPrefix(path, prefix)
-	}
-	if strings.HasSuffix(pattern, "*") && !strings.Contains(pattern[:len(pattern)-1], "*") {
-		prefix := pattern[:len(pattern)-1]
-		return strings.HasPrefix(path, prefix)
+		if !strings.Contains(prefix, "*") {
+			return strings.HasPrefix(path, prefix)
+		}
 	}
 
 	// 处理后缀匹配
-	if len(pattern) > 1 && strings.HasPrefix(pattern, "*") && !strings.Contains(pattern[1:], "*") {
+	if strings.HasPrefix(pattern, "*") {
 		suffix := pattern[1:]
-		return strings.HasSuffix(path, suffix)
-	}
-	if strings.HasPrefix(pattern, "*") && !strings.Contains(pattern[1:], "*") {
-		suffix := pattern[1:]
-		return strings.HasSuffix(path, suffix)
+		if !strings.Contains(suffix, "*") {
+			return strings.HasSuffix(path, suffix)
+		}
 	}
 
 	// 将路径和模式按斜杠分割成段
@@ -136,19 +136,17 @@ func matchSegments(pathSegs []string, patternSegs []string, pathIdx, patternIdx 
 // matchSegment 匹配单个路径段
 func matchSegment(pathSeg, patternSeg string) bool {
 	// 精确匹配
-	if patternSeg == pathSeg {
-		return true
-	}
-
-	// 单段通配符 *
-	if patternSeg == "*" {
+	if patternSeg == pathSeg || patternSeg == "*" {
 		return true
 	}
 
 	// 问号匹配单个字符
 	if strings.Contains(patternSeg, "?") {
-		regexPattern := strings.Replace(patternSeg, "?", ".", -1)
-		regexPattern = "^" + regexPattern + "$"
+		var builder strings.Builder
+		builder.WriteString("^")
+		builder.WriteString(strings.Replace(patternSeg, "?", ".", -1))
+		builder.WriteString("$")
+		regexPattern := builder.String()
 		regex, err := regexp.Compile(regexPattern)
 		if err != nil {
 			return false
@@ -167,7 +165,7 @@ func matchSegment(pathSeg, patternSeg string) bool {
 	}
 
 	// 范围匹配 {min-max}
-	if rangeRegex := regexp.MustCompile(`\{(\d+)-(\d+)\}`); rangeRegex.MatchString(patternSeg) {
+	if rangeRegex.MatchString(patternSeg) {
 		matches := rangeRegex.FindStringSubmatch(patternSeg)
 		if len(matches) == 3 {
 			min, _ := strconv.Atoi(matches[1])

@@ -370,7 +370,13 @@ func startHealthCheck(name string, interval time.Duration, autoReconnect bool, q
 
 		// 检查副本连接
 		for i, replica := range instance.ReadReplicas {
-			sqlDB, _ := replica.DB()
+			if replica == nil {
+				continue
+			}
+			sqlDB, err := replica.DB()
+			if err != nil || sqlDB == nil {
+				continue
+			}
 			ctx, cancel := context.WithTimeout(context.Background(), queryTimeout)
 			replicaErr := sqlDB.PingContext(ctx)
 			cancel()
@@ -431,7 +437,7 @@ func reconnectMainDB(instance *DBInstance, now time.Time) bool {
 
 // 重新连接副本数据库
 func reconnectReplica(instance *DBInstance, replicaIndex int) bool {
-	if replicaIndex < 0 || replicaIndex >= len(instance.Config.Replicas) || replicaIndex >= len(instance.ReadReplicas) {
+	if instance == nil || replicaIndex < 0 || replicaIndex >= len(instance.Config.Replicas) || replicaIndex >= len(instance.ReadReplicas) {
 		return false
 	}
 
@@ -512,16 +518,27 @@ func GetReadDB(name string) *gorm.DB {
 	}
 
 	instance.mutex.RLock()
-	defer instance.mutex.RUnlock()
+	// 检查副本数量和配置
+	replicaCount := len(instance.ReadReplicas)
+	onlyMaster := instance.Config.OnlyMaster
+	instance.mutex.RUnlock()
 
 	// 如果无副本或配置为始终使用主库，返回主连接
-	replicaCount := len(instance.ReadReplicas)
-	if replicaCount == 0 || instance.Config.OnlyMaster {
+	if replicaCount == 0 || onlyMaster {
 		return instance.DB
 	}
 
-	// 简单轮询负载均衡（可优化为加权轮询）
+	// 获取索引（内部有锁保护）
 	index := instance.getWeightedRoundRobinIndex()
+
+	// 再次加锁检查索引是否有效
+	instance.mutex.RLock()
+	defer instance.mutex.RUnlock()
+
+	if index < 0 || index >= len(instance.ReadReplicas) {
+		return instance.DB // 索引无效时使用主库
+	}
+
 	return instance.ReadReplicas[index]
 }
 
@@ -656,8 +673,8 @@ func (ins *DBInstance) getWeightedRoundRobinIndex() int {
 		return 0 // 防止除零错误
 	}
 
-	// 生成副本集合的唯一标识
-	key := fmt.Sprintf("%p", &ins.ReadReplicas)
+	// 使用实例名作为key
+	key := ins.Name // 每个实例名应该是唯一的
 
 	ins.mutex.Lock()
 	defer ins.mutex.Unlock()
