@@ -3,6 +3,7 @@ package middleware
 import (
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
+	"katydid-mp-user/pkg/log"
 )
 
 // Trace 分布式追踪相关
@@ -12,6 +13,11 @@ func Trace(serviceName, keyID, keyPath string) gin.HandlerFunc {
 		requestID := c.GetHeader(keyID)
 		if requestID == "" {
 			requestID = uuid.New().String()
+			if gin.Mode() == gin.DebugMode {
+				log.Debugf("■ ■ Trace(中间件) ■ ■ ID生成: %s", requestID)
+			} else {
+				log.Warnf("■ ■ Trace(中间件) ■ ■ ID缺失，升成: %s", requestID)
+			}
 			c.Header(keyID, requestID) // header
 		}
 		c.Set(keyID, requestID) // context

@@ -558,6 +558,13 @@ func logGetCachedRegexp(pattern string) (*regexp.Regexp, error) {
 	return compiled, nil
 }
 
+// 在类型定义前添加接口确认检查
+var (
+	_ http.Hijacker = (*loggerResponseBodyWriter)(nil)
+	_ http.Flusher  = (*loggerResponseBodyWriter)(nil)
+	_ http.Pusher   = (*loggerResponseBodyWriter)(nil)
+)
+
 // 优化的响应体记录器
 type loggerResponseBodyWriter struct {
 	gin.ResponseWriter
