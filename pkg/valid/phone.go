@@ -262,8 +262,13 @@ func init() {
 
 // IsPhone 将phone分割成CountryCode和number，并验证数据
 func IsPhone(phone string) (*PhoneCountryCode, string, bool) {
+	if phone = strings.TrimSpace(phone); phone == "" {
+		return nil, "", false
+	}
+
 	original := phone
-	if phone = cleanPhoneNumber(phone); phone == "" {
+	phone = cleanPhoneNumber(phone)
+	if phone == "" {
 		return nil, "", false
 	}
 
@@ -319,7 +324,7 @@ func IsPhoneNumber(code, number string) (*PhoneCountryCode, string, bool) {
 	}
 
 	for _, re := range patterns {
-		if re.MatchString(number) {
+		if re != nil && re.MatchString(number) {
 			return countryCode, number, true
 		}
 	}
@@ -425,17 +430,37 @@ func findMatchingCountryCode(phone string) (*PhoneCountryCode, string, bool) {
 
 // cleanPhoneNumber 清理电话号码，移除所有空白字符
 func cleanPhoneNumber(phone string) string {
+	if phone == "" {
+		return ""
+	}
+
 	phone = strings.TrimSpace(phone)
-	// 保留加号(+)和数字，移除其他字符
-	return strings.Map(func(r rune) rune {
+	var builder strings.Builder
+	builder.Grow(len(phone))
+
+	for _, r := range phone {
 		if r == '+' || unicode.IsDigit(r) {
-			return r
+			builder.WriteRune(r)
 		}
-		return -1
-	}, phone)
+	}
+
+	return builder.String()
 }
 
 // cleanDigitsOnly 只保留数字字符
 func cleanDigitsOnly(input string) string {
-	return regexp.MustCompile(`\D`).ReplaceAllString(input, "")
+	if input == "" {
+		return ""
+	}
+
+	var builder strings.Builder
+	builder.Grow(len(input))
+
+	for _, r := range input {
+		if unicode.IsDigit(r) {
+			builder.WriteRune(r)
+		}
+	}
+
+	return builder.String()
 }
