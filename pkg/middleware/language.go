@@ -2,6 +2,7 @@ package middleware
 
 import (
 	"github.com/gin-gonic/gin"
+	"github.com/hashicorp/golang-lru/v2"
 	"katydid-mp-user/pkg/i18n"
 	"katydid-mp-user/pkg/log"
 	"sort"
@@ -10,14 +11,10 @@ import (
 	"sync"
 )
 
-const (
-	HeaderKeyAcceptLanguage = "Accept-Language"
-)
-
-// 使用缓存减少重复计算
 var (
-	langCache     = make(map[string]string)
-	langCacheLock sync.RWMutex
+	// 使用LRU缓存减少重复计算
+	langCache *lru.Cache[string, string]
+	langOnce  sync.Once
 )
 
 // languagePreference 表示带权重的语言偏好
@@ -27,51 +24,47 @@ type languagePreference struct {
 }
 
 // Language 创建处理请求语言的中间件
-func Language() gin.HandlerFunc {
+func Language(keyAccept string, maxSize int) gin.HandlerFunc {
+	// 初始化LRU缓存
+	langOnce.Do(func() {
+		var err error
+		langCache, err = lru.New[string, string](maxSize)
+		if err != nil {
+			log.Error("■ ■ Language(中间件) ■ ■ 初始化缓存失败", log.FError(err))
+			// 创建一个容量较小的缓存作为后备
+			langCache, _ = lru.New[string, string](maxSize / 10)
+		}
+	})
+
 	return func(c *gin.Context) {
-		lang := c.GetHeader(HeaderKeyAcceptLanguage)
-		if lang == "" {
-			log.DebugFmt("■ ■ Language ■ ■ 空就默认语言: %s", i18n.DefLang())
+		acceptLang := c.GetHeader("Accept-Language")
+		if acceptLang == "" {
 			// 如果头部为空，直接使用默认语言
-			c.Set(LanguageKey, i18n.DefLang())
+			c.Set(keyAccept, i18n.DefLang())
 			c.Next()
 			return
 		}
 
 		// 优先检查缓存
-		resultLang := getCachedLanguage(lang)
-		if resultLang != "" {
-			log.DebugFmt("■ ■ Language ■ ■ 缓存命中: %s -> %s", lang, resultLang)
-			c.Set(LanguageKey, resultLang)
+		if resultLang, found := langCache.Get(acceptLang); found {
+			c.Set(keyAccept, resultLang)
 			c.Next()
 			return
 		}
-		log.DebugFmt("■ ■ Language ■ ■ 缓存未命中: %s", lang)
 
 		// 解析所有语言偏好并按权重排序（从高到低）
-		preferences := parseLanguagePreferences(lang)
+		preferences := parseLanguagePreferences(acceptLang)
 
 		// 查找最佳匹配语言
-		resultLang = findBestLanguageMatch(preferences)
+		resultLang := findBestLanguageMatch(preferences)
 
 		// 更新缓存
-		updateLanguageCache(lang, resultLang)
-		log.DebugFmt("■ ■ Language ■ ■ 更新缓存: %s -> %s", lang, resultLang)
+		langCache.Add(acceptLang, resultLang)
+		log.Debugf("■ ■ Language ■ ■(中间件) 更新缓存: %s -> %s", acceptLang, resultLang)
 
-		c.Set(LanguageKey, resultLang)
+		c.Set(keyAccept, resultLang)
 		c.Next()
 	}
-}
-
-// getCachedLanguage 从缓存中获取语言
-func getCachedLanguage(lang string) string {
-	langCacheLock.RLock()
-	defer langCacheLock.RUnlock()
-
-	if cachedLang, exists := langCache[lang]; exists {
-		return cachedLang
-	}
-	return ""
 }
 
 // parseLanguagePreferences 解析Accept-Language头部，返回按权重排序的语言偏好列表
@@ -80,17 +73,25 @@ func parseLanguagePreferences(header string) []languagePreference {
 	preferences := make([]languagePreference, 0, len(parts))
 
 	for _, part := range parts {
+		part = strings.TrimSpace(part)
+		if part == "" {
+			continue // 跳过空项
+		}
+
 		pref := languagePreference{weight: 1.0} // 默认权重为1.0
 
 		// 分离语言代码和权重值
 		subParts := strings.Split(part, ";")
 		pref.lang = strings.TrimSpace(subParts[0])
+		if pref.lang == "" {
+			continue // 跳过无效语言代码
+		}
 
 		// 如果有权重值，解析它
 		if len(subParts) > 1 {
 			qParts := strings.Split(subParts[1], "=")
 			if len(qParts) == 2 && strings.TrimSpace(qParts[0]) == "q" {
-				if weight, err := strconv.ParseFloat(strings.TrimSpace(qParts[1]), 64); err == nil {
+				if weight, err := strconv.ParseFloat(strings.TrimSpace(qParts[1]), 64); err == nil && weight >= 0 && weight <= 1 {
 					pref.weight = weight
 				}
 			}
@@ -107,8 +108,16 @@ func parseLanguagePreferences(header string) []languagePreference {
 
 // findBestLanguageMatch 找到最佳匹配的语言
 func findBestLanguageMatch(preferences []languagePreference) string {
+	if len(preferences) == 0 {
+		return i18n.DefLang() // 如果没有偏好，返回默认语言
+	}
+
 	for _, pref := range preferences {
 		cleanLang := pref.lang
+		if cleanLang == "" {
+			continue
+		}
+
 		// 检查完整语言代码
 		if i18n.HasLang(cleanLang) {
 			return cleanLang
@@ -118,28 +127,19 @@ func findBestLanguageMatch(preferences []languagePreference) string {
 		subParts := strings.Split(cleanLang, "-")
 		if len(subParts) > 1 {
 			// 先检查主语言部分
-			if i18n.HasLang(subParts[0]) {
-				return subParts[0]
+			mainLang := strings.TrimSpace(subParts[0])
+			if mainLang != "" && i18n.HasLang(mainLang) {
+				return mainLang
 			}
+
 			// 再检查区域部分
-			if i18n.HasLang(subParts[1]) {
-				return subParts[1]
+			region := strings.TrimSpace(subParts[1])
+			if region != "" && i18n.HasLang(region) {
+				return region
 			}
 		}
 	}
 
 	// 如果没有找到匹配的语言，使用默认语言
 	return i18n.DefLang()
-}
-
-// updateLanguageCache 更新语言缓存
-func updateLanguageCache(key, lang string) {
-	langCacheLock.Lock()
-	defer langCacheLock.Unlock()
-
-	// 缓存最大条目数，避免缓存无限增长
-	//if len(langCache) >= 10000 {
-	//	langCache = make(map[string]string)
-	//}
-	langCache[key] = lang
 }
