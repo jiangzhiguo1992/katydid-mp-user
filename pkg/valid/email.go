@@ -16,6 +16,11 @@ type EmailComponents struct {
 
 // IsEmail 验证电子邮件地址的各个组成部分
 func IsEmail(email string) (*EmailComponents, bool) {
+	// 先检查总长度限制
+	if len(email) > 254 {
+		return nil, false
+	}
+
 	// 首先解析电子邮件
 	components, ok := parseEmail(email)
 	if !ok {
@@ -69,8 +74,14 @@ func IsEmailDomain(domain string) bool {
 	}
 
 	// 基本域名验证
-	domainRegex := regexp.MustCompile(`^[a-zA-Z0-9][a-zA-Z0-9\-]*(\.[a-zA-Z0-9][a-zA-Z0-9\-]*)+$`)
+	domainRegex := regexp.MustCompile(`^(?:[a-zA-Z0-9](?:[a-zA-Z0-9\-]{0,61}[a-zA-Z0-9])?\.)+[a-zA-Z0-9](?:[a-zA-Z0-9\-]{0,61}[a-zA-Z0-9])?$`)
 	if !domainRegex.MatchString(domain) {
+		return false
+	}
+
+	// 检查TLD长度，至少2个字符
+	parts := strings.Split(domain, ".")
+	if len(parts) < 2 || len(parts[len(parts)-1]) < 2 {
 		return false
 	}
 
@@ -89,7 +100,7 @@ func IsEmailDomain(domain string) bool {
 // FindEmailsInText 从文本中提取有效的电子邮件地址
 func FindEmailsInText(text string) []string {
 	// 使用更精确的正则表达式直接匹配可能有效的邮箱
-	emailRegex := regexp.MustCompile(`[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}`)
+	emailRegex := regexp.MustCompile(`\b[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}\b`)
 	matches := emailRegex.FindAllString(text, -1)
 
 	validEmails := make([]string, 0, len(matches))
@@ -130,7 +141,7 @@ func parseEmail(email string) (*EmailComponents, bool) {
 		return nil, false
 	}
 
-	// 提取TLD
+	// 提取TLD和实体部分
 	domainParts := strings.Split(domain, ".")
 	if len(domainParts) < 2 {
 		return nil, false
