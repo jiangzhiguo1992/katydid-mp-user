@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"strings"
 	"sync"
+
+	lru "github.com/hashicorp/golang-lru/v2"
 )
 
 var (
@@ -19,17 +21,32 @@ type Matcher struct {
 	onWarn      func(string)      // 警告回调函数
 	mu          sync.RWMutex      // 用于保护 codeLocIds 和 msgPatterns 的并发读取
 
-	patternCache sync.Map // 缓存已匹配的错误信息和对应的locId
-	codeCache    sync.Map // 缓存locId和对应的code
+	patternCache *lru.Cache[string, string] // 缓存已匹配的错误信息和对应的locId
+	codeCache    *lru.Cache[string, int]    // 缓存locId和对应的code
 }
 
 // InitMatch 初始化错误匹配器
-func InitMatch(codes map[int][]string, patterns map[string]string, onWarn func(string)) {
+func InitMatch(cacheSize int, codes map[int][]string, patterns map[string]string, onWarn func(string)) {
 	once.Do(func() {
+		// 创建LRU缓存
+		if cacheSize <= 0 {
+			cacheSize = 1000 // 使用合理的默认值
+		}
+		patternCache, err := lru.New[string, string](cacheSize)
+		if err != nil {
+			panic(fmt.Errorf("■ ■ errs ■ ■ 初始化patternCache失败: %w", err))
+		}
+		codeCache, err := lru.New[string, int](cacheSize)
+		if err != nil {
+			panic(fmt.Errorf("■ ■ errs ■ ■ 初始化codeCache失败: %w", err))
+		}
+
 		matcher = &Matcher{
-			codeLocIds:  codes,
-			msgPatterns: patterns,
-			onWarn:      onWarn,
+			codeLocIds:   codes,
+			msgPatterns:  patterns,
+			onWarn:       onWarn,
+			patternCache: patternCache,
+			codeCache:    codeCache,
 		}
 
 		// 初始化空映射
@@ -44,7 +61,7 @@ func InitMatch(codes map[int][]string, patterns map[string]string, onWarn func(s
 		for code, locIds := range matcher.codeLocIds {
 			for _, locId := range locIds {
 				if locId != "" {
-					matcher.codeCache.Store(locId, code)
+					matcher.codeCache.Add(locId, code)
 				}
 			}
 		}
@@ -111,8 +128,8 @@ func MatchMsg(msg string) *Error {
 // findLocId 寻找匹配的本地化ID
 func (m *Matcher) findLocId(msg string) (string, bool) {
 	// 先检查缓存
-	if cachedLocId, ok := m.patternCache.Load(msg); ok {
-		return cachedLocId.(string), true
+	if cachedLocId, ok := m.patternCache.Get(msg); ok {
+		return cachedLocId, true
 	}
 
 	m.mu.RLock()
@@ -122,7 +139,7 @@ func (m *Matcher) findLocId(msg string) (string, bool) {
 	for pattern, msgID := range m.msgPatterns {
 		if pattern != "" && strings.Contains(msg, pattern) {
 			// 缓存结果
-			m.patternCache.Store(msg, msgID)
+			m.patternCache.Add(msg, msgID)
 			return msgID, true
 		}
 	}
@@ -132,8 +149,8 @@ func (m *Matcher) findLocId(msg string) (string, bool) {
 // findCode 根据本地化ID查找错误码
 func (m *Matcher) findCode(locId string) (int, bool) {
 	// 先检查缓存
-	if cachedCode, ok := m.codeCache.Load(locId); ok {
-		return cachedCode.(int), true
+	if cachedCode, ok := m.codeCache.Get(locId); ok {
+		return cachedCode, true
 	}
 
 	m.mu.RLock()
@@ -144,7 +161,7 @@ func (m *Matcher) findCode(locId string) (int, bool) {
 		for _, id := range locIds {
 			if id == locId {
 				// 缓存结果
-				m.codeCache.Store(locId, code)
+				m.codeCache.Add(locId, code)
 				return code, true
 			}
 		}

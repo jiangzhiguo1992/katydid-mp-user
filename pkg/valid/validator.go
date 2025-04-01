@@ -129,6 +129,13 @@ func RegisterFieldRule(fieldRules FieldValidRule) {
 
 // Check 根据场景执行验证，并返回本地化错误信息
 func Check(obj any, scene Scene) []*MsgErr {
+	if obj == nil {
+		return []*MsgErr{{
+			Err: errors.New("validation object cannot be nil"),
+			Msg: "invalid_object_validation",
+		}}
+	}
+
 	v := Get()
 	typ := reflect.TypeOf(obj)
 

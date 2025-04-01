@@ -3,6 +3,7 @@ package valid
 import (
 	"github.com/microcosm-cc/bluemonday"
 	"regexp"
+	"strings"
 )
 
 var (
@@ -87,6 +88,11 @@ func (v *XSSValidator) SanitizeXSS(text string) string {
 func (v *XSSValidator) HasXSS(text string) bool {
 	if text == "" {
 		return false
+	}
+
+	// 先进行简单快速检查，筛选出明显安全的文本
+	if !strings.ContainsAny(text, "<>\"'&") {
+		return false // 明显安全的文本快速通过
 	}
 
 	// 首先使用正则检测

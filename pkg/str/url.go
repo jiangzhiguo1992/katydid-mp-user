@@ -43,17 +43,19 @@ func MatchURLPath(path string, pattern string) bool {
 	}
 
 	// 处理前缀匹配（优先于正则匹配，提高性能）
-	if strings.HasSuffix(pattern, "*") {
+	if strings.HasSuffix(pattern, "*") && pattern != "*" {
 		prefix := pattern[:len(pattern)-1]
-		if !strings.Contains(prefix, "*") {
+		if !strings.Contains(prefix, "*") && !strings.Contains(prefix, "?") &&
+			!strings.Contains(prefix, "{") && !strings.Contains(prefix, "[") {
 			return strings.HasPrefix(path, prefix)
 		}
 	}
 
 	// 处理后缀匹配
-	if strings.HasPrefix(pattern, "*") {
+	if strings.HasPrefix(pattern, "*") && pattern != "*" {
 		suffix := pattern[1:]
-		if !strings.Contains(suffix, "*") {
+		if !strings.Contains(suffix, "*") && !strings.Contains(suffix, "?") &&
+			!strings.Contains(suffix, "{") && !strings.Contains(suffix, "[") {
 			return strings.HasSuffix(path, suffix)
 		}
 	}
@@ -101,18 +103,34 @@ func matchSegments(pathSegs []string, patternSegs []string, pathIdx, patternIdx 
 	pathSeg := pathSegs[pathIdx]
 
 	// 处理带正则的命名参数 {name:pattern}
-	if strings.Contains(pattern, ":") && strings.HasPrefix(pattern, "{") && strings.HasSuffix(pattern, "}") {
-		paramParts := strings.SplitN(pattern[1:len(pattern)-1], ":", 2)
-		if len(paramParts) == 2 {
-			paramName, regexStr := paramParts[0], paramParts[1]
-			// 编译正则表达式
-			regex, err := regexp.Compile("^" + regexStr + "$")
-			if err == nil && regex.MatchString(pathSeg) {
-				// 存储参数值（如果需要）
+	if strings.HasPrefix(pattern, "{") && strings.HasSuffix(pattern, "}") {
+		// 提取命名参数内容
+		paramContent := pattern[1 : len(pattern)-1]
+
+		// 检查是否包含正则表达式部分
+		if strings.Contains(paramContent, ":") {
+			paramParts := strings.SplitN(paramContent, ":", 2)
+			if len(paramParts) == 2 {
+				paramName, regexStr := paramParts[0], paramParts[1]
+				// 检查参数名不为空
+				if paramName != "" {
+					// 编译正则表达式
+					regex, err := regexp.Compile("^" + regexStr + "$")
+					if err == nil && regex.MatchString(pathSeg) {
+						// 存储参数值
+						params[paramName] = pathSeg
+						return matchSegments(pathSegs, patternSegs, pathIdx+1, patternIdx+1, params)
+					}
+				}
+				return false
+			}
+		} else {
+			// 简单命名参数 {param}
+			paramName := paramContent
+			if paramName != "" {
 				params[paramName] = pathSeg
 				return matchSegments(pathSegs, patternSegs, pathIdx+1, patternIdx+1, params)
 			}
-			return false
 		}
 	}
 
@@ -168,16 +186,18 @@ func matchSegment(pathSeg, patternSeg string) bool {
 	if rangeRegex.MatchString(patternSeg) {
 		matches := rangeRegex.FindStringSubmatch(patternSeg)
 		if len(matches) == 3 {
-			min, _ := strconv.Atoi(matches[1])
-			max, _ := strconv.Atoi(matches[2])
+			minn, minErr := strconv.Atoi(matches[1])
+			maxx, maxErr := strconv.Atoi(matches[2])
 
-			// 替换成正则表达式进行匹配
-			replPattern := strings.Replace(patternSeg, matches[0], fmt.Sprintf("[0-9]{%d,%d}", min, max), 1)
-			regex, err := regexp.Compile("^" + replPattern + "$")
-			if err != nil {
-				return false
+			if minErr == nil && maxErr == nil && minn <= maxx {
+				// 替换成正则表达式进行匹配
+				replPattern := strings.Replace(patternSeg, matches[0], fmt.Sprintf("[0-9]{%d,%d}", min, max), 1)
+				regex, err := regexp.Compile("^" + replPattern + "$")
+				if err != nil {
+					return false
+				}
+				return regex.MatchString(pathSeg)
 			}
-			return regex.MatchString(pathSeg)
 		}
 	}
 
