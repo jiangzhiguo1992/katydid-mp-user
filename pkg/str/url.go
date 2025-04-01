@@ -9,6 +9,7 @@ import (
 
 var (
 	rangeRegex = regexp.MustCompile(`\{(\d+)-(\d+)\}`)
+	paramRegex = regexp.MustCompile(`^[a-zA-Z_][a-zA-Z0-9_]*$`)
 )
 
 // MatchURLPath 检查传入的路径是否匹配指定的模式
@@ -36,6 +37,10 @@ func MatchURLPath(path string, pattern string) bool {
 	if path == "" || pattern == "" {
 		return path == pattern
 	}
+
+	// 标准化输入，移除多余的斜杠
+	path = strings.TrimSpace(path)
+	pattern = strings.TrimSpace(pattern)
 
 	// 优化：特殊情况处理
 	if pattern == "**" || pattern == "/**" {
@@ -112,9 +117,9 @@ func matchSegments(pathSegs []string, patternSegs []string, pathIdx, patternIdx 
 			paramParts := strings.SplitN(paramContent, ":", 2)
 			if len(paramParts) == 2 {
 				paramName, regexStr := paramParts[0], paramParts[1]
-				// 检查参数名不为空
-				if paramName != "" {
-					// 编译正则表达式
+				// 添加更严格的参数名检查
+				if paramName != "" && paramRegex.MatchString(paramName) {
+					// 尝试编译正则表达式，添加错误恢复
 					regex, err := regexp.Compile("^" + regexStr + "$")
 					if err == nil && regex.MatchString(pathSeg) {
 						// 存储参数值
@@ -122,25 +127,17 @@ func matchSegments(pathSegs []string, patternSegs []string, pathIdx, patternIdx 
 						return matchSegments(pathSegs, patternSegs, pathIdx+1, patternIdx+1, params)
 					}
 				}
-				return false
 			}
+			return false
 		} else {
 			// 简单命名参数 {param}
 			paramName := paramContent
-			if paramName != "" {
+			if paramName != "" && paramRegex.MatchString(paramName) {
 				params[paramName] = pathSeg
 				return matchSegments(pathSegs, patternSegs, pathIdx+1, patternIdx+1, params)
 			}
 		}
-	}
-
-	// 处理简单命名参数 {param}
-	if len(pattern) > 2 && pattern[0] == '{' && pattern[len(pattern)-1] == '}' {
-		// 提取参数名
-		paramName := pattern[1 : len(pattern)-1]
-		// 存储参数值（如果需要）
-		params[paramName] = pathSeg
-		return matchSegments(pathSegs, patternSegs, pathIdx+1, patternIdx+1, params)
+		return false // 明确返回false，如果参数名为空或无效
 	}
 
 	// 处理单个路径段
@@ -160,12 +157,16 @@ func matchSegment(pathSeg, patternSeg string) bool {
 
 	// 问号匹配单个字符
 	if strings.Contains(patternSeg, "?") {
-		var builder strings.Builder
-		builder.WriteString("^")
-		builder.WriteString(strings.Replace(patternSeg, "?", ".", -1))
-		builder.WriteString("$")
-		regexPattern := builder.String()
-		regex, err := regexp.Compile(regexPattern)
+		// 将模式中除了问号外的其他正则元字符进行转义
+		pattern := ""
+		for _, ch := range patternSeg {
+			if ch == '?' {
+				pattern += "."
+			} else {
+				pattern += regexp.QuoteMeta(string(ch))
+			}
+		}
+		regex, err := regexp.Compile("^" + pattern + "$")
 		if err != nil {
 			return false
 		}
@@ -174,6 +175,11 @@ func matchSegment(pathSeg, patternSeg string) bool {
 
 	// 字符集匹配 [abc]
 	if strings.Contains(patternSeg, "[") && strings.Contains(patternSeg, "]") {
+		// 增加安全检查，确保方括号���配且格式正确
+		if !isValidBracketPattern(patternSeg) {
+			return false
+		}
+
 		regexPattern := "^" + patternSeg + "$"
 		regex, err := regexp.Compile(regexPattern)
 		if err != nil {
@@ -189,22 +195,43 @@ func matchSegment(pathSeg, patternSeg string) bool {
 			minn, minErr := strconv.Atoi(matches[1])
 			maxx, maxErr := strconv.Atoi(matches[2])
 
-			if minErr == nil && maxErr == nil && minn <= maxx {
-				// 替换成正则表达式进行匹配
-				replPattern := strings.Replace(patternSeg, matches[0], fmt.Sprintf("[0-9]{%d,%d}", min, max), 1)
-				regex, err := regexp.Compile("^" + replPattern + "$")
+			// 添加额外检查，确保数值合理
+			if minErr == nil && maxErr == nil && minn >= 0 && maxx >= 0 && minn <= maxx {
+				// 构建一个新的正则表达式模式
+				parts := rangeRegex.Split(patternSeg, -1)
+				regexPattern := "^"
+				for i, part := range parts {
+					regexPattern += regexp.QuoteMeta(part)
+					if i < len(parts)-1 {
+						regexPattern += fmt.Sprintf("\\d{%d,%d}", minn, maxx)
+					}
+				}
+				regexPattern += "$"
+
+				regex, err := regexp.Compile(regexPattern)
 				if err != nil {
 					return false
 				}
 				return regex.MatchString(pathSeg)
 			}
 		}
+		return false
 	}
 
 	// 处理通配符 *
 	if strings.Contains(patternSeg, "*") {
-		regexPattern := "^" + strings.Replace(patternSeg, "*", ".*", -1) + "$"
-		regex, err := regexp.Compile(regexPattern)
+		var pattern strings.Builder
+		pattern.WriteString("^")
+		for i := 0; i < len(patternSeg); i++ {
+			if patternSeg[i] == '*' {
+				pattern.WriteString(".*")
+			} else {
+				pattern.WriteString(regexp.QuoteMeta(string(patternSeg[i])))
+			}
+		}
+		pattern.WriteString("$")
+
+		regex, err := regexp.Compile(pattern.String())
 		if err != nil {
 			return false
 		}
@@ -212,4 +239,25 @@ func matchSegment(pathSeg, patternSeg string) bool {
 	}
 
 	return false
+}
+
+// 添加辅助函数检查字符集合模式是否有效
+func isValidBracketPattern(pattern string) bool {
+	// 检查是否有未闭合的方括号
+	openCount := strings.Count(pattern, "[")
+	closeCount := strings.Count(pattern, "]")
+	if openCount != closeCount {
+		return false
+	}
+
+	// 检查方括号内是否有内容
+	brackets := regexp.MustCompile(`\[(.*?)\]`)
+	matches := brackets.FindAllStringSubmatch(pattern, -1)
+	for _, match := range matches {
+		if len(match) > 1 && len(match[1]) == 0 {
+			return false // 空的字符集合如 [] 是无效的
+		}
+	}
+
+	return true
 }
