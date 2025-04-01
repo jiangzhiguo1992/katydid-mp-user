@@ -45,9 +45,24 @@ params = [] # 选填
 #IdleTimeout = 200
 
 
+[middleware.trace]
+enable = true
+key_id = "X-Trace-Id"
+key_path = "X-Trace-Path"
+
 [middleware.logger]
 enable = true
 skip_status = [] # 需要跳过的状态码, 401, 404
 skip_paths = ["/favicon.ico", "/health", "/metrics"]
 sensitives = ["password", "token", "secret", "Authorization", "Cookie"]
 max_size = 4096 # 日志大小限制, -1表示不限制
+
+[middleware.cors]
+enable = true
+
+[middleware.csrf]
+enable = true
+
+[middleware.xss]
+enable = true
+

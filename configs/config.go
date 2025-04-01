@@ -42,6 +42,11 @@ type (
 	}
 
 	MiddleWareConf struct {
+		Trace struct {
+			Enable  bool   `toml:"enable" mapstructure:"enable"`
+			KeyID   string `toml:"key_id" mapstructure:"key_id"`
+			KeyPath string `toml:"key_path" mapstructure:"key_path"`
+		} `toml:"trace" mapstructure:"trace"`
 		Logger struct {
 			Enable     bool     `toml:"enable" mapstructure:"enable"`
 			SkipStatus []int    `toml:"skip_status" mapstructure:"skip_status"`
@@ -49,6 +54,15 @@ type (
 			Sensitives []string `toml:"sensitives" mapstructure:"sensitives"`
 			MaxSize    int      `toml:"max_size" mapstructure:"max_size"`
 		} `toml:"logger" mapstructure:"logger"`
+		CORS struct {
+			Enable bool `toml:"enable" mapstructure:"enable"`
+		} `toml:"cors" mapstructure:"cors"`
+		CSRF struct {
+			Enable bool `toml:"enable" mapstructure:"enable"`
+		} `toml:"csrf" mapstructure:"csrf"`
+		XSS struct {
+			Enable bool `toml:"enable" mapstructure:"enable"`
+		} `toml:"xss" mapstructure:"xss"`
 	}
 
 	AppConf struct {
