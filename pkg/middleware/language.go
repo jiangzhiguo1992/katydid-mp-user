@@ -2,7 +2,7 @@ package middleware
 
 import (
 	"github.com/gin-gonic/gin"
-	"github.com/hashicorp/golang-lru/v2"
+	lru "github.com/hashicorp/golang-lru/v2"
 	"katydid-mp-user/pkg/i18n"
 	"katydid-mp-user/pkg/log"
 	"sort"
@@ -92,17 +92,24 @@ func parseLanguagePreferences(header string) []languagePreference {
 		langCode := part
 
 		// 查找分号位置，避免不必要的字符串分割
-		if qIndex := strings.IndexByte(part, ';'); qIndex >= 0 {
+		if qIndex := strings.IndexByte(part, ';'); qIndex >= 0 && qIndex < len(part)-1 {
 			langCode = strings.TrimSpace(part[:qIndex])
+			if langCode == "" {
+				continue // 跳过空语言代码
+			}
 
 			// 只在有q=参数时解析权重
-			if qPart := part[qIndex+1:]; qPart != "" {
-				qPart = strings.TrimSpace(qPart)
-				if strings.HasPrefix(qPart, "q=") {
-					qValue := strings.TrimPrefix(qPart, "q=")
-					qValue = strings.TrimSpace(qValue)
-					if qValue != "" {
-						if parsedWeight, err := strconv.ParseFloat(qValue, 64); err == nil && parsedWeight >= 0 && parsedWeight <= 1 {
+			qPart := strings.TrimSpace(part[qIndex+1:])
+			if strings.HasPrefix(qPart, "q=") {
+				qValue := strings.TrimSpace(strings.TrimPrefix(qPart, "q="))
+				if qValue != "" {
+					if parsedWeight, err := strconv.ParseFloat(qValue, 64); err == nil {
+						// 确保权重在有效范围内
+						if parsedWeight < 0 {
+							weight = 0
+						} else if parsedWeight > 1 {
+							weight = 1
+						} else {
 							weight = parsedWeight
 						}
 					}
@@ -110,7 +117,8 @@ func parseLanguagePreferences(header string) []languagePreference {
 			}
 		}
 
-		if langCode != "" {
+		// 对语言代码进行额外的有效性验证
+		if isValidLanguageCode(langCode) {
 			preferences = append(preferences, languagePreference{lang: langCode, weight: weight})
 		}
 	}
@@ -120,6 +128,22 @@ func parseLanguagePreferences(header string) []languagePreference {
 		return preferences[i].weight > preferences[j].weight
 	})
 	return preferences
+}
+
+// 辅助函数：检查语言代码是否有效
+func isValidLanguageCode(code string) bool {
+	// 简单验证：至少包含一个有效字符，且不含特殊字符
+	if code == "" {
+		return false
+	}
+	// 语言代码通常是2-3个字母，或带有区域代码的格式如zh-CN
+	// 这里用简单验证，实际项目可能需要更复杂的验证
+	for _, c := range code {
+		if !((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') || c == '-' || c == '_') {
+			return false
+		}
+	}
+	return true
 }
 
 // findBestLanguageMatch 找到最佳匹配的语言
@@ -140,17 +164,17 @@ func findBestLanguageMatch(preferences []languagePreference) string {
 		}
 
 		// 仅当需要时分解语言标签
-		if dashIndex := strings.IndexByte(lang, '-'); dashIndex > 0 {
+		if dashIndex := strings.IndexByte(lang, '-'); dashIndex > 0 && dashIndex < len(lang)-1 {
 			// 主语言部分
 			mainLang := lang[:dashIndex]
 			if i18n.HasLang(mainLang) {
 				return mainLang
 			}
 
-			// 区域部分（如果有效）
+			// 区域部分（确保是有效的索引范围）
 			if dashIndex+1 < len(lang) {
 				region := lang[dashIndex+1:]
-				if i18n.HasLang(region) {
+				if region != "" && i18n.HasLang(region) {
 					return region
 				}
 			}

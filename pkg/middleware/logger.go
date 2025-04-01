@@ -50,6 +50,10 @@ var (
 		},
 	}
 
+	// 预编译正则表达式模板，将字段名作为参数
+	logJsonFieldRegexTpl = `("%s"\s*:\s*)(\"[^\"]*\"|\d+|true|false|null)`
+	logFormFieldRegexTpl = `(%s=)([^&\s]*)`
+
 	// 添加正则表达式缓存
 	logRegexpCache      = make(map[string]*regexp.Regexp)
 	logRegexpCacheMutex sync.RWMutex
@@ -276,6 +280,10 @@ func logCollectRequestParams(c *gin.Context) map[string]any {
 		delete(params, k)
 	}
 
+	if c.Request == nil || c.Request.URL == nil {
+		return params
+	}
+
 	for k, v := range c.Request.URL.Query() {
 		if len(v) > 1 {
 			params[k] = v
@@ -384,15 +392,19 @@ func logHTTPRequest(
 	}
 
 	if responseBody != nil && responseBody.Len() > 0 {
-		w := c.Writer.(*loggerResponseBodyWriter)
-		w.mu.Lock()
-		bodyString := responseBody.String()
-		w.mu.Unlock()
+		if w, ok := c.Writer.(*loggerResponseBodyWriter); ok {
+			w.mu.Lock()
+			bodyString := responseBody.String()
+			w.mu.Unlock()
 
-		if config.MaxBodySize >= 0 && len(bodyString) > config.MaxBodySize {
-			bodyString = bodyString[:config.MaxBodySize] + "... [truncated]"
+			if config.MaxBodySize >= 0 && len(bodyString) > config.MaxBodySize {
+				bodyString = bodyString[:config.MaxBodySize] + "... [truncated]"
+			}
+			_, _ = fmt.Fprintf(&msgBuilder, "\n\tresponse_body(%d): %s", size, bodyString)
+		} else {
+			// 处理类型断言失败的情况
+			_, _ = fmt.Fprintf(&msgBuilder, "\n\tresponse_body(%d): [无法获取响应体]", size)
 		}
-		_, _ = fmt.Fprintf(&msgBuilder, "\n\tresponse_body(%d): %s", size, bodyString)
 	}
 
 	// 根据状态码选择日志级别
@@ -481,6 +493,9 @@ func (b *loggerBodyReader) formatBodyString(sensitiveFields ...string) string {
 		bodyStr = bodyStr[:b.maxSize] + "... [truncated]"
 	}
 
+	// 预处理所有需要的正则表达式，减少锁的次数
+	regexps := make(map[string]*regexp.Regexp, len(sensitiveFields)*2)
+
 	// 使用正则表达式进行更精确的敏感信息替换
 	for _, field := range sensitiveFields {
 		if !strings.Contains(bodyStr, field) {
@@ -488,17 +503,24 @@ func (b *loggerBodyReader) formatBodyString(sensitiveFields ...string) string {
 		}
 
 		// JSON 格式敏感字段
-		pattern := fmt.Sprintf(`("%s"\s*:\s*)(\"[^\"]*\"|\d+|true|false|null)`, regexp.QuoteMeta(field))
-		re, err := logGetCachedRegexp(pattern)
-		if err == nil {
-			bodyStr = re.ReplaceAllString(bodyStr, `$1"[REDACTED]"`)
+		jsonPattern := fmt.Sprintf(logJsonFieldRegexTpl, regexp.QuoteMeta(field))
+		if re, err := logGetCachedRegexp(jsonPattern); err == nil {
+			regexps[jsonPattern] = re
 		}
 
 		// 表单格式敏感字段
-		formPattern := fmt.Sprintf(`(%s=)([^&\s]*)`, regexp.QuoteMeta(field))
-		formRe, err := logGetCachedRegexp(formPattern)
-		if err == nil {
-			bodyStr = formRe.ReplaceAllString(bodyStr, `$1[REDACTED]`)
+		formPattern := fmt.Sprintf(logFormFieldRegexTpl, regexp.QuoteMeta(field))
+		if re, err := logGetCachedRegexp(formPattern); err == nil {
+			regexps[formPattern] = re
+		}
+	}
+
+	// 使用预先加载的正则表达式执行替换
+	for pattern, re := range regexps {
+		if strings.Contains(pattern, logJsonFieldRegexTpl) {
+			bodyStr = re.ReplaceAllString(bodyStr, `$1"[REDACTED]"`)
+		} else {
+			bodyStr = re.ReplaceAllString(bodyStr, `$1[REDACTED]`)
 		}
 	}
 
