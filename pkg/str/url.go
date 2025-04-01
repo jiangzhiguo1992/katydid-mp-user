@@ -8,10 +8,10 @@ import (
 )
 
 var (
-	rangeRegex        = regexp.MustCompile(`\{(\d+)-(\d+)\}`)
-	paramRegex        = regexp.MustCompile(`^[a-zA-Z_][a-zA-Z0-9_]*$`)
-	brackets          = regexp.MustCompile(`\[(.*?)\]`)
-	questionMarkRegex = regexp.MustCompile(`\?`)
+	rangeRegex = regexp.MustCompile(`\{(\d+)-(\d+)\}`)
+	paramRegex = regexp.MustCompile(`^[a-zA-Z_][a-zA-Z0-9_]*$`)
+	brackets   = regexp.MustCompile(`\[(.*?)\]`)
+
 	maxRecursionDepth = 50 // 减小递归深度限制
 )
 
@@ -80,7 +80,7 @@ func MatchURLPath(path string, pattern string) bool {
 // params 用于存储命名参数的值（如果需要使用）
 func matchSegments(pathSegs []string, patternSegs []string, pathIdx, patternIdx int, params map[string]string, depth int) bool {
 	// 防止过深的递归导致栈溢出
-	if depth > 100 {
+	if depth > maxRecursionDepth {
 		return false
 	}
 
@@ -97,6 +97,12 @@ func matchSegments(pathSegs []string, patternSegs []string, pathIdx, patternIdx 
 		// 这是最后一个模式段，可以匹配路径中的所有剩余段
 		if patternIdx == len(patternSegs)-1 {
 			return true
+		}
+
+		// 检查剩余模式段数是否超过剩余路径段数
+		remainingPatternSegs := len(patternSegs) - patternIdx - 1
+		if remainingPatternSegs > len(pathSegs)-pathIdx {
+			return false // 不可能匹配成功
 		}
 
 		// 尝试匹配0个或多个路径段
@@ -163,6 +169,11 @@ func matchSegments(pathSegs []string, patternSegs []string, pathIdx, patternIdx 
 
 // matchSegment 匹配单个路径段
 func matchSegment(pathSeg, patternSeg string) bool {
+	// 防止过长的路径段
+	if len(pathSeg) > 1000 || len(patternSeg) > 1000 {
+		return false
+	}
+
 	// 精确匹配
 	if patternSeg == pathSeg || patternSeg == "*" {
 		return true
@@ -206,7 +217,7 @@ func matchSegment(pathSeg, patternSeg string) bool {
 
 		for _, match := range matches {
 			// 确保索引有效
-			if match[0] < 0 || match[1] > len(patternSeg) ||
+			if len(match) < 4 || match[0] < 0 || match[1] > len(patternSeg) ||
 				match[2] < 0 || match[3] > len(patternSeg) ||
 				match[2] >= match[3] {
 				return false
@@ -219,18 +230,6 @@ func matchSegment(pathSeg, patternSeg string) bool {
 
 			// 添加方括号内容，转义特殊字符
 			bracketContent := patternSeg[match[2]:match[3]]
-			// 检查是否为特殊正则表达式
-			if strings.ContainsAny(bracketContent, "\\^-]") {
-				// 对特殊字符进行转义处理
-				var escaped strings.Builder
-				for _, ch := range bracketContent {
-					if ch == '\\' || ch == '^' || ch == '-' || ch == ']' {
-						escaped.WriteRune('\\')
-					}
-					escaped.WriteRune(ch)
-				}
-				bracketContent = escaped.String()
-			}
 			regexPattern += "[" + bracketContent + "]"
 			lastIndex = match[1]
 		}
