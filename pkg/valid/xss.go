@@ -18,7 +18,7 @@ var (
 		regexp.MustCompile(`(?i)javascript\s*:`),
 		regexp.MustCompile(`(?i)vbscript\s*:`),
 		regexp.MustCompile(`(?i)livescript\s*:`),
-		regexp.MustCompile(`(?i)data\s*:.*script`),
+		regexp.MustCompile(`(?i)data\s*:.*?script`),
 
 		// JavaScript 事件处理器
 		regexp.MustCompile(`(?i)\s+on\w+\s*=`),
@@ -32,7 +32,7 @@ var (
 
 		// 数据URI
 		regexp.MustCompile(`(?i)data:(?:text|image|application)/(?:html|xml|xhtml|svg)`),
-		regexp.MustCompile(`(?i)data:.*?;base64`),
+		regexp.MustCompile(`(?i)data:.*?;base64`), // 使用��贪婪匹配
 
 		// 表达式和绕过
 		regexp.MustCompile(`(?i)expression\s*\(`),
@@ -54,7 +54,7 @@ var (
 		// SVG嵌入式脚本
 		regexp.MustCompile(`(?i)<\s*svg[^>]*>.*?<\s*script`),
 
-		// 添加新的检测模式：CSP绕���
+		// 添加新的检测模式：CSP绕过
 		regexp.MustCompile(`(?i)<\s*meta\s+http-equiv\s*=\s*["']?content-security-policy`),
 
 		// 添加DOM clobbering检测
