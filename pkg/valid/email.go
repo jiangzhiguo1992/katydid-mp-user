@@ -5,6 +5,15 @@ import (
 	"strings"
 )
 
+var (
+	// 用户名部分正则表达式 - 符合RFC 5322标准
+	usernameRegex = regexp.MustCompile(`^[a-zA-Z0-9!#$%&'*+\-/=?^_` + "`" + `{|}~.]+$`)
+	// 域名部分正则表达式
+	domainRegex = regexp.MustCompile(`^(?:[a-zA-Z0-9](?:[a-zA-Z0-9\-]{0,61}[a-zA-Z0-9])?\.)+[a-zA-Z0-9](?:[a-zA-Z0-9\-]{0,61}[a-zA-Z0-9])?$`)
+	// 优化后的电子邮件匹配正则表达式
+	emailRegex = regexp.MustCompile(`\b[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9](?:[a-zA-Z0-9\-]{0,61}[a-zA-Z0-9])?(?:\.[a-zA-Z0-9](?:[a-zA-Z0-9\-]{0,61}[a-zA-Z0-9])?)*\.[a-zA-Z]{2,}(?:\b|$)`)
+)
+
 // EmailComponents 保存解析后的电子邮件地址各部分
 type EmailComponents struct {
 	Address  string // 完整电子邮件地址
@@ -15,8 +24,16 @@ type EmailComponents struct {
 }
 
 // IsEmail 验证电子邮件地址的各个组成部分
+// 返回解析后的邮件组件和一个表示邮件是否有效的布尔值
+// 如果邮件无效，但能够解析出组件，则返回组件和false
+// 如果邮件格式完全无效无法解析，则返回nil和false
 func IsEmail(email string) (*EmailComponents, bool) {
-	// 先检查总长度限制
+	// 检查是否为空
+	if email = strings.TrimSpace(email); email == "" {
+		return nil, false
+	}
+
+	// 检查总长度限制
 	if len(email) > 254 {
 		return nil, false
 	}
@@ -51,8 +68,7 @@ func IsEmailUsername(username string) bool {
 	}
 
 	// 验证用户名中的字符是否符合RFC规范
-	basicRegex := regexp.MustCompile(`^[a-zA-Z0-9!#$%&'*+\-/=?^_` + "`" + `{|}~.]+$`)
-	if !basicRegex.MatchString(username) {
+	if !usernameRegex.MatchString(username) {
 		return false
 	}
 
@@ -74,7 +90,6 @@ func IsEmailDomain(domain string) bool {
 	}
 
 	// 基本域名验证
-	domainRegex := regexp.MustCompile(`^(?:[a-zA-Z0-9](?:[a-zA-Z0-9\-]{0,61}[a-zA-Z0-9])?\.)+[a-zA-Z0-9](?:[a-zA-Z0-9\-]{0,61}[a-zA-Z0-9])?$`)
 	if !domainRegex.MatchString(domain) {
 		return false
 	}
@@ -99,15 +114,29 @@ func IsEmailDomain(domain string) bool {
 
 // FindEmailsInText 从文本中提取有效的电子邮件地址
 func FindEmailsInText(text string) []string {
+	if text = strings.TrimSpace(text); text == "" {
+		return []string{}
+	}
+
 	// 使用更精确的正则表达式直接匹配可能有效的邮箱
-	emailRegex := regexp.MustCompile(`\b[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}\b`)
 	matches := emailRegex.FindAllString(text, -1)
+	if len(matches) == 0 {
+		return []string{}
+	}
 
 	validEmails := make([]string, 0, len(matches))
+	seen := make(map[string]struct{}) // 用于去重
+
 	for _, match := range matches {
+		// 检查是否已处理过相同邮箱
+		if _, exists := seen[match]; exists {
+			continue
+		}
+
 		// 使用IsEmail进行最终验证
 		if _, ok := IsEmail(match); ok {
 			validEmails = append(validEmails, match)
+			seen[match] = struct{}{}
 		}
 	}
 
@@ -116,11 +145,8 @@ func FindEmailsInText(text string) []string {
 
 // parseEmail 将电子邮件分割成不同组件
 func parseEmail(email string) (*EmailComponents, bool) {
-	// 移除空格
-	email = strings.TrimSpace(email)
-
-	// 转为小写（尽管技术上用户名可以区分大小写）
-	email = strings.ToLower(email)
+	// 移除空格并转为小写
+	email = strings.ToLower(strings.TrimSpace(email))
 
 	// 检查邮件是否为空
 	if email == "" {
@@ -141,7 +167,7 @@ func parseEmail(email string) (*EmailComponents, bool) {
 		return nil, false
 	}
 
-	// 提取TLD和实体部分
+	// 提取 TLD 和实体部分
 	domainParts := strings.Split(domain, ".")
 	if len(domainParts) < 2 {
 		return nil, false
