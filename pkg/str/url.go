@@ -14,7 +14,15 @@ var (
 )
 
 const (
-	maxRecursionDepth = 50 // 减小递归深度限制
+	maxRecursionDepth  = 50   // 递归深度限制
+	maxSegmentLength   = 2000 // 路径段长度限制
+	maxRegexLength     = 500  // 正则表达式长度限制
+	maxQuestionMarks   = 100  // 问号数量限制
+	maxBrackets        = 10   // 方括号数量限制
+	maxBracketContent  = 100  // 字符集合内容长度限制
+	maxWildcards       = 10   // 通配符数量限制
+	maxRangeValue      = 50   // 范围上限值
+	maxRangeDifference = 20   // 范围差值限制
 )
 
 // MatchURLPath 检查传入的路径是否匹配指定的模式
@@ -47,6 +55,11 @@ func MatchURLPath(path string, pattern string) bool {
 	path = strings.TrimSpace(path)
 	pattern = strings.TrimSpace(pattern)
 
+	// 检查路径和模式的长度
+	if len(path) > maxSegmentLength*10 || len(pattern) > maxSegmentLength*10 {
+		return false
+	}
+
 	// 优化：特殊情况处理
 	if pattern == "**" || pattern == "/**" {
 		return true // 匹配所有路径
@@ -55,8 +68,7 @@ func MatchURLPath(path string, pattern string) bool {
 	// 处理前缀匹配（优先于正则匹配，提高性能）
 	if strings.HasSuffix(pattern, "*") && pattern != "*" && len(pattern) > 1 {
 		prefix := pattern[:len(pattern)-1]
-		if !strings.Contains(prefix, "*") && !strings.Contains(prefix, "?") &&
-			!strings.Contains(prefix, "{") && !strings.Contains(prefix, "[") {
+		if !strings.ContainsAny(prefix, "*?{[") {
 			return strings.HasPrefix(path, prefix)
 		}
 	}
@@ -64,8 +76,7 @@ func MatchURLPath(path string, pattern string) bool {
 	// 处理后缀匹配
 	if strings.HasPrefix(pattern, "*") && pattern != "*" && len(pattern) > 1 {
 		suffix := pattern[1:]
-		if !strings.Contains(suffix, "*") && !strings.Contains(suffix, "?") &&
-			!strings.Contains(suffix, "{") && !strings.Contains(suffix, "[") {
+		if !strings.ContainsAny(suffix, "*?{[") {
 			return strings.HasSuffix(path, suffix)
 		}
 	}
@@ -74,12 +85,16 @@ func MatchURLPath(path string, pattern string) bool {
 	pathSegments := strings.Split(strings.Trim(path, "/"), "/")
 	patternSegments := strings.Split(strings.Trim(pattern, "/"), "/")
 
+	// 限制路径段数量
+	if len(pathSegments) > 100 || len(patternSegments) > 100 {
+		return false
+	}
+
 	// 处理多段通配符 **
 	return matchSegments(pathSegments, patternSegments, 0, 0, make(map[string]string), 0)
 }
 
 // matchSegments 使用递归方式匹配路径段
-// params 用于存储命名参数的值（如果需要使用）
 func matchSegments(pathSegs []string, patternSegs []string, pathIdx, patternIdx int, params map[string]string, depth int) bool {
 	// 防止过深的递归导致栈溢出
 	if depth > maxRecursionDepth {
@@ -111,8 +126,8 @@ func matchSegments(pathSegs []string, patternSegs []string, pathIdx, patternIdx 
 			return false // 不可能匹配成功
 		}
 
-		// 尝试匹配0个或多个路径段（优化循环方向，从少到多）
-		for i := pathIdx; i <= len(pathSegs); i++ {
+		// 尝试匹配0个或多个路径段（优化：从多到少，更容易找到成功匹配）
+		for i := len(pathSegs); i >= pathIdx; i-- {
 			if matchSegments(pathSegs, patternSegs, i, patternIdx+1, params, depth+1) {
 				return true
 			}
@@ -128,13 +143,12 @@ func matchSegments(pathSegs []string, patternSegs []string, pathIdx, patternIdx 
 	pathSeg := pathSegs[pathIdx]
 
 	// 添加防护：检查路径段长度
-	maxSegmentLength := 2000
 	if len(pathSeg) > maxSegmentLength || len(pattern) > maxSegmentLength {
 		return false
 	}
 
 	// 处理带正则的命名参数 {name:pattern}
-	if strings.HasPrefix(pattern, "{") && strings.HasSuffix(pattern, "}") {
+	if strings.HasPrefix(pattern, "{") && strings.HasSuffix(pattern, "}") && len(pattern) >= 3 {
 		// 提取命名参数内容
 		paramContent := pattern[1 : len(pattern)-1]
 
@@ -150,7 +164,7 @@ func matchSegments(pathSegs []string, patternSegs []string, pathIdx, patternIdx 
 				paramName, regexStr := paramParts[0], paramParts[1]
 
 				// 限制正则表达式长度
-				if len(regexStr) > 500 {
+				if len(regexStr) > maxRegexLength {
 					return false
 				}
 
@@ -188,12 +202,11 @@ func matchSegments(pathSegs []string, patternSegs []string, pathIdx, patternIdx 
 // matchSegment 匹配单个路径段
 func matchSegment(pathSeg, patternSeg string) bool {
 	// 防止过长的路径段
-	maxSegmentLength := 2000 // 增加一些容错空间
 	if len(pathSeg) > maxSegmentLength || len(patternSeg) > maxSegmentLength {
 		return false
 	}
 
-	// 精确匹配
+	// 精确匹配或通配符匹配
 	if patternSeg == pathSeg || patternSeg == "*" {
 		return true
 	}
@@ -201,22 +214,24 @@ func matchSegment(pathSeg, patternSeg string) bool {
 	// 问号匹配单个字符
 	if strings.Contains(patternSeg, "?") {
 		// 限制问号数量，防止DoS攻击
-		if strings.Count(patternSeg, "?") > 100 {
+		if strings.Count(patternSeg, "?") > maxQuestionMarks {
 			return false
 		}
 
 		// 构建安全的正则模式
-		pattern := ""
+		pattern := strings.Builder{}
+		pattern.WriteString("^")
 		for _, ch := range patternSeg {
 			if ch == '?' {
-				pattern += "."
+				pattern.WriteString(".")
 			} else {
-				pattern += regexp.QuoteMeta(string(ch))
+				pattern.WriteString(regexp.QuoteMeta(string(ch)))
 			}
 		}
+		pattern.WriteString("$")
 
 		// 添加错误恢复
-		regex, err := regexp.Compile("^" + pattern + "$")
+		regex, err := regexp.Compile(pattern.String())
 		if err != nil {
 			return false
 		}
@@ -226,11 +241,11 @@ func matchSegment(pathSeg, patternSeg string) bool {
 	// 字符集匹配 [abc]
 	if strings.Contains(patternSeg, "[") && strings.Contains(patternSeg, "]") {
 		// 限制字符集数量
-		if strings.Count(patternSeg, "[") > 10 {
+		if strings.Count(patternSeg, "[") > maxBrackets {
 			return false
 		}
 
-		// 先验证方括号格式��否正确
+		// 先验证方括号格式是否正确
 		if !isValidBracketPattern(patternSeg) {
 			return false
 		}
@@ -242,11 +257,12 @@ func matchSegment(pathSeg, patternSeg string) bool {
 		}
 
 		// 构建正则表达式，更安全地处理每一部分
-		regexPattern := "^"
+		regexPattern := strings.Builder{}
+		regexPattern.WriteString("^")
 		lastIndex := 0
 
 		for _, match := range matches {
-			// 确保索引有效 (完善的索引检查)
+			// 确保索引有效
 			if len(match) < 4 {
 				return false
 			}
@@ -259,27 +275,26 @@ func matchSegment(pathSeg, patternSeg string) bool {
 
 			// 转义方括号前的内容
 			if match[0] > lastIndex {
-				regexPattern += regexp.QuoteMeta(patternSeg[lastIndex:match[0]])
+				regexPattern.WriteString(regexp.QuoteMeta(patternSeg[lastIndex:match[0]]))
 			}
 
-			// 添加方括号内容，转义特殊字符
+			// 添加方括号内容，检查长度限制
 			bracketContent := patternSeg[match[2]:match[3]]
-			// 限制字符集合长度
-			if len(bracketContent) > 100 {
+			if len(bracketContent) > maxBracketContent {
 				return false
 			}
-			regexPattern += "[" + bracketContent + "]"
+			regexPattern.WriteString("[" + bracketContent + "]")
 			lastIndex = match[1]
 		}
 
 		// 添加方括号后的内容
 		if lastIndex < len(patternSeg) {
-			regexPattern += regexp.QuoteMeta(patternSeg[lastIndex:])
+			regexPattern.WriteString(regexp.QuoteMeta(patternSeg[lastIndex:]))
 		}
-		regexPattern += "$"
+		regexPattern.WriteString("$")
 
 		// 添加错误处理
-		regex, err := regexp.Compile(regexPattern)
+		regex, err := regexp.Compile(regexPattern.String())
 		if err != nil {
 			return false
 		}
@@ -299,23 +314,23 @@ func matchSegment(pathSeg, patternSeg string) bool {
 		// 增强数值校验，防止范围过大
 		if minErr != nil || maxErr != nil ||
 			minn < 0 || maxx < 0 || minn > maxx ||
-			// 更严格的范围限制，防止正则爆炸
-			maxx > 50 || maxx-minn > 20 {
+			maxx > maxRangeValue || maxx-minn > maxRangeDifference {
 			return false
 		}
 
 		// 构建正则模式
 		parts := rangeRegex.Split(patternSeg, -1)
-		regexPattern := "^"
+		regexPattern := strings.Builder{}
+		regexPattern.WriteString("^")
 		for i, part := range parts {
-			regexPattern += regexp.QuoteMeta(part)
+			regexPattern.WriteString(regexp.QuoteMeta(part))
 			if i < len(parts)-1 {
-				regexPattern += fmt.Sprintf("\\d{%d,%d}", minn, maxx)
+				regexPattern.WriteString(fmt.Sprintf("\\d{%d,%d}", minn, maxx))
 			}
 		}
-		regexPattern += "$"
+		regexPattern.WriteString("$")
 
-		regex, err := regexp.Compile(regexPattern)
+		regex, err := regexp.Compile(regexPattern.String())
 		if err != nil {
 			return false
 		}
@@ -325,7 +340,7 @@ func matchSegment(pathSeg, patternSeg string) bool {
 	// 处理通配符 *，增强安全性
 	if strings.Contains(patternSeg, "*") {
 		// 限制星号数量
-		if strings.Count(patternSeg, "*") > 10 {
+		if strings.Count(patternSeg, "*") > maxWildcards {
 			return false
 		}
 
@@ -351,7 +366,7 @@ func matchSegment(pathSeg, patternSeg string) bool {
 	return false
 }
 
-// 添加辅助函数检查字符集合模式是否有效
+// isValidBracketPattern 检查字符集合模式是否有效
 func isValidBracketPattern(pattern string) bool {
 	// 检查是否有未闭合的方括号
 	openCount := strings.Count(pattern, "[")
