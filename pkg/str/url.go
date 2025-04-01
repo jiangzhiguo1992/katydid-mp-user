@@ -8,9 +8,11 @@ import (
 )
 
 var (
-	rangeRegex = regexp.MustCompile(`\{(\d+)-(\d+)\}`)
-	paramRegex = regexp.MustCompile(`^[a-zA-Z_][a-zA-Z0-9_]*$`)
-	brackets   = regexp.MustCompile(`\[(.*?)\]`)
+	rangeRegex        = regexp.MustCompile(`\{(\d+)-(\d+)\}`)
+	paramRegex        = regexp.MustCompile(`^[a-zA-Z_][a-zA-Z0-9_]*$`)
+	brackets          = regexp.MustCompile(`\[(.*?)\]`)
+	questionMarkRegex = regexp.MustCompile(`\?`)
+	maxRecursionDepth = 50 // 减小递归深度限制
 )
 
 // MatchURLPath 检查传入的路径是否匹配指定的模式
@@ -177,6 +179,7 @@ func matchSegment(pathSeg, patternSeg string) bool {
 				pattern += regexp.QuoteMeta(string(ch))
 			}
 		}
+		// 添加错误恢复
 		regex, err := regexp.Compile("^" + pattern + "$")
 		if err != nil {
 			return false
@@ -186,28 +189,49 @@ func matchSegment(pathSeg, patternSeg string) bool {
 
 	// 字符集匹配 [abc]
 	if strings.Contains(patternSeg, "[") && strings.Contains(patternSeg, "]") {
-		// 增加安全检查，确保方括号正确配对且格式正确
+		// 先验证方括号格式是否正确
 		if !isValidBracketPattern(patternSeg) {
 			return false
 		}
 
-		// 使用 CaptureGroups 来更安全地处理正则匹配
+		// 使用更安全的方式提取括号内容
 		matches := brackets.FindAllStringSubmatchIndex(patternSeg, -1)
 		if matches == nil || len(matches) == 0 {
 			return false // 无法正确匹配括号
 		}
 
-		// 将方括号外的内容进行转义处理
+		// 构建正则表达式，更安全地处理每一部分
 		regexPattern := "^"
 		lastIndex := 0
 
 		for _, match := range matches {
+			// 确保索引有效
+			if match[0] < 0 || match[1] > len(patternSeg) ||
+				match[2] < 0 || match[3] > len(patternSeg) ||
+				match[2] >= match[3] {
+				return false
+			}
+
 			// 转义方括号前的内容
 			if match[0] > lastIndex {
 				regexPattern += regexp.QuoteMeta(patternSeg[lastIndex:match[0]])
 			}
-			// 添加方括号内容
-			regexPattern += "[" + patternSeg[match[2]:match[3]] + "]"
+
+			// 添加方括号内容，转义特殊字符
+			bracketContent := patternSeg[match[2]:match[3]]
+			// 检查是否为特殊正则表达式
+			if strings.ContainsAny(bracketContent, "\\^-]") {
+				// 对特殊字符进行转义处理
+				var escaped strings.Builder
+				for _, ch := range bracketContent {
+					if ch == '\\' || ch == '^' || ch == '-' || ch == ']' {
+						escaped.WriteRune('\\')
+					}
+					escaped.WriteRune(ch)
+				}
+				bracketContent = escaped.String()
+			}
+			regexPattern += "[" + bracketContent + "]"
 			lastIndex = match[1]
 		}
 
@@ -217,6 +241,7 @@ func matchSegment(pathSeg, patternSeg string) bool {
 		}
 		regexPattern += "$"
 
+		// 添加错误处理
 		regex, err := regexp.Compile(regexPattern)
 		if err != nil {
 			return false
@@ -227,31 +252,35 @@ func matchSegment(pathSeg, patternSeg string) bool {
 	// 范围匹配 {min-max}
 	if rangeRegex.MatchString(patternSeg) {
 		matches := rangeRegex.FindStringSubmatch(patternSeg)
-		if len(matches) == 3 {
-			minn, minErr := strconv.Atoi(matches[1])
-			maxx, maxErr := strconv.Atoi(matches[2])
+		if len(matches) != 3 {
+			return false
+		}
 
-			// 添加额外检查，确保数值合理且防止过大的范围值导致性能问题
-			if minErr == nil && maxErr == nil && minn >= 0 && maxx >= 0 && minn <= maxx {
-				// 构建一个新的正则表达式模式
-				parts := rangeRegex.Split(patternSeg, -1)
-				regexPattern := "^"
-				for i, part := range parts {
-					regexPattern += regexp.QuoteMeta(part)
-					if i < len(parts)-1 {
-						regexPattern += fmt.Sprintf("\\d{%d,%d}", minn, maxx)
-					}
-				}
-				regexPattern += "$"
+		minn, minErr := strconv.Atoi(matches[1])
+		maxx, maxErr := strconv.Atoi(matches[2])
 
-				regex, err := regexp.Compile(regexPattern)
-				if err != nil {
-					return false
-				}
-				return regex.MatchString(pathSeg)
+		// 增强数值校验，防止范围过大
+		if minErr != nil || maxErr != nil ||
+			minn < 0 || maxx < 0 || minn > maxx || maxx > 100 {
+			return false
+		}
+
+		// 构建正则模式
+		parts := rangeRegex.Split(patternSeg, -1)
+		regexPattern := "^"
+		for i, part := range parts {
+			regexPattern += regexp.QuoteMeta(part)
+			if i < len(parts)-1 {
+				regexPattern += fmt.Sprintf("\\d{%d,%d}", minn, maxx)
 			}
 		}
-		return false
+		regexPattern += "$"
+
+		regex, err := regexp.Compile(regexPattern)
+		if err != nil {
+			return false
+		}
+		return regex.MatchString(pathSeg)
 	}
 
 	// 处理通配符 *
@@ -267,6 +296,7 @@ func matchSegment(pathSeg, patternSeg string) bool {
 		}
 		pattern.WriteString("$")
 
+		// 添加错误处理
 		regex, err := regexp.Compile(pattern.String())
 		if err != nil {
 			return false
@@ -282,7 +312,7 @@ func isValidBracketPattern(pattern string) bool {
 	// 检查是否有未闭合的方括号
 	openCount := strings.Count(pattern, "[")
 	closeCount := strings.Count(pattern, "]")
-	if openCount != closeCount {
+	if openCount != closeCount || openCount == 0 {
 		return false
 	}
 
@@ -290,11 +320,13 @@ func isValidBracketPattern(pattern string) bool {
 	matches := brackets.FindAllStringSubmatch(pattern, -1)
 	for _, match := range matches {
 		if len(match) > 1 {
+			// 检查是否为空字符集合
 			if len(match[1]) == 0 {
-				return false // 空的字符集合如 [] 是无效的
+				return false
 			}
+			// 检查是否有嵌套方括号
 			if strings.Contains(match[1], "[") || strings.Contains(match[1], "]") {
-				return false // 不允许嵌套方括号
+				return false
 			}
 		}
 	}
