@@ -280,9 +280,9 @@ func IsPhone(phone string) (*PhoneCountryCode, string, bool) {
 			code := matches[1]
 			number := cleanDigitsOnly(matches[2])
 
-			if countryCode, exists := countryCodeMap[code]; exists {
-				_, _, valid := IsPhoneNumber(code, number)
-				return &countryCode, number, valid
+			if _, exists := countryCodeMap[code]; exists {
+				countryCode, number2, valid := IsPhoneNumber(code, number)
+				return countryCode, number2, valid
 			}
 		}
 
@@ -310,17 +310,14 @@ func IsPhoneNumber(code, number string) (*PhoneCountryCode, string, bool) {
 	// 检查国家代码是否有效
 	countryCode, ok := IsPhoneCountryCode(code)
 	if !ok {
-		return nil, "", false
+		return nil, number, false
 	}
 
 	// 使用预编译的正则表达式验证
 	patterns, exists := compiledPatterns[code]
 	if !exists || len(patterns) == 0 {
-		// 如果没有特定模式，至少验证长度是否合理(大多数号码在6-15位之间)
-		if len(number) < 6 || len(number) > 15 {
-			return countryCode, number, false
-		}
-		return countryCode, number, true
+		// 如果没有特定模式，至少验证长度是否合理
+		return countryCode, number, len(number) >= 6 && len(number) <= 15
 	}
 
 	for _, re := range patterns {
@@ -354,6 +351,10 @@ func IsPhoneCountryCode(code string) (*PhoneCountryCode, bool) {
 
 // FormatPhone 根据国家代码格式格式化电话号码
 func FormatPhone(phone string) string {
+	if phone == "" {
+		return ""
+	}
+
 	code, number, ok := IsPhone(phone)
 	if !ok {
 		return phone // 返回原始输入，因为它不是有效的电话号码
@@ -371,7 +372,7 @@ func FormatPhone(phone string) string {
 // FindPhonesInText 从文本中查找可能的电话号码
 func FindPhonesInText(text string) []string {
 	// 使用更严格的正则表达式模式匹配国际号码格式
-	phonePattern := regexp.MustCompile(`(?:(?:\+|00)[1-9]\d{0,3}[\s.-]*)?(?:\(?\d{1,4}\)?[\s.-]*)?(?:\d{2,4}[\s.-]*){2,4}`)
+	phonePattern := regexp.MustCompile(`(?:\+|00)[1-9]\d{0,3}[\s.-]*(?:\(?\d{1,4}\)?[\s.-]*\d{2,4}[\s.-]*\d{2,4}[\s.-]*\d{1,4})`)
 	matches := phonePattern.FindAllString(text, -1)
 
 	// 过滤只保留有效号码并去重
@@ -413,9 +414,17 @@ func FindPhoneCountryByName(name string) []PhoneCountryCode {
 
 // findMatchingCountryCode 查找匹配的国家代码，通过按长度排序后的代码列表提高效率
 func findMatchingCountryCode(phone string) (*PhoneCountryCode, string, bool) {
+	if phone == "" {
+		return nil, "", false
+	}
+
 	for _, code := range sortedCountryCodes {
 		if strings.HasPrefix(phone, code) {
 			number := phone[len(code):]
+			if number == "" {
+				continue // 确保号码部分不为空
+			}
+
 			countryCode, exists := countryCodeMap[code]
 			if !exists {
 				continue
