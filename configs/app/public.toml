@@ -46,23 +46,27 @@ params = [] # 选填
 
 
 [middleware.trace]
-enable = true
+enable = true # 分布式才开
 key_id = "X-Trace-Id" # 网关生成并塞入的requestID
 key_path = "X-Trace-Path" # 每层api都会塞入 ">name"
 
+[middleware.language]
+#enable = true # 必须是true
+key_accept = "Accept-Language" # 请求头中语言参数
+
 [middleware.logger]
-enable = true
+enable = true # 接入日志收集之后，就只debug开
 skip_status = [] # 需要跳过的状态码, 401, 404
 skip_paths = ["/favicon.ico", "/health", "/metrics"]
 sensitives = ["password", "token", "secret", "Authorization", "Cookie"]
 max_size = 4096 # 日志大小限制, -1表示不限制
 
 [middleware.cors]
-enable = true
+enable = true # 前后端分离才开
 
 [middleware.csrf]
-enable = true
+enable = true # 在cookie里放敏感数据才开
 
 [middleware.xss]
-enable = true
+enable = true # html渲染才开
 

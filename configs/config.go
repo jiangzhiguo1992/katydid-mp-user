@@ -47,6 +47,9 @@ type (
 			KeyID   string `toml:"key_id" mapstructure:"key_id"`
 			KeyPath string `toml:"key_path" mapstructure:"key_path"`
 		} `toml:"trace" mapstructure:"trace"`
+		Language struct {
+			KeyAccept string `toml:"key_accept" mapstructure:"key_accept"`
+		} `toml:"language" mapstructure:"language"`
 		Logger struct {
 			Enable     bool     `toml:"enable" mapstructure:"enable"`
 			SkipStatus []int    `toml:"skip_status" mapstructure:"skip_status"`

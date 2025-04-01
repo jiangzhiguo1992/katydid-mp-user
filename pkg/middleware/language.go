@@ -25,16 +25,22 @@ type languagePreference struct {
 
 // Language 创建处理请求语言的中间件
 func Language(keyAccept string, maxSize int) gin.HandlerFunc {
+	// 使用默认合理的缓存大小，避免过度参数化
+	if maxSize <= 0 {
+		maxSize = 1000 // 使用合理的默认值
+	}
+
 	// 初始化LRU缓存
 	langOnce.Do(func() {
 		var err error
 		langCache, err = lru.New[string, string](maxSize)
 		if err != nil {
 			log.Error("■ ■ Language(中间件) ■ ■ 初始化缓存失败", log.FError(err))
-			// 创建一个容量较小的缓存作为后备
-			langCache, _ = lru.New[string, string](maxSize / 10)
 		}
 	})
+	if langCache == nil {
+		return func(context *gin.Context) {}
+	}
 
 	return func(c *gin.Context) {
 		acceptLang := c.GetHeader("Accept-Language")
@@ -69,6 +75,10 @@ func Language(keyAccept string, maxSize int) gin.HandlerFunc {
 
 // parseLanguagePreferences 解析Accept-Language头部，返回按权重排序的语言偏好列表
 func parseLanguagePreferences(header string) []languagePreference {
+	if header == "" {
+		return []languagePreference{}
+	}
+
 	parts := strings.Split(header, ",")
 	preferences := make([]languagePreference, 0, len(parts))
 
@@ -78,25 +88,31 @@ func parseLanguagePreferences(header string) []languagePreference {
 			continue // 跳过空项
 		}
 
-		pref := languagePreference{weight: 1.0} // 默认权重为1.0
+		weight := 1.0 // 默认权重
+		langCode := part
 
-		// 分离语言代码和权重值
-		subParts := strings.Split(part, ";")
-		pref.lang = strings.TrimSpace(subParts[0])
-		if pref.lang == "" {
-			continue // 跳过无效语言代码
-		}
+		// 查找分号位置，避免不必要的字符串分割
+		if qIndex := strings.IndexByte(part, ';'); qIndex >= 0 {
+			langCode = strings.TrimSpace(part[:qIndex])
 
-		// 如果有权重值，解析它
-		if len(subParts) > 1 {
-			qParts := strings.Split(subParts[1], "=")
-			if len(qParts) == 2 && strings.TrimSpace(qParts[0]) == "q" {
-				if weight, err := strconv.ParseFloat(strings.TrimSpace(qParts[1]), 64); err == nil && weight >= 0 && weight <= 1 {
-					pref.weight = weight
+			// 只在有q=参数时解析权重
+			if qPart := part[qIndex+1:]; qPart != "" {
+				qPart = strings.TrimSpace(qPart)
+				if strings.HasPrefix(qPart, "q=") {
+					qValue := strings.TrimPrefix(qPart, "q=")
+					qValue = strings.TrimSpace(qValue)
+					if qValue != "" {
+						if parsedWeight, err := strconv.ParseFloat(qValue, 64); err == nil && parsedWeight >= 0 && parsedWeight <= 1 {
+							weight = parsedWeight
+						}
+					}
 				}
 			}
 		}
-		preferences = append(preferences, pref)
+
+		if langCode != "" {
+			preferences = append(preferences, languagePreference{lang: langCode, weight: weight})
+		}
 	}
 
 	// 按权重排序语言偏好（从高到低）
@@ -109,33 +125,34 @@ func parseLanguagePreferences(header string) []languagePreference {
 // findBestLanguageMatch 找到最佳匹配的语言
 func findBestLanguageMatch(preferences []languagePreference) string {
 	if len(preferences) == 0 {
-		return i18n.DefLang() // 如果没有偏好，返回默认语言
+		return i18n.DefLang()
 	}
 
 	for _, pref := range preferences {
-		cleanLang := pref.lang
-		if cleanLang == "" {
+		lang := pref.lang
+		if lang == "" {
 			continue
 		}
 
-		// 检查完整语言代码
-		if i18n.HasLang(cleanLang) {
-			return cleanLang
+		// 先检查完整语言代码
+		if i18n.HasLang(lang) {
+			return lang
 		}
 
-		// 分解语言标签（如 zh-CN -> zh, CN）
-		subParts := strings.Split(cleanLang, "-")
-		if len(subParts) > 1 {
-			// 先检查主语言部分
-			mainLang := strings.TrimSpace(subParts[0])
-			if mainLang != "" && i18n.HasLang(mainLang) {
+		// 仅当需要时分解语言标签
+		if dashIndex := strings.IndexByte(lang, '-'); dashIndex > 0 {
+			// 主语言部分
+			mainLang := lang[:dashIndex]
+			if i18n.HasLang(mainLang) {
 				return mainLang
 			}
 
-			// 再检查区域部分
-			region := strings.TrimSpace(subParts[1])
-			if region != "" && i18n.HasLang(region) {
-				return region
+			// 区域部分（如果有效）
+			if dashIndex+1 < len(lang) {
+				region := lang[dashIndex+1:]
+				if i18n.HasLang(region) {
+					return region
+				}
 			}
 		}
 	}
