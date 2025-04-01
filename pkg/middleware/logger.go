@@ -115,8 +115,6 @@ func loggerMethodColor(method string) string {
 
 // LoggerConfig 定义ZapLogger的配置选项
 type LoggerConfig struct {
-	TraceKeyID     string   // 追踪ID的键
-	TraceKeyPath   string   // 追踪路径的键
 	LogParams      bool     // 是否记录请求参数
 	LogHeaders     bool     // 是否记录请求头
 	LogBody        bool     // 是否记录请求体
@@ -131,13 +129,8 @@ type LoggerConfig struct {
 }
 
 // LoggerDefaultConfig 返回默认配置
-func LoggerDefaultConfig(
-	traceKeyID, traceKeyPath string,
-	skipStatus []int, skipPaths, sensitives []string, size int,
-) LoggerConfig {
+func LoggerDefaultConfig(skipStatus []int, skipPaths, sensitives []string, size int) LoggerConfig {
 	return LoggerConfig{
-		TraceKeyID:     traceKeyID,
-		TraceKeyPath:   traceKeyPath,
 		LogParams:      true,
 		LogHeaders:     true,
 		LogBody:        true,
@@ -374,18 +367,15 @@ func logHTTPRequest(
 		methodFormatted = method
 	}
 
-	traceID := c.GetString(config.TraceKeyID)
-	tracePath := c.GetString(config.TraceKeyPath)
-
 	// 构建日志消息
 	var msgBuilder strings.Builder
 	msgBuilder.Grow(512) // 预分配空间
 
 	_, _ = fmt.Fprintf(&msgBuilder,
-		"[GIN] %s | %12v | %15s | %4s %s \n\ttraceID: %s, tracePath: %s \n\theader: %v",
+		"[GIN] %s | %12v | %15s | %4s %s \n\theader: %v \n\tcontext: %v",
 		statusCode, latency, clientIP,
 		methodFormatted, fullPath,
-		traceID, tracePath, headers,
+		headers, c.Keys,
 	)
 	if bodyLog != nil {
 		if s := bodyLog.formatBodyString(config.Sensitives...); s != "" {

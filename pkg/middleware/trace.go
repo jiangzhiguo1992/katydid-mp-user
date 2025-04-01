@@ -13,10 +13,8 @@ func Trace(serviceName, keyID, keyPath string) gin.HandlerFunc {
 		requestID := c.GetHeader(keyID)
 		if requestID == "" {
 			requestID = uuid.New().String()
-			if gin.Mode() == gin.DebugMode {
-				log.Debugf("■ ■ Trace(中间件) ■ ■ ID生成: %s", requestID)
-			} else {
-				log.Warnf("■ ■ Trace(中间件) ■ ■ ID缺失，升成: %s", requestID)
+			if gin.Mode() != gin.DebugMode {
+				log.Warnf("■ ■ Trace(中间件) ■ ■ ID缺失，自动生成: %s", requestID)
 			}
 			c.Header(keyID, requestID) // header
 		}
@@ -29,5 +27,7 @@ func Trace(serviceName, keyID, keyPath string) gin.HandlerFunc {
 			c.Header(keyPath, requestPath2) // header
 		}
 		c.Set(keyPath, requestPath2) // context
+
+		log.Debugf("■ ■ Trace(中间件) ■ ■ ID: %s, Path: %s", requestID, requestPath2)
 	}
 }
