@@ -10,7 +10,7 @@ var (
 	usernameRegex = regexp.MustCompile(`^[a-zA-Z0-9!#$%&'*+\-/=?^_` + "`" + `{|}~.]+$`)
 	// 域名部分正则表达式
 	domainRegex = regexp.MustCompile(`^(?:[a-zA-Z0-9](?:[a-zA-Z0-9\-]{0,61}[a-zA-Z0-9])?\.)+[a-zA-Z0-9](?:[a-zA-Z0-9\-]{0,61}[a-zA-Z0-9])?$`)
-	// 优化后的电子邮件匹配正则表达式
+	// 优化后的电子邮件匹配正则表达式 - 修正以更准确匹配
 	emailRegex = regexp.MustCompile(`\b[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9](?:[a-zA-Z0-9\-]{0,61}[a-zA-Z0-9])?(?:\.[a-zA-Z0-9](?:[a-zA-Z0-9\-]{0,61}[a-zA-Z0-9])?)*\.[a-zA-Z]{2,}(?:\b|$)`)
 )
 
@@ -128,6 +128,9 @@ func FindEmailsInText(text string) []string {
 	seen := make(map[string]struct{}) // 用于去重
 
 	for _, match := range matches {
+		// 移除可能的前后空格
+		match = strings.TrimSpace(match)
+
 		// 检查是否已处理过相同邮箱
 		if _, exists := seen[match]; exists {
 			continue
