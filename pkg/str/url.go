@@ -10,6 +10,7 @@ import (
 var (
 	rangeRegex = regexp.MustCompile(`\{(\d+)-(\d+)\}`)
 	paramRegex = regexp.MustCompile(`^[a-zA-Z_][a-zA-Z0-9_]*$`)
+	brackets   = regexp.MustCompile(`\[(.*?)\]`)
 )
 
 // MatchURLPath 检查传入的路径是否匹配指定的模式
@@ -175,12 +176,31 @@ func matchSegment(pathSeg, patternSeg string) bool {
 
 	// 字符集匹配 [abc]
 	if strings.Contains(patternSeg, "[") && strings.Contains(patternSeg, "]") {
-		// 增加安全检查，确保方括号���配且格式正确
+		// 增加安全检查，确保方括号正确配对且格式正确
 		if !isValidBracketPattern(patternSeg) {
 			return false
 		}
 
-		regexPattern := "^" + patternSeg + "$"
+		// 将方括号外的内容进行转义处理
+		regexPattern := "^"
+		lastIndex := 0
+
+		for _, match := range brackets.FindAllStringSubmatchIndex(patternSeg, -1) {
+			// 转义方括号前的内容
+			if match[0] > lastIndex {
+				regexPattern += regexp.QuoteMeta(patternSeg[lastIndex:match[0]])
+			}
+			// 添加方括号内容
+			regexPattern += "[" + patternSeg[match[2]:match[3]] + "]"
+			lastIndex = match[1]
+		}
+
+		// 添加方括号后的内容
+		if lastIndex < len(patternSeg) {
+			regexPattern += regexp.QuoteMeta(patternSeg[lastIndex:])
+		}
+		regexPattern += "$"
+
 		regex, err := regexp.Compile(regexPattern)
 		if err != nil {
 			return false
@@ -195,8 +215,8 @@ func matchSegment(pathSeg, patternSeg string) bool {
 			minn, minErr := strconv.Atoi(matches[1])
 			maxx, maxErr := strconv.Atoi(matches[2])
 
-			// 添加额外检查，确保数值合理
-			if minErr == nil && maxErr == nil && minn >= 0 && maxx >= 0 && minn <= maxx {
+			// 添加额外检查，确保数值合理且防止过大的���值导致性能问题
+			if minErr == nil && maxErr == nil && minn >= 0 && maxx >= 0 && minn <= maxx && maxx-minn <= 100 {
 				// 构建一个新的正则表达式模式
 				parts := rangeRegex.Split(patternSeg, -1)
 				regexPattern := "^"
@@ -250,14 +270,31 @@ func isValidBracketPattern(pattern string) bool {
 		return false
 	}
 
-	// 检查方括号内是否有内容
-	brackets := regexp.MustCompile(`\[(.*?)\]`)
+	// 检查方括号内是否有内容及嵌套方括号
 	matches := brackets.FindAllStringSubmatch(pattern, -1)
 	for _, match := range matches {
-		if len(match) > 1 && len(match[1]) == 0 {
-			return false // 空的字符集合如 [] 是无效的
+		if len(match) > 1 {
+			if len(match[1]) == 0 {
+				return false // 空的字符集合如 [] 是无效的
+			}
+			if strings.Contains(match[1], "[") || strings.Contains(match[1], "]") {
+				return false // 不允许嵌套方括号
+			}
 		}
 	}
 
-	return true
+	// 确保方括号正确配对
+	stack := 0
+	for _, char := range pattern {
+		if char == '[' {
+			stack++
+		} else if char == ']' {
+			stack--
+			if stack < 0 {
+				return false // 右括号在左括号之前出现
+			}
+		}
+	}
+
+	return stack == 0
 }
