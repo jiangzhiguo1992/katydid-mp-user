@@ -15,7 +15,7 @@ type PhoneCountryCode struct {
 }
 
 var (
-	// internationalPhoneRegex 用于国际电话号码验证的��则表达式
+	// internationalPhoneRegex 用于国际电话号码验证的正则表达式
 	internationalPhoneRegex = regexp.MustCompile(`^\+([1-9]\d{0,3})[ -]?(\(?\d{1,4}\)?[ -]?(?:\d{1,4}[ -]?){1,4})$`)
 
 	// numberOnlyRegex 用于仅验证号码部分(纯数字)
@@ -322,7 +322,7 @@ func IsPhoneNumber(code, number string) (*PhoneCountryCode, string, bool) {
 	return &countryCode, number, valid
 }
 
-// 新增：将验证逻辑提取为单独的函数，避免重复代码
+// validateNumberWithPattern 验证电话号码是否匹配国家代码的模式
 func validateNumberWithPattern(code, number string) bool {
 	patterns, exists := compiledPatterns[code]
 	if !exists || len(patterns) == 0 {
@@ -340,6 +340,11 @@ func validateNumberWithPattern(code, number string) bool {
 
 // IsPhoneCountryCode 检查提供的字符串是否是有效的国家代码
 func IsPhoneCountryCode(code string) (*PhoneCountryCode, bool) {
+	if code = strings.TrimSpace(code); code == "" {
+		return nil, false
+	}
+
+	// 移除前导的'+'(如果存在)
 	code = cleanPhoneNumber(code)
 	if code == "" {
 		return nil, false
@@ -368,7 +373,7 @@ func FormatPhone(phone string) string {
 		// 如果无效，返回统一处理后的格式而不是原始输入
 		cleanedPhone := cleanPhoneNumber(phone)
 		if cleanedPhone == "" {
-			return phone // 如果清��后为空，则返回原始输入
+			return phone // 如果清理后为空，则返回原始输入
 		}
 		return cleanedPhone
 	}
@@ -391,6 +396,9 @@ func FindPhonesInText(text string) []string {
 	// 使用更严格的正则表达式模式匹配国际号码格式
 	phonePattern := regexp.MustCompile(`(?:\+|00)[1-9]\d{0,3}[\s.-]*(?:\(?\d{1,4}\)?[\s.-]*\d{2,4}[\s.-]*\d{2,4}[\s.-]*\d{1,4})`)
 	matches := phonePattern.FindAllString(text, -1)
+	if len(matches) == 0 {
+		return nil
+	}
 
 	// 过滤只保留有效号码并去重
 	validNumbersMap := make(map[string]bool)
@@ -400,7 +408,7 @@ func FindPhonesInText(text string) []string {
 		_, _, ok := IsPhone(match)
 		if ok {
 			formatted := FormatPhone(match)
-			if !validNumbersMap[formatted] {
+			if formatted != "" && !validNumbersMap[formatted] {
 				validNumbersMap[formatted] = true
 				validNumbers = append(validNumbers, formatted)
 			}
@@ -412,8 +420,7 @@ func FindPhonesInText(text string) []string {
 
 // FindPhoneCountryByName 通过名称搜索国家代码
 func FindPhoneCountryByName(name string) []PhoneCountryCode {
-	name = strings.TrimSpace(name)
-	if name == "" {
+	if name = strings.TrimSpace(name); name == "" {
 		return nil
 	}
 
@@ -455,7 +462,7 @@ func findMatchingCountryCode(phone string) (*PhoneCountryCode, string, bool) {
 	return nil, phone, false
 }
 
-// cleanPhoneNumber 清理电话号码，移除所有空白字符
+// cleanPhoneNumber 清理电话号码，移除所有空白字符，仅保留+和数字
 func cleanPhoneNumber(phone string) string {
 	if phone == "" {
 		return ""
