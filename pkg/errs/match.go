@@ -89,11 +89,11 @@ func MatchErr(err error) *Error {
 	locId, found := matcher.findLocId(errMsg)
 
 	// 再从codeLocIds里找code
-	code, hasCode := matcher.findCode(locId)
+	code, _ := matcher.findCode(locId)
 
-	if hasCode {
+	if found {
 		return New(err).WithCode(code).AppendLocale(locId, nil).Wash()
-	} else if !found && matcher.onWarn != nil {
+	} else if matcher.onWarn != nil {
 		matcher.onWarn(fmt.Sprintf("■ ■ Err ■ ■错误匹配err失败, msgID: %s", locId))
 	}
 
@@ -113,11 +113,11 @@ func MatchMsg(msg string) *Error {
 	locId, found := matcher.findLocId(msg)
 
 	// 再从codeLocIds里找code
-	code, hasCode := matcher.findCode(locId)
+	code, _ := matcher.findCode(locId)
 
-	if hasCode {
+	if found {
 		return New(nil).WithCode(code).WithMsg(msg).AppendLocale(locId, nil).Wash()
-	} else if !found && matcher.onWarn != nil {
+	} else if matcher.onWarn != nil {
 		matcher.onWarn(fmt.Sprintf("■ ■ Err ■ ■ 错误匹配msg失败, msgID: %s", locId))
 	}
 
@@ -127,13 +127,17 @@ func MatchMsg(msg string) *Error {
 
 // findLocId 寻找匹配的本地化ID
 func (m *Matcher) findLocId(msg string) (string, bool) {
-	// 先检查缓存
-	if cachedLocId, ok := m.patternCache.Get(msg); ok {
-		return cachedLocId, true
+	if msg == "" {
+		return msg, false
 	}
 
 	m.mu.RLock()
 	defer m.mu.RUnlock()
+
+	// 先检查缓存
+	if cachedLocId, ok := m.patternCache.Get(msg); ok {
+		return cachedLocId, true
+	}
 
 	// 从patterns中查找匹配的本地化ID
 	for pattern, msgID := range m.msgPatterns {
@@ -148,13 +152,17 @@ func (m *Matcher) findLocId(msg string) (string, bool) {
 
 // findCode 根据本地化ID查找错误码
 func (m *Matcher) findCode(locId string) (int, bool) {
-	// 先检查缓存
-	if cachedCode, ok := m.codeCache.Get(locId); ok {
-		return cachedCode, true
+	if locId == "" {
+		return 0, false
 	}
 
 	m.mu.RLock()
 	defer m.mu.RUnlock()
+
+	// 先检查缓存
+	if cachedCode, ok := m.codeCache.Get(locId); ok {
+		return cachedCode, true
+	}
 
 	// 在codeLocIds中查找匹配的code
 	for code, locIds := range m.codeLocIds {

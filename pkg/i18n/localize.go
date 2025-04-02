@@ -41,6 +41,15 @@ func Init(cfg Config) error {
 	//marshal, _ := json.MarshalIndent(cfg, "", "\t")
 	//cfg.OnInfo(fmt.Sprintf("■ ■ i18n ■ ■ 配置 ---> %s", marshal), nil)
 
+	// 确保回调函数不为nil，避免空指针异常
+	if cfg.OnInfo == nil {
+		cfg.OnInfo = func(string, map[string]any) {}
+	}
+
+	if cfg.OnErr == nil {
+		cfg.OnErr = func(string, map[string]any) {}
+	}
+
 	m, err := newManager(cfg)
 	if err != nil {
 		return fmt.Errorf("■ ■ i18n ■ ■ 创建 i18n 失败: %w", err)
@@ -60,7 +69,7 @@ func HasLang(lang string) bool {
 // DefLang 获取默认语言
 func DefLang() string {
 	if defaultManager == nil {
-		return ""
+		return defaultLang
 	}
 	return defaultManager.config.DefaultLang
 }
@@ -133,12 +142,14 @@ func (m *Manager) loadMessageFiles() error {
 		if dir == "" {
 			continue // 跳过空目录配置
 		}
+
 		fs, err := filepath.Glob(filepath.Join(dir, "*"))
 		if err != nil {
 			return fmt.Errorf("■ ■ i18n ■ ■ 加载文件夹 %s 失败: %w", dir, err)
 		}
 		files = append(files, filterMessageFiles(fs)...)
 	}
+
 	if len(files) == 0 {
 		return fmt.Errorf("■ ■ i18n ■ ■ 没有发现文件: %v", m.config.DocDirs)
 	}
@@ -148,23 +159,28 @@ func (m *Manager) loadMessageFiles() error {
 
 	// 加载文件并提取消息ID
 	m.langs = make([]string, 0, len(files))
+	m.langsMap = make(map[string]bool, len(files))
+
 	for _, file := range files {
 		if _, err := m.bundle.LoadMessageFile(file); err != nil {
 			return fmt.Errorf("■ ■ i18n ■ ■ 加载文件 %s 失败: %w", file, err)
 		}
 
 		lang := extractLangFromFilename(file)
+		if lang == "" {
+			continue // 跳过无法提取语言的文件
+		}
+
 		m.langs = append(m.langs, lang)
 		m.langsMap[lang] = true
 	}
+
 	marshal2, _ := json.MarshalIndent(map[string]any{"languages": m.langs}, "", "\t")
 	m.config.OnInfo(fmt.Sprintf("■ ■ i18n ■ ■ 本地化加载语言: %s", marshal2), nil)
 
 	// 确保默认语言存在
 	if !m.langsMap[m.config.DefaultLang] {
-		if m.config.OnErr != nil {
-			m.config.OnErr("■ ■ i18n ■ ■ 本地化默认文件不存在 ", map[string]any{"lang": m.config.DefaultLang})
-		}
+		m.config.OnErr("■ ■ i18n ■ ■ 本地化默认文件不存在 ", map[string]any{"lang": m.config.DefaultLang})
 	}
 
 	// 预缓存默认Localizer
@@ -174,9 +190,17 @@ func (m *Manager) loadMessageFiles() error {
 }
 
 func filterMessageFiles(files []string) []string {
+	if len(files) == 0 {
+		return nil
+	}
+
 	result := make([]string, 0, len(files))
 
 	for _, f := range files {
+		if f == "" {
+			continue
+		}
+
 		if fi, err := os.Stat(f); err == nil && !fi.IsDir() {
 			result = append(result, f)
 		}
@@ -209,9 +233,10 @@ func (m *Manager) getLocalizers(lang string) []*i18n.Localizer {
 		return val
 	}
 
-	// 构建语言标签列表，实现回退链
+	// 预分配适当大小的切片，避免动态扩容
 	tags := make([]string, 0, 3) // 大多数情况下不超过3个标签
 
+	// 添加精确匹配的语言标签
 	if m.langsMap[lang] {
 		tags = append(tags, lang)
 	}
@@ -293,9 +318,11 @@ func LocalizeMust(lang, msgID string, data map[string]any) string {
 	if defaultManager == nil {
 		return unknownError
 	}
+
 	if lang == "" {
 		lang = defaultManager.config.DefaultLang
 	}
+
 	return defaultManager.localize(lang, msgID, data, false)
 }
 
@@ -303,9 +330,11 @@ func LocalizeTry(lang, msgID string, data map[string]any) string {
 	if defaultManager == nil {
 		return unknownError
 	}
+
 	if lang == "" {
 		lang = defaultManager.config.DefaultLang
 	}
+
 	return defaultManager.localize(lang, msgID, data, true)
 }
 
