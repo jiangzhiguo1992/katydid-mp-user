@@ -1,4 +1,4 @@
-package str
+package valid
 
 import (
 	"fmt"
@@ -10,17 +10,17 @@ import (
 
 var (
 	// 预编译正则表达式，提高性能
-	rangeRegex = regexp.MustCompile(`\{(\d+)-(\d+)\}`)
-	paramRegex = regexp.MustCompile(`^[a-zA-Z_][a-zA-Z0-9_]*$`)
-	brackets   = regexp.MustCompile(`\[(.*?)\]`)
+	urlRangeRegex = regexp.MustCompile(`\{(\d+)-(\d+)\}`)
+	urlParamRegex = regexp.MustCompile(`^[a-zA-Z_][a-zA-Z0-9_]*$`)
+	urlBrackets   = regexp.MustCompile(`\[(.*?)\]`)
 
 	// 使用sync.Pool缓存编译后的正则表达式，减少重复编译
-	regexPool = sync.Pool{
+	urlRegexPool = sync.Pool{
 		New: func() interface{} {
 			return make(map[string]*regexp.Regexp)
 		},
 	}
-	regexPoolMutex sync.RWMutex
+	urlRegexPoolMutex sync.RWMutex
 )
 
 const (
@@ -104,11 +104,11 @@ func MatchURLPath(path string, pattern string) bool {
 	params := make(map[string]string)
 
 	// 处理多段通配符 **
-	return matchSegments(pathSegments, patternSegments, 0, 0, params, 0)
+	return urlMatchSegments(pathSegments, patternSegments, 0, 0, params, 0)
 }
 
-// matchSegments 使用递归方式匹配路径段
-func matchSegments(pathSegs []string, patternSegs []string, pathIdx, patternIdx int, params map[string]string, depth int) bool {
+// urlMatchSegments 使用递归方式匹配路径段
+func urlMatchSegments(pathSegs []string, patternSegs []string, pathIdx, patternIdx int, params map[string]string, depth int) bool {
 	// 防止过深的递归导致栈溢出
 	if depth > maxRecursionDepth {
 		return false
@@ -142,12 +142,12 @@ func matchSegments(pathSegs []string, patternSegs []string, pathIdx, patternIdx 
 		// 尝试匹配0个或多个路径段（优化：从多到少，更容易找到成功匹配）
 		for i := len(pathSegs); i >= pathIdx; i-- {
 			// 创建临时参数表，避免污染原参数表
-			tempParams := make(map[string]string)
+			tempParams := make(map[string]string, len(params))
 			for k, v := range params {
 				tempParams[k] = v
 			}
 
-			if matchSegments(pathSegs, patternSegs, i, patternIdx+1, tempParams, depth+1) {
+			if urlMatchSegments(pathSegs, patternSegs, i, patternIdx+1, tempParams, depth+1) {
 				// 成功匹配时，将临时参数合并回原参数表
 				for k, v := range tempParams {
 					params[k] = v
@@ -192,13 +192,13 @@ func matchSegments(pathSegs []string, patternSegs []string, pathIdx, patternIdx 
 				}
 
 				// 添加更严格的参数名检查
-				if paramName != "" && paramRegex.MatchString(paramName) {
+				if paramName != "" && urlParamRegex.MatchString(paramName) {
 					// 使用正则表达式缓存
-					regex := getCompiledRegex("^" + regexStr + "$")
+					regex := getCompiledUrlRegex("^" + regexStr + "$")
 					if regex != nil && regex.MatchString(pathSeg) {
 						// 存储参数值
 						params[paramName] = pathSeg
-						return matchSegments(pathSegs, patternSegs, pathIdx+1, patternIdx+1, params, depth+1)
+						return urlMatchSegments(pathSegs, patternSegs, pathIdx+1, patternIdx+1, params, depth+1)
 					}
 				}
 			}
@@ -206,24 +206,24 @@ func matchSegments(pathSegs []string, patternSegs []string, pathIdx, patternIdx 
 		} else {
 			// 简单命名参数 {param}
 			paramName := paramContent
-			if paramName != "" && paramRegex.MatchString(paramName) {
+			if paramName != "" && urlParamRegex.MatchString(paramName) {
 				params[paramName] = pathSeg
-				return matchSegments(pathSegs, patternSegs, pathIdx+1, patternIdx+1, params, depth+1)
+				return urlMatchSegments(pathSegs, patternSegs, pathIdx+1, patternIdx+1, params, depth+1)
 			}
 		}
 		return false // 明确返回false，如果参数名为空或无效
 	}
 
 	// 处理单个路径段
-	if matchSegment(pathSeg, pattern) {
-		return matchSegments(pathSegs, patternSegs, pathIdx+1, patternIdx+1, params, depth+1)
+	if urlMatchSegment(pathSeg, pattern) {
+		return urlMatchSegments(pathSegs, patternSegs, pathIdx+1, patternIdx+1, params, depth+1)
 	}
 
 	return false
 }
 
-// matchSegment 匹配单个路径段
-func matchSegment(pathSeg, patternSeg string) bool {
+// urlMatchSegment 匹配单个路径段
+func urlMatchSegment(pathSeg, patternSeg string) bool {
 	// 防止过长的路径段
 	if len(pathSeg) > maxSegmentLength || len(patternSeg) > maxSegmentLength {
 		return false
@@ -254,7 +254,7 @@ func matchSegment(pathSeg, patternSeg string) bool {
 		pattern.WriteString("$")
 
 		// 使用缓存的正则表达式
-		regex := getCompiledRegex(pattern.String())
+		regex := getCompiledUrlRegex(pattern.String())
 		if regex == nil {
 			return false
 		}
@@ -269,12 +269,12 @@ func matchSegment(pathSeg, patternSeg string) bool {
 		}
 
 		// 先验证方括号格式是否正确
-		if !isValidBracketPattern(patternSeg) {
+		if !isValidUrlBracketPattern(patternSeg) {
 			return false
 		}
 
 		// 使用更安全的方式提取括号内容
-		matches := brackets.FindAllStringSubmatchIndex(patternSeg, -1)
+		matches := urlBrackets.FindAllStringSubmatchIndex(patternSeg, -1)
 		if matches == nil || len(matches) == 0 {
 			return false // 无法正确匹配括号
 		}
@@ -317,7 +317,7 @@ func matchSegment(pathSeg, patternSeg string) bool {
 		regexPattern.WriteString("$")
 
 		// 使用正则表达式缓存
-		regex := getCompiledRegex(regexPattern.String())
+		regex := getCompiledUrlRegex(regexPattern.String())
 		if regex == nil {
 			return false
 		}
@@ -325,8 +325,8 @@ func matchSegment(pathSeg, patternSeg string) bool {
 	}
 
 	// 范围匹配 {min-max}，增强安全性
-	if rangeRegex.MatchString(patternSeg) {
-		matches := rangeRegex.FindStringSubmatch(patternSeg)
+	if urlRangeRegex.MatchString(patternSeg) {
+		matches := urlRangeRegex.FindStringSubmatch(patternSeg)
 		if len(matches) != 3 {
 			return false
 		}
@@ -342,7 +342,7 @@ func matchSegment(pathSeg, patternSeg string) bool {
 		}
 
 		// 构建正则模式
-		parts := rangeRegex.Split(patternSeg, -1)
+		parts := urlRangeRegex.Split(patternSeg, -1)
 		regexPattern := strings.Builder{}
 		regexPattern.WriteString("^")
 		for i, part := range parts {
@@ -354,7 +354,7 @@ func matchSegment(pathSeg, patternSeg string) bool {
 		regexPattern.WriteString("$")
 
 		// 使用正则表达式缓存
-		regex := getCompiledRegex(regexPattern.String())
+		regex := getCompiledUrlRegex(regexPattern.String())
 		if regex == nil {
 			return false
 		}
@@ -380,7 +380,7 @@ func matchSegment(pathSeg, patternSeg string) bool {
 		pattern.WriteString("$")
 
 		// 使用正则表达式缓存
-		regex := getCompiledRegex(pattern.String())
+		regex := getCompiledUrlRegex(pattern.String())
 		if regex == nil {
 			return false
 		}
@@ -390,8 +390,8 @@ func matchSegment(pathSeg, patternSeg string) bool {
 	return false
 }
 
-// isValidBracketPattern 检查字符集合模式是否有效
-func isValidBracketPattern(pattern string) bool {
+// isValidUrlBracketPattern 检查字符集合模式是否有效
+func isValidUrlBracketPattern(pattern string) bool {
 	// 检查是否有未闭合的方括号
 	openCount := strings.Count(pattern, "[")
 	closeCount := strings.Count(pattern, "]")
@@ -400,7 +400,7 @@ func isValidBracketPattern(pattern string) bool {
 	}
 
 	// 检查方括号内是否有内容及嵌套方括号
-	matches := brackets.FindAllStringSubmatch(pattern, -1)
+	matches := urlBrackets.FindAllStringSubmatch(pattern, -1)
 	for _, match := range matches {
 		if len(match) > 1 {
 			// 检查是否为空字符集合
@@ -430,35 +430,35 @@ func isValidBracketPattern(pattern string) bool {
 	return stack == 0
 }
 
-// getCompiledRegex 从缓存中获取编译后的正则表达式，如果不存在则编译并缓存
+// getCompiledUrlRegex 从缓存中获取编译后的正则表达式，如果不存在则编译并缓存
 // 通过正则表达式缓存提高性能，避免重复编译相同的正则表达式
-func getCompiledRegex(pattern string) *regexp.Regexp {
+func getCompiledUrlRegex(pattern string) *regexp.Regexp {
 	// 先尝试从缓存中读取
-	regexPoolMutex.RLock()
-	cache := regexPool.Get().(map[string]*regexp.Regexp)
+	urlRegexPoolMutex.RLock()
+	cache := urlRegexPool.Get().(map[string]*regexp.Regexp)
 	regex, found := cache[pattern]
-	regexPoolMutex.RUnlock()
+	urlRegexPoolMutex.RUnlock()
 
 	if found {
 		// 确保归还缓存
-		regexPool.Put(cache)
+		urlRegexPool.Put(cache)
 		return regex
 	}
 
 	// 未找到则编译
 	compiledRegex, err := regexp.Compile(pattern)
 	if err != nil {
-		regexPool.Put(cache) // 确保归还缓存
+		urlRegexPool.Put(cache) // 确保归还缓存
 		return nil
 	}
 
 	// 写入缓存
-	regexPoolMutex.Lock()
+	urlRegexPoolMutex.Lock()
 	cache[pattern] = compiledRegex
-	regexPoolMutex.Unlock()
+	urlRegexPoolMutex.Unlock()
 
 	// 归还缓存
-	regexPool.Put(cache)
+	urlRegexPool.Put(cache)
 
 	return compiledRegex
 }

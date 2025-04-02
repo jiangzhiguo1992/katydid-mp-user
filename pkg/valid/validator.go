@@ -26,8 +26,8 @@ const (
 )
 
 var (
-	v    *Validator
-	once sync.Once
+	valid *Validator
+	vOnce sync.Once
 )
 
 type (
@@ -95,12 +95,12 @@ type (
 )
 
 func Get() *Validator {
-	once.Do(func() {
+	vOnce.Do(func() {
 		opts := []validator.Option{
 			validator.WithRequiredStructEnabled(),
 		}
 
-		v = &Validator{
+		valid = &Validator{
 			validate: validator.New(opts...),
 			regTypes: &sync.Map{},
 			regLocs:  &sync.Map{},
@@ -115,7 +115,7 @@ func Get() *Validator {
 		//	return name
 		//})
 	})
-	return v
+	return valid
 }
 
 // RegisterFieldRule 注册字段验证规则
