@@ -75,6 +75,8 @@ func newTokenClaims(
 
 	// 计算过期时间
 	now := time.Now()
+	nowNumeric := jwt.NewNumericDate(now)
+
 	var expiresAt *jwt.NumericDate
 	if expireSec > 0 {
 		expiresAt = jwt.NewNumericDate(now.Add(time.Duration(expireSec) * time.Second))
@@ -88,8 +90,8 @@ func newTokenClaims(
 			Issuer:    issuer,
 			Subject:   fmt.Sprintf("%d", accountID),
 			ExpiresAt: expiresAt,
-			NotBefore: jwt.NewNumericDate(now),
-			IssuedAt:  jwt.NewNumericDate(now),
+			NotBefore: nowNumeric,
+			IssuedAt:  nowNumeric,
 			ID:        tokenID,
 		},
 	}
@@ -143,16 +145,19 @@ func (t *Token) IsExpired() bool {
 		return true // 没有声明或过期时间视为已过期
 	}
 
-	// 先判断Claims的
+	now := time.Now()
+
+	// 先判断Claims的ExpiresAt
 	if t.Claims.ExpiresAt != nil {
-		return time.Now().After(t.Claims.ExpiresAt.Time)
+		return now.After(t.Claims.ExpiresAt.Time)
 	}
 
 	// 如果未设置过期时间，根据ExpireSec判断
 	if t.ExpireSec < 0 {
 		return false // 负数表示永不过期
 	}
-	return time.Now().Unix() > (t.IssuedAt + t.ExpireSec)
+
+	return now.Unix() > (t.IssuedAt + t.ExpireSec)
 }
 
 // GenerateJWTToken 使用提供的密钥生成JWT令牌
