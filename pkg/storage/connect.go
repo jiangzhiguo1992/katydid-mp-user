@@ -280,10 +280,10 @@ func connectWithRetries(dialector gorm.Dialector, config *gorm.Config, maxRetrie
 
 // 配置连接池
 func configureConnectionPool(sqlDB *sql.DB, config DBConfig) {
-	sqlDB.SetMaxOpenConns(config.MaxOpen)
-	sqlDB.SetMaxIdleConns(config.MaxIdle)
-	sqlDB.SetConnMaxLifetime(config.MaxLifeTime)
-	sqlDB.SetConnMaxIdleTime(config.MaxIdleTime)
+	sqlDB.SetMaxOpenConns(config.MaxOpen)        // <=0 是不限制
+	sqlDB.SetMaxIdleConns(config.MaxIdle)        // <=0 是不限制
+	sqlDB.SetConnMaxLifetime(config.MaxLifeTime) // <=0 是不限制
+	sqlDB.SetConnMaxIdleTime(config.MaxIdleTime) // <=0 是不限制
 }
 
 // 连接主数据库 (无锁)
@@ -682,8 +682,8 @@ func Stats(name string) (sql.DBStats, error) {
 // getWeightedRoundRobinIndex 实现加权轮询算法 (带锁)
 func (ins *DBInstance) getWeightedRoundRobinIndex() (int, func()) {
 	// 使用读锁
-	ins.mutex.RLock()
-	unlock := func() { ins.mutex.RUnlock() }
+	ins.mutex.Lock()
+	unlock := func() { ins.mutex.Unlock() }
 
 	// 获取只读信息
 	replicaCount := len(ins.ReadReplicas) // ins.ReadReplicas的长度为准
@@ -713,11 +713,6 @@ func (ins *DBInstance) getWeightedRoundRobinIndex() (int, func()) {
 
 	// 生成副本集合的唯一标识
 	key := ins.Name
-
-	// 换锁
-	unlock()
-	ins.mutex.Lock()
-	unlock = func() { ins.mutex.Unlock() }
 
 	// 获取当前计数
 	currentCount := ins.ReplicasCount[key]
