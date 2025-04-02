@@ -346,11 +346,10 @@ func startHealthCheck(name string, interval time.Duration, autoReconnect bool, q
 		err := Ping(name, queryTimeout)
 		now := time.Now()
 
-		instance.mutex.Lock()
-		isHealthy := err == nil
-		instance.Healthy = isHealthy
-
-		if isHealthy {
+		if err == nil {
+			// 连接健康，更新状态
+			instance.mutex.Lock()
+			instance.Healthy = true
 			instance.LastPingTime = now
 			instance.mutex.Unlock()
 
@@ -358,6 +357,9 @@ func startHealthCheck(name string, interval time.Duration, autoReconnect bool, q
 				context.Background(),
 				fmt.Sprintf("■ ■ Storage ■ ■ 数据库-健康OK: %s", name))
 		} else {
+			// 连接不健康
+			instance.mutex.Lock()
+			instance.Healthy = false
 			instance.mutex.Unlock()
 
 			if autoReconnect {
@@ -367,10 +369,9 @@ func startHealthCheck(name string, interval time.Duration, autoReconnect bool, q
 
 				// 尝试重新连接
 				if reconnectMainDB(instance, now) {
-					instance.mutex.Lock()
-					instance.Healthy = true
-					instance.LastPingTime = now
-					instance.mutex.Unlock()
+					instance.Config.Logger.Info(
+						context.Background(),
+						fmt.Sprintf("■ ■ Storage ■ ■ 数据库-自动重连成功: %s", name))
 				}
 			} else {
 				instance.Config.Logger.Error(
@@ -379,7 +380,7 @@ func startHealthCheck(name string, interval time.Duration, autoReconnect bool, q
 			}
 		}
 
-		// 检查副本连接 - 优化锁的使用
+		// 检查副本连接
 		checkAndReconnectReplicas(instance, autoReconnect, queryTimeout)
 	}
 }
@@ -427,8 +428,12 @@ func checkAndReconnectReplicas(instance *DBInstance, autoReconnect bool, queryTi
 	}
 }
 
-// 重新连接主数据库 (无锁)
+// 重新连接主数据库 (带锁)
 func reconnectMainDB(instance *DBInstance, now time.Time) bool {
+	if instance == nil {
+		return false
+	}
+
 	// 关闭旧连接
 	sqlDB, _ := instance.DB.DB()
 	if sqlDB != nil {
@@ -451,9 +456,11 @@ func reconnectMainDB(instance *DBInstance, now time.Time) bool {
 		sqlDB, _ := db.DB()
 		if sqlDB != nil {
 			configureConnectionPool(sqlDB, *instance.Config)
+			instance.mutex.Lock()
 			instance.DB = db
 			instance.Healthy = true
 			instance.LastPingTime = now
+			instance.mutex.Unlock()
 			return true
 		}
 	}
@@ -466,11 +473,19 @@ func reconnectMainDB(instance *DBInstance, now time.Time) bool {
 
 // 重新连接副本数据库 (无锁)
 func reconnectReplica(instance *DBInstance, replicaIndex int) bool {
-	if instance == nil || replicaIndex < 0 || replicaIndex >= len(instance.Config.Replicas) || replicaIndex >= len(instance.ReadReplicas) {
+	if instance == nil {
+		return false
+	}
+
+	instance.mutex.RLock()
+	if replicaIndex < 0 || replicaIndex >= len(instance.Config.Replicas) || replicaIndex >= len(instance.ReadReplicas) {
+		instance.mutex.RUnlock()
 		return false
 	}
 
 	replica := instance.Config.Replicas[replicaIndex]
+	oldDB := instance.ReadReplicas[replicaIndex]
+	instance.mutex.RUnlock()
 
 	// 创建副本配置
 	replicaConfig := *instance.Config
@@ -487,7 +502,6 @@ func reconnectReplica(instance *DBInstance, replicaIndex int) bool {
 	}
 
 	// 关闭现有连接
-	oldDB := instance.ReadReplicas[replicaIndex]
 	if sqlDB, err := oldDB.DB(); err == nil && sqlDB != nil {
 		_ = sqlDB.Close()
 	}
@@ -506,12 +520,19 @@ func reconnectReplica(instance *DBInstance, replicaIndex int) bool {
 
 	if err == nil && newDB != nil {
 		// 配置连接池
-		if sqlDB, err := newDB.DB(); err == nil {
-			configureConnectionPool(sqlDB, replicaConfig)
+		sqlDB, err := newDB.DB()
+		if err != nil {
+			return false
 		}
+		configureConnectionPool(sqlDB, replicaConfig)
 
-		// 更新实例
-		instance.ReadReplicas[replicaIndex] = newDB
+		// 加锁更新实例
+		instance.mutex.Lock()
+		if replicaIndex < len(instance.ReadReplicas) {
+			instance.ReadReplicas[replicaIndex] = newDB
+		}
+		instance.mutex.Unlock()
+
 		return true
 	}
 
@@ -573,6 +594,7 @@ func CloseDB(name string) error {
 	if !exists || instance == nil {
 		return fmt.Errorf("■ ■ Storage ■ ■ 数据库-关闭:未找到指定的连接:%s", name)
 	}
+
 	instance.mutex.Lock()
 	defer instance.mutex.Unlock()
 
@@ -585,10 +607,20 @@ func CloseDB(name string) error {
 
 	// 关闭副本连接
 	for _, replica := range instance.ReadReplicas {
-		if sqlDB, err := replica.DB(); err == nil && sqlDB != nil {
-			_ = sqlDB.Close()
+		if replica != nil {
+			if sqlDB, err := replica.DB(); err == nil && sqlDB != nil {
+				_ = sqlDB.Close()
+			}
 		}
 	}
+
+	// 清空引用，帮助GC回收内存
+	instance.DB = nil
+	instance.ReadReplicas = nil
+	for k := range instance.ReplicasCount {
+		delete(instance.ReplicasCount, k)
+	}
+	instance.Config = nil
 
 	delete(dbInstances, name)
 	return err
@@ -605,6 +637,7 @@ func CloseAllDBs() []error {
 			errs = append(errs, fmt.Errorf("■ ■ Storage ■ ■ 数据库-关闭:无效的连接:%s", name))
 			continue
 		}
+
 		instance.mutex.Lock()
 
 		// 关闭主连接
@@ -621,12 +654,23 @@ func CloseAllDBs() []error {
 
 		// 关闭副本连接
 		for i, replica := range instance.ReadReplicas {
-			if sqlDB, err := replica.DB(); err == nil && sqlDB != nil {
-				if err = sqlDB.Close(); err != nil {
-					errs = append(errs, fmt.Errorf("关闭副本 %s[%d] 失败: %w", name, i, err))
+			if replica != nil {
+				if sqlDB, err := replica.DB(); err == nil && sqlDB != nil {
+					if err = sqlDB.Close(); err != nil {
+						errs = append(errs, fmt.Errorf("关闭副本 %s[%d] 失败: %w", name, i, err))
+					}
 				}
 			}
 		}
+
+		// 清空引用，帮助GC回收内存
+		instance.DB = nil
+		instance.ReadReplicas = nil
+		for k := range instance.ReplicasCount {
+			delete(instance.ReplicasCount, k)
+		}
+		instance.Config = nil
+
 		instance.mutex.Unlock()
 
 		delete(dbInstances, name)
@@ -643,17 +687,23 @@ func Ping(name string, timeout time.Duration) error {
 
 	sqlDB, err := instance.DB.DB()
 	if err != nil {
-		return err
+		return fmt.Errorf("■ ■ Storage ■ ■ 数据库-Ping:获取SQL DB失败:%s: %w", name, err)
 	}
 
 	// 使用带超时的上下文进行ping
 	if timeout > 0 {
 		ctx, cancel := context.WithTimeout(context.Background(), timeout)
 		defer cancel()
-		return sqlDB.PingContext(ctx)
+		if err := sqlDB.PingContext(ctx); err != nil {
+			return fmt.Errorf("■ ■ Storage ■ ■ 数据库-Ping失败(%s): %w", name, err)
+		}
+		return nil
 	}
 
-	return sqlDB.Ping()
+	if err := sqlDB.Ping(); err != nil {
+		return fmt.Errorf("■ ■ Storage ■ ■ 数据库-Ping失败(%s): %w", name, err)
+	}
+	return nil
 }
 
 // Stats 获取数据库连接池统计信息
