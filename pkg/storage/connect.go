@@ -281,11 +281,7 @@ func createGormConfig(config DBConfig) *gorm.Config {
 
 // 连接重试 (无锁)
 func connectWithRetries(dialector gorm.Dialector, config *gorm.Config, maxRetries int, retryDelay, retryMaxDelay time.Duration) (*gorm.DB, error) {
-	ctx := context.Background() // 没有超时，connect的时间是未知的
-
-	var db *gorm.DB
-	var err error
-
+	// 设置默认值，避免无效参数
 	if maxRetries <= 0 {
 		maxRetries = 3 // 默认重试3次
 	}
@@ -296,16 +292,28 @@ func connectWithRetries(dialector gorm.Dialector, config *gorm.Config, maxRetrie
 		retryMaxDelay = 30 * time.Second // 默认最大重试间隔30秒
 	}
 
+	ctx := context.Background() // 没有超时，connect的时间是未知的
+	var db *gorm.DB
+	var err error
+
 	for i := 0; i < maxRetries; i++ {
 		db, err = gorm.Open(dialector, config)
 		if err == nil && db != nil {
-			return db, nil
+			// 验证连接是否真的可用
+			sqlDB, sqlErr := db.DB()
+			if sqlErr == nil {
+				if pingErr := sqlDB.PingContext(ctx); pingErr == nil {
+					return db, nil // 连接成功并且可用
+				}
+				// 如果ping失败，关闭连接后继续重试
+				_ = sqlDB.Close()
+			}
 		} else if err == nil && db == nil {
 			err = fmt.Errorf("■ ■ Storage ■ ■ 数据库-连接成功但实例为空")
 		}
 		config.Logger.Warn(ctx, fmt.Sprintf("■ ■ Storage ■ ■ 数据库-连接重试(%d/%d):%v\n%v", i+1, maxRetries, dialector, err))
 
-		// 指数退避
+		// 指数退避策略，避免频繁重试
 		currentDelay := time.Duration(float64(retryDelay) * math.Pow(1.5, float64(i)))
 		if currentDelay > retryMaxDelay {
 			currentDelay = retryMaxDelay // 设置最大退避时间
