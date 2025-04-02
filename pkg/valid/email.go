@@ -7,7 +7,7 @@ import (
 
 var (
 	// 用户名部分正则表达式 - 符合RFC 5322标准
-	usernameRegex = regexp.MustCompile(`^[a-zA-Z0-9!#$%&'*+\-/=?^_` + "`" + `{|}~.]+$`)
+	usernameRegex = regexp.MustCompile(`^[a-zA-Z0-9!#$%&'*+\-/=?^_\` + "`" + `{|}~.]+$`)
 	// 域名部分正则表达式
 	domainRegex = regexp.MustCompile(`^(?:[a-zA-Z0-9](?:[a-zA-Z0-9\-]{0,61}[a-zA-Z0-9])?\.)+[a-zA-Z0-9](?:[a-zA-Z0-9\-]{0,61}[a-zA-Z0-9])?$`)
 	// 优化后的电子邮件匹配正则表达式 - 修正以更准确匹配

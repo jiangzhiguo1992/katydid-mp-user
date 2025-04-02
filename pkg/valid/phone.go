@@ -9,17 +9,20 @@ import (
 
 // PhoneCountryCode 表示国家电话代码
 type PhoneCountryCode struct {
-	Code     string
-	Name     string
-	Patterns []string
+	Code     string   // 国家代码
+	Name     string   // 国家名称
+	Patterns []string // 电话号码模式
 }
 
 var (
-	// internationalPhoneRegex 用于国际电话号码验证的正则表达式
+	// 用于国际电话号码验证的正则表达式
 	internationalPhoneRegex = regexp.MustCompile(`^\+([1-9]\d{0,3})[ -]?(\(?\d{1,4}\)?[ -]?(?:\d{1,4}[ -]?){1,4})$`)
 
-	// numberOnlyRegex 用于仅验证号码部分(纯数字)
+	// 用于仅验证号码部分(纯数字)
 	numberOnlyRegex = regexp.MustCompile(`^[0-9]{6,15}$`)
+
+	// 用于从文本中提取电话号码
+	phoneExtractRegex = regexp.MustCompile(`(?:\+|00)[1-9]\d{0,3}[\s.-]*(?:\(?\d{1,4}\)?[\s.-]*\d{2,4}[\s.-]*\d{2,4}[\s.-]*\d{1,4})`)
 
 	// CountryCodes 国家代码列表
 	CountryCodes = []PhoneCountryCode{
@@ -394,8 +397,7 @@ func FindPhonesInText(text string) []string {
 	}
 
 	// 使用更严格的正则表达式模式匹配国际号码格式
-	phonePattern := regexp.MustCompile(`(?:\+|00)[1-9]\d{0,3}[\s.-]*(?:\(?\d{1,4}\)?[\s.-]*\d{2,4}[\s.-]*\d{2,4}[\s.-]*\d{1,4})`)
-	matches := phonePattern.FindAllString(text, -1)
+	matches := phoneExtractRegex.FindAllString(text, -1)
 	if len(matches) == 0 {
 		return nil
 	}
