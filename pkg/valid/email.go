@@ -29,7 +29,8 @@ type EmailComponents struct {
 // 如果邮件格式完全无效无法解析，则返回nil和false
 func IsEmail(email string) (*EmailComponents, bool) {
 	// 检查是否为空
-	if email = strings.TrimSpace(email); email == "" {
+	email = strings.TrimSpace(email)
+	if email == "" {
 		return nil, false
 	}
 
@@ -59,10 +60,7 @@ func IsEmail(email string) (*EmailComponents, bool) {
 
 // IsEmailUsername 验证电子邮件的本地部分
 func IsEmailUsername(username string) bool {
-	// 移除前后空格
-	username = strings.TrimSpace(username)
-
-	// 检查是否为空
+	// 检查是否为空（不需要再次调用TrimSpace，parseEmail已经处理过）
 	if username == "" {
 		return false
 	}
@@ -83,10 +81,7 @@ func IsEmailUsername(username string) bool {
 
 // IsEmailDomain 验证电子邮件的域名部分
 func IsEmailDomain(domain string) bool {
-	// 移除前后空格
-	domain = strings.TrimSpace(domain)
-
-	// 检查是否为空
+	// 检查是否为空（不需要再次调用TrimSpace，parseEmail已经处理过）
 	if domain == "" {
 		return false
 	}
@@ -122,7 +117,8 @@ func IsEmailDomain(domain string) bool {
 // FindEmailsInText 从文本中提取有效的电子邮件地址
 func FindEmailsInText(text string) []string {
 	// 检查文本是否为空
-	if text = strings.TrimSpace(text); text == "" {
+	text = strings.TrimSpace(text)
+	if text == "" {
 		return []string{}
 	}
 
