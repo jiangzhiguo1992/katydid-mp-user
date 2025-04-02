@@ -26,8 +26,8 @@ const (
 
 // 全局连接池，可以支持多个数据库实例
 var (
-	dbInstances = make(map[string]*DBInstance)
-	dbMutex     sync.RWMutex
+	dbInstances = make(map[string]*DBInstance) // 实例列表
+	dbMutex     sync.RWMutex                   // 操作dbInstances的锁
 )
 
 type (
@@ -595,7 +595,6 @@ func CloseDB(name string) error {
 	}
 
 	instance.mutex.Lock()
-	defer instance.mutex.Unlock()
 
 	// 关闭主连接
 	sqlDB, err := instance.DB.DB()
@@ -620,6 +619,8 @@ func CloseDB(name string) error {
 		delete(instance.ReplicasCount, k)
 	}
 	instance.Config = nil
+
+	instance.mutex.Unlock()
 
 	delete(dbInstances, name)
 	return err
@@ -687,11 +688,6 @@ func Ping(name string, timeout time.Duration) error {
 	sqlDB, err := instance.DB.DB()
 	if err != nil {
 		return fmt.Errorf("■ ■ Storage ■ ■ 数据库-Ping:获取SQL DB失败:%s: %w", name, err)
-	}
-
-	// 默认超时设置为5秒
-	if timeout <= 0 {
-		timeout = 5 * time.Second
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
