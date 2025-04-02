@@ -124,8 +124,15 @@ func (m *Manager) registerUnmarshalFuncs() {
 }
 
 func (m *Manager) loadMessageFiles() error {
+	if len(m.config.DocDirs) == 0 {
+		return fmt.Errorf("■ ■ i18n ■ ■ 未配置文档目录")
+	}
+
 	var files []string
 	for _, dir := range m.config.DocDirs {
+		if dir == "" {
+			continue // 跳过空目录配置
+		}
 		fs, err := filepath.Glob(filepath.Join(dir, "*"))
 		if err != nil {
 			return fmt.Errorf("■ ■ i18n ■ ■ 加载文件夹 %s 失败: %w", dir, err)
@@ -135,6 +142,7 @@ func (m *Manager) loadMessageFiles() error {
 	if len(files) == 0 {
 		return fmt.Errorf("■ ■ i18n ■ ■ 没有发现文件: %v", m.config.DocDirs)
 	}
+
 	marshal, _ := json.MarshalIndent(map[string]any{"files": files}, "", "\t")
 	m.config.OnInfo(fmt.Sprintf("■ ■ i18n ■ ■ 本地化加载文件: %s", marshal), nil)
 
@@ -179,6 +187,12 @@ func filterMessageFiles(files []string) []string {
 func extractLangFromFilename(file string) string {
 	base := filepath.Base(file)
 	ext := filepath.Ext(base)
+
+	// 避免无扩展名的情况下可能的索引越界
+	if len(ext) == 0 {
+		return base
+	}
+
 	name := base[:len(base)-len(ext)]
 
 	// 查找最后一个点的位置
@@ -210,11 +224,12 @@ func (m *Manager) getLocalizers(lang string) []*i18n.Localizer {
 		}
 	}
 
-	// 添加默认语言
-	if (len(tags) == 0) || (tags[len(tags)-1] != m.config.DefaultLang) {
+	// 确保添加默认语言作为最后的回退选项
+	if len(tags) == 0 || tags[len(tags)-1] != m.config.DefaultLang {
 		tags = append(tags, m.config.DefaultLang)
 	}
 
+	// 预分配localizers切片
 	localizers := make([]*i18n.Localizer, len(tags))
 	for i := 0; i < len(tags); i++ {
 		tt := strings.Join(tags[i:], "_")
@@ -226,6 +241,8 @@ func (m *Manager) getLocalizers(lang string) []*i18n.Localizer {
 		m.localizer.Add(tt, localizer)
 		localizers[i] = localizer
 	}
+
+	// 缓存结果
 	m.localizers.Add(lang, localizers)
 	return localizers
 }
@@ -234,16 +251,23 @@ func (m *Manager) localize(lang, msgID string, data map[string]any, fallbackToID
 	// 构建语言标签列表，实现回退链
 	localizers := m.getLocalizers(lang)
 
+	// 使用共享的LocalizeConfig对象减少内存分配
+	config := &i18n.LocalizeConfig{
+		MessageID:    msgID,
+		TemplateData: data,
+		DefaultMessage: &i18n.Message{
+			ID: msgID,
+			//Other: unknownError,
+		},
+	}
+
 	// 循环查找
 	for _, localizer := range localizers {
-		msg, err := localizer.Localize(&i18n.LocalizeConfig{
-			MessageID:    msgID,
-			TemplateData: data,
-			DefaultMessage: &i18n.Message{
-				ID: msgID,
-				//Other: unknownError,
-			},
-		})
+		if localizer == nil {
+			continue // 避免空指针引用
+		}
+
+		msg, err := localizer.Localize(config)
 		if err == nil && len(msg) > 0 {
 			return msg // 找到有效翻译直接返回
 		}
@@ -269,12 +293,18 @@ func LocalizeMust(lang, msgID string, data map[string]any) string {
 	if defaultManager == nil {
 		return unknownError
 	}
+	if lang == "" {
+		lang = defaultManager.config.DefaultLang
+	}
 	return defaultManager.localize(lang, msgID, data, false)
 }
 
 func LocalizeTry(lang, msgID string, data map[string]any) string {
 	if defaultManager == nil {
 		return unknownError
+	}
+	if lang == "" {
+		lang = defaultManager.config.DefaultLang
 	}
 	return defaultManager.localize(lang, msgID, data, true)
 }
