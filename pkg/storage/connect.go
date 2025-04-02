@@ -9,6 +9,7 @@ import (
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
 	"gorm.io/gorm/logger"
+	"math"
 	"sync"
 	"time"
 )
@@ -278,7 +279,7 @@ func createGormConfig(config DBConfig) *gorm.Config {
 	}
 }
 
-// 连接重试
+// 连接重试 (无锁)
 func connectWithRetries(dialector gorm.Dialector, config *gorm.Config, maxRetries int, retryDelay, retryMaxDelay time.Duration) (*gorm.DB, error) {
 	ctx := context.Background()
 	var db *gorm.DB
@@ -304,13 +305,13 @@ func connectWithRetries(dialector gorm.Dialector, config *gorm.Config, maxRetrie
 		config.Logger.Warn(ctx, fmt.Sprintf("■ ■ Storage ■ ■ 数据库-连接重试(%d/%d):%v\n%v", i+1, maxRetries, dialector, err))
 
 		// 指数退避
-		retryDelay = time.Duration(float64(retryDelay) * 1.5)
-		if retryDelay > retryMaxDelay {
-			retryDelay = retryMaxDelay // 设置最大退避时间
+		currentDelay := time.Duration(float64(retryDelay) * math.Pow(1.5, float64(i)))
+		if currentDelay > retryMaxDelay {
+			currentDelay = retryMaxDelay // 设置最大退避时间
 		}
 
 		select {
-		case <-time.After(retryDelay):
+		case <-time.After(currentDelay):
 		case <-ctx.Done():
 			return nil, ctx.Err()
 		}
@@ -328,7 +329,7 @@ func configureConnectionPool(sqlDB *sql.DB, config DBConfig) {
 	sqlDB.SetConnMaxIdleTime(config.MaxIdleTime)
 }
 
-// 启动健康检查
+// 启动健康检查 (有锁)
 func startHealthCheck(name string, interval time.Duration, autoReconnect bool, queryTimeout time.Duration) {
 	ticker := time.NewTicker(interval)
 	defer ticker.Stop()
@@ -336,36 +337,33 @@ func startHealthCheck(name string, interval time.Duration, autoReconnect bool, q
 	for range ticker.C {
 		instance := GetDBInstance(name)
 		if instance == nil {
-			// 实例已被删除，停止健康检查
-			return
+			return // 实例已被删除，停止健康检查
 		}
-		instance.Config.Logger.Info(
-			context.Background(),
-			fmt.Sprintf("■ ■ Storage ■ ■ 数据库-健康检查: %s", name))
 
 		// 检查主连接
 		err := Ping(name, queryTimeout)
 		now := time.Now()
 		instance.mutex.Lock()
+		isHealthy := err == nil
+		instance.Healthy = isHealthy
 
-		if err != nil {
-			instance.Healthy = false
-
-			if autoReconnect {
-				instance.Config.Logger.Error(
-					context.Background(),
-					fmt.Sprintf("■ ■ Storage ■ ■ 数据库-健康No: %s\n %v", name, err))
-
-				// 尝试重新连接
-				reconnectMainDB(instance, now)
-			}
-		} else {
-			instance.Healthy = true
+		if isHealthy {
 			instance.LastPingTime = now
 
 			instance.Config.Logger.Info(
 				context.Background(),
 				fmt.Sprintf("■ ■ Storage ■ ■ 数据库-健康OK: %s", name))
+		} else if autoReconnect {
+			instance.Config.Logger.Warn(
+				context.Background(),
+				fmt.Sprintf("■ ■ Storage ■ ■ 数据库-健康NO，%s，自动重连...:\n%v", name, err))
+
+			// 尝试重新连接
+			reconnectMainDB(instance, now)
+		} else {
+			instance.Config.Logger.Error(
+				context.Background(),
+				fmt.Sprintf("■ ■ Storage ■ ■ 数据库-健康NO，%s，不自动重连:\n %v", name, err))
 		}
 
 		// 检查副本连接
@@ -398,7 +396,7 @@ func startHealthCheck(name string, interval time.Duration, autoReconnect bool, q
 	}
 }
 
-// 重新连接主数据库
+// 重新连接主数据库 (无锁)
 func reconnectMainDB(instance *DBInstance, now time.Time) bool {
 	// 关闭旧连接
 	sqlDB, _ := instance.DB.DB()
@@ -435,7 +433,7 @@ func reconnectMainDB(instance *DBInstance, now time.Time) bool {
 	return false
 }
 
-// 重新连接副本数据库
+// 重新连接副本数据库 (无锁)
 func reconnectReplica(instance *DBInstance, replicaIndex int) bool {
 	if instance == nil || replicaIndex < 0 || replicaIndex >= len(instance.Config.Replicas) || replicaIndex >= len(instance.ReadReplicas) {
 		return false
@@ -489,7 +487,7 @@ func reconnectReplica(instance *DBInstance, replicaIndex int) bool {
 	return false
 }
 
-// GetDBInstance 获取数据库实例信息
+// GetDBInstance 获取数据库实例信息 (带锁)
 func GetDBInstance(name string) *DBInstance {
 	dbMutex.RLock()
 	defer dbMutex.RUnlock()
@@ -501,7 +499,7 @@ func GetDBInstance(name string) *DBInstance {
 	return instance
 }
 
-// GetDB 通过名称获取数据库连接
+// GetDB 通过名称获取数据库连接 (带锁)
 func GetDB(name string) *gorm.DB {
 	instance := GetDBInstance(name)
 	if instance == nil {
@@ -510,39 +508,32 @@ func GetDB(name string) *gorm.DB {
 	return instance.DB
 }
 
-// GetReadDB 获取读库连接（支持负载均衡选择副本）
+// GetReadDB 获取读库连接 (带锁) 支持负载均衡选择副本
 func GetReadDB(name string) *gorm.DB {
 	instance := GetDBInstance(name)
 	if instance == nil {
 		return nil
 	}
 
-	instance.mutex.RLock()
-	// 检查副本数量和配置
-	replicaCount := len(instance.ReadReplicas)
-	onlyMaster := instance.Config.OnlyMaster
-	instance.mutex.RUnlock()
-
-	// 如果无副本或配置为始终使用主库，返回主连接
-	if replicaCount == 0 || onlyMaster {
-		return instance.DB
-	}
-
-	// 获取索引（内部有锁保护）
+	// 获取索引 (内部有锁保护)
 	index := instance.getWeightedRoundRobinIndex()
 
-	// 再次加锁检查索引是否有效
+	// 读锁
 	instance.mutex.RLock()
 	defer instance.mutex.RUnlock()
 
-	if index < 0 || index >= len(instance.ReadReplicas) {
+	// 检查副本数量和配置
+	replicaCount := len(instance.ReadReplicas)
+	if index < 0 || index >= replicaCount {
 		return instance.DB // 索引无效时使用主库
+	} else if replicaCount == 0 || instance.Config.OnlyMaster {
+		return instance.DB // 如果无副本或配置为始终使用主库，返回主连接
 	}
 
 	return instance.ReadReplicas[index]
 }
 
-// CloseDB 关闭指定的数据库连接
+// CloseDB 关闭指定的数据库连接 (带锁)
 func CloseDB(name string) error {
 	dbMutex.Lock()
 	defer dbMutex.Unlock()
@@ -551,6 +542,8 @@ func CloseDB(name string) error {
 	if !exists || instance == nil {
 		return fmt.Errorf("■ ■ Storage ■ ■ 数据库-关闭:未找到指定的连接:%s", name)
 	}
+	instance.mutex.Lock()
+	defer instance.mutex.Unlock()
 
 	// 关闭主连接
 	sqlDB, err := instance.DB.DB()
@@ -570,7 +563,7 @@ func CloseDB(name string) error {
 	return err
 }
 
-// CloseAllDBs 关闭所有数据库连接
+// CloseAllDBs 关闭所有数据库连接 (带锁)
 func CloseAllDBs() []error {
 	dbMutex.Lock()
 	defer dbMutex.Unlock()
@@ -581,11 +574,13 @@ func CloseAllDBs() []error {
 			errs = append(errs, fmt.Errorf("■ ■ Storage ■ ■ 数据库-关闭:无效的连接:%s", name))
 			continue
 		}
+		instance.mutex.Lock()
 
 		// 关闭主连接
 		sqlDB, err := instance.DB.DB()
 		if err != nil {
 			errs = append(errs, err)
+			instance.mutex.Unlock()
 			continue
 		}
 
@@ -601,6 +596,7 @@ func CloseAllDBs() []error {
 				}
 			}
 		}
+		instance.mutex.Unlock()
 
 		delete(dbInstances, name)
 	}
@@ -643,7 +639,7 @@ func Stats(name string) (sql.DBStats, error) {
 	return sqlDB.Stats(), nil
 }
 
-// getWeightedRoundRobinIndex 实现加权轮询算法
+// getWeightedRoundRobinIndex 实现加权轮询算法 (带锁)
 func (ins *DBInstance) getWeightedRoundRobinIndex() int {
 	replicaCount := len(ins.ReadReplicas)
 	if replicaCount == 0 {
