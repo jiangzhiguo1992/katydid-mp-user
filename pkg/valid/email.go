@@ -10,7 +10,7 @@ var (
 	usernameRegex = regexp.MustCompile(`^[a-zA-Z0-9!#$%&'*+\-/=?^_\` + "`" + `{|}~.]+$`)
 	// 域名部分正则表达式
 	domainRegex = regexp.MustCompile(`^(?:[a-zA-Z0-9](?:[a-zA-Z0-9\-]{0,61}[a-zA-Z0-9])?\.)+[a-zA-Z0-9](?:[a-zA-Z0-9\-]{0,61}[a-zA-Z0-9])?$`)
-	// 优化后的电子邮件匹配正则表达式 - 修正以更准确匹配
+	// 优化后的电子邮件匹配正则表达式 - 用于从文本中初步筛选可能的邮箱地址
 	emailRegex = regexp.MustCompile(`\b[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9](?:[a-zA-Z0-9\-]{0,61}[a-zA-Z0-9])?(?:\.[a-zA-Z0-9](?:[a-zA-Z0-9\-]{0,61}[a-zA-Z0-9])?)*\.[a-zA-Z]{2,}(?:\b|$)`)
 )
 
@@ -33,7 +33,7 @@ func IsEmail(email string) (*EmailComponents, bool) {
 		return nil, false
 	}
 
-	// 检查总长度限制
+	// 检查总长度限制 (RFC 5321)
 	if len(email) > 254 {
 		return nil, false
 	}
@@ -59,16 +59,16 @@ func IsEmail(email string) (*EmailComponents, bool) {
 
 // IsEmailUsername 验证电子邮件的本地部分
 func IsEmailUsername(username string) bool {
+	// 移除前后空格
 	username = strings.TrimSpace(username)
+
+	// 检查是否为空
 	if username == "" {
-		return false
-	} else if len(username) > 64 {
-		// RFC 5321 本地部分最大长度
 		return false
 	}
 
-	// 验证用户名中的字符是否符合RFC规范
-	if !usernameRegex.MatchString(username) {
+	// RFC 5321 本地部分最大长度为64个字符
+	if len(username) > 64 {
 		return false
 	}
 
@@ -77,15 +77,22 @@ func IsEmailUsername(username string) bool {
 		return false
 	}
 
-	return true
+	// 验证用户名中的字符是否符合RFC规范
+	return usernameRegex.MatchString(username)
 }
 
 // IsEmailDomain 验证电子邮件的域名部分
 func IsEmailDomain(domain string) bool {
+	// 移除前后空格
 	domain = strings.TrimSpace(domain)
+
+	// 检查是否为空
 	if domain == "" {
 		return false
-	} else if len(domain) > 255 {
+	}
+
+	// 检查域名长度限制
+	if len(domain) > 255 {
 		return false
 	}
 
@@ -114,18 +121,20 @@ func IsEmailDomain(domain string) bool {
 
 // FindEmailsInText 从文本中提取有效的电子邮件地址
 func FindEmailsInText(text string) []string {
+	// 检查文本是否为空
 	if text = strings.TrimSpace(text); text == "" {
 		return []string{}
 	}
 
-	// 使用更精确的正则表达式直接匹配可能有效的邮箱
+	// 使用正则表达式初步筛选可能的邮箱地址
 	matches := emailRegex.FindAllString(text, -1)
 	if len(matches) == 0 {
 		return []string{}
 	}
 
+	// 预分配空间以避免多次扩容
 	validEmails := make([]string, 0, len(matches))
-	seen := make(map[string]struct{}) // 用于去重
+	seen := make(map[string]struct{}, len(matches)) // 用于去重
 
 	for _, match := range matches {
 		// 移除可能的前后空格

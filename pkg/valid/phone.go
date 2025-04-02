@@ -238,19 +238,25 @@ var (
 	}
 
 	// 缓存用于快速查找
-	countryCodeMap     = make(map[string]PhoneCountryCode)
+	countryCodeMap     map[string]PhoneCountryCode
 	sortedCountryCodes []string
-	compiledPatterns   = make(map[string][]*regexp.Regexp)
+	compiledPatterns   map[string][]*regexp.Regexp
 )
 
+// 初始化函数，预编译正则表达式、构建查找映射等
 func init() {
+	// 预分配足够大小的映射和切片，避免动态扩容
+	countryCodeMap = make(map[string]PhoneCountryCode, len(CountryCodes))
+	sortedCountryCodes = make([]string, 0, len(CountryCodes))
+	compiledPatterns = make(map[string][]*regexp.Regexp, len(CountryCodes))
+
 	// 构建查找映射并预编译所有正则表达式
 	for _, countryCode := range CountryCodes {
 		countryCodeMap[countryCode.Code] = countryCode
 		sortedCountryCodes = append(sortedCountryCodes, countryCode.Code)
 
 		// 预编译模式以提升性能
-		var patterns []*regexp.Regexp
+		patterns := make([]*regexp.Regexp, 0, len(countryCode.Patterns))
 		for _, pattern := range countryCode.Patterns {
 			patterns = append(patterns, regexp.MustCompile(pattern))
 		}
@@ -286,10 +292,8 @@ func IsPhone(phone string) (*PhoneCountryCode, string, bool) {
 			// 验证国家代码是否存在
 			if countryCode, exists := countryCodeMap[code]; exists {
 				// 直接使用已知的国家代码进行验证
-				if isValid := validateNumberWithPattern(code, number); isValid {
-					return &countryCode, number, true
-				}
-				return &countryCode, number, false
+				isValid := validateNumberWithPattern(code, number)
+				return &countryCode, number, isValid
 			}
 		}
 
@@ -396,15 +400,15 @@ func FindPhonesInText(text string) []string {
 		return nil
 	}
 
-	// 使用更严格的正则表达式模式匹配国际号码格式
+	// 使用正则表达式模式匹配国际号码格式
 	matches := phoneExtractRegex.FindAllString(text, -1)
 	if len(matches) == 0 {
 		return nil
 	}
 
 	// 过滤只保留有效号码并去重
-	validNumbersMap := make(map[string]bool)
-	var validNumbers []string
+	validNumbersMap := make(map[string]bool, len(matches))
+	validNumbers := make([]string, 0, len(matches))
 
 	for _, match := range matches {
 		_, _, ok := IsPhone(match)
