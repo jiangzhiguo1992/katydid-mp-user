@@ -137,20 +137,30 @@ func (t *Token) generateJWTToken(secret string, tokenID *string) error {
 	return nil
 }
 
+// IsExpired 检查令牌是否过期
+func (t *Token) IsExpired() bool {
+	if t.Claims == nil {
+		return true // 没有声明或过期时间视为已过期
+	}
+
+	// 先判断Claims的
+	if t.Claims.ExpiresAt != nil {
+		return time.Now().After(t.Claims.ExpiresAt.Time)
+	}
+
+	// 如果未设置过期时间，根据ExpireSec判断
+	if t.ExpireSec < 0 {
+		return false // 负数表示永不过期
+	}
+	return time.Now().Unix() > (t.IssuedAt + t.ExpireSec)
+}
+
 // GenerateJWTToken 使用提供的密钥生成JWT令牌
 func (tc *TokenClaims) generateJWTToken(secret string) (string, error) {
 	// 创建token
 	token := jwt.NewWithClaims(SigningMethod, tc)
 	// 签名token
 	return token.SignedString([]byte(secret))
-}
-
-// IsExpired 检查令牌是否过期
-func (t *Token) IsExpired() bool {
-	if t.Claims == nil || t.Claims.ExpiresAt == nil {
-		return true // 没有声明或过期时间视为已过期
-	}
-	return time.Now().After(t.Claims.ExpiresAt.Time)
 }
 
 // generateSecureRandomString 生成安全的随机字符串
@@ -174,7 +184,7 @@ func generateSecureRandomString(length int) (string, error) {
 // ParseJWT 解析JWT令牌
 func ParseJWT(tokenStr string, secret string, checkExpire bool) (*TokenClaims, bool, error) {
 	// 如果不检查过期，使用自定义验证函数
-	var parserOptions []jwt.ParserOption
+	parserOptions := make([]jwt.ParserOption, 0, 1)
 	if !checkExpire {
 		parserOptions = append(parserOptions, jwt.WithoutClaimsValidation())
 	}
