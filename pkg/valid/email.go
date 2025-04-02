@@ -136,15 +136,18 @@ func FindEmailsInText(text string) []string {
 		// 移除可能的前后空格
 		match = strings.TrimSpace(match)
 
+		// 转换为小写以进行不区分大小写的去重
+		lowerMatch := strings.ToLower(match)
+
 		// 检查是否已处理过相同邮箱，优化放前面，减少IsEmail调用
-		if seen[match] {
+		if seen[lowerMatch] {
 			continue
 		}
 
 		// 使用IsEmail进行最终验证
 		if _, ok := IsEmail(match); ok {
 			validEmails = append(validEmails, match)
-			seen[match] = true
+			seen[lowerMatch] = true
 		}
 	}
 

@@ -455,6 +455,11 @@ func findMatchingCountryCode(phone string) (*PhoneCountryCode, string, bool) {
 	}
 
 	for _, code := range sortedCountryCodes {
+		// 避免索引越界
+		if len(phone) < len(code) {
+			continue
+		}
+
 		if strings.HasPrefix(phone, code) {
 			number := phone[len(code):]
 			if number == "" {
