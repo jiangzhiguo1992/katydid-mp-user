@@ -281,7 +281,9 @@ func createGormConfig(config DBConfig) *gorm.Config {
 
 // 连接重试 (无锁)
 func connectWithRetries(dialector gorm.Dialector, config *gorm.Config, maxRetries int, retryDelay, retryMaxDelay time.Duration) (*gorm.DB, error) {
-	ctx := context.Background()
+	ctx, cancel := context.WithTimeout(context.Background(), retryMaxDelay*time.Duration(maxRetries))
+	defer cancel()
+
 	var db *gorm.DB
 	var err error
 
@@ -343,56 +345,85 @@ func startHealthCheck(name string, interval time.Duration, autoReconnect bool, q
 		// 检查主连接
 		err := Ping(name, queryTimeout)
 		now := time.Now()
+
 		instance.mutex.Lock()
 		isHealthy := err == nil
 		instance.Healthy = isHealthy
 
 		if isHealthy {
 			instance.LastPingTime = now
+			instance.mutex.Unlock()
 
 			instance.Config.Logger.Info(
 				context.Background(),
 				fmt.Sprintf("■ ■ Storage ■ ■ 数据库-健康OK: %s", name))
-		} else if autoReconnect {
-			instance.Config.Logger.Warn(
-				context.Background(),
-				fmt.Sprintf("■ ■ Storage ■ ■ 数据库-健康NO，%s，自动重连...:\n%v", name, err))
-
-			// 尝试重新连接
-			reconnectMainDB(instance, now)
 		} else {
-			instance.Config.Logger.Error(
-				context.Background(),
-				fmt.Sprintf("■ ■ Storage ■ ■ 数据库-健康NO，%s，不自动重连:\n %v", name, err))
-		}
+			instance.mutex.Unlock()
 
-		// 检查副本连接
-		for i, replica := range instance.ReadReplicas {
-			if replica == nil {
-				continue
-			}
-			sqlDB, err := replica.DB()
-			if err != nil || sqlDB == nil {
-				continue
-			}
-			ctx, cancel := context.WithTimeout(context.Background(), queryTimeout)
-			replicaErr := sqlDB.PingContext(ctx)
-			cancel()
+			if autoReconnect {
+				instance.Config.Logger.Warn(
+					context.Background(),
+					fmt.Sprintf("■ ■ Storage ■ ■ 数据库-健康NO，%s，自动重连...:\n%v", name, err))
 
-			if replicaErr != nil && autoReconnect {
+				// 尝试重新连接
+				if reconnectMainDB(instance, now) {
+					instance.mutex.Lock()
+					instance.Healthy = true
+					instance.LastPingTime = now
+					instance.mutex.Unlock()
+				}
+			} else {
 				instance.Config.Logger.Error(
 					context.Background(),
-					fmt.Sprintf("■ ■ Storage ■ ■ 数据库-副本健康No: %s [%d]\n %v", name, i, replicaErr))
-
-				// 重新连接副本
-				reconnectReplica(instance, i)
-			} else {
-				instance.Config.Logger.Info(
-					context.Background(),
-					fmt.Sprintf("■ ■ Storage ■ ■ 数据库-副本健康OK: %s [%d]", name, i))
+					fmt.Sprintf("■ ■ Storage ■ ■ 数据库-健康NO，%s，不自动重连:\n %v", name, err))
 			}
 		}
-		instance.mutex.Unlock()
+
+		// 检查副本连接 - 优化锁的使用
+		checkAndReconnectReplicas(instance, autoReconnect, queryTimeout)
+	}
+}
+
+// checkAndReconnectReplicas 检查副本连接 (无锁)
+func checkAndReconnectReplicas(instance *DBInstance, autoReconnect bool, queryTimeout time.Duration) {
+	if instance == nil {
+		return
+	}
+
+	// 读锁获取副本列表
+	instance.mutex.RLock()
+	replicas := make([]*gorm.DB, len(instance.ReadReplicas))
+	copy(replicas, instance.ReadReplicas)
+	instance.mutex.RUnlock()
+
+	for i, replica := range replicas {
+		if replica == nil {
+			continue
+		}
+		sqlDB, err := replica.DB()
+		if err != nil || sqlDB == nil {
+			continue
+		}
+		ctx, cancel := context.WithTimeout(context.Background(), queryTimeout)
+		replicaErr := sqlDB.PingContext(ctx)
+		cancel()
+
+		if replicaErr != nil && autoReconnect {
+			instance.Config.Logger.Error(
+				context.Background(),
+				fmt.Sprintf("■ ■ Storage ■ ■ 数据库-副本健康No: %s [%d]\n %v", instance.Name, i, replicaErr))
+
+			// 重新连接副本
+			if reconnected := reconnectReplica(instance, i); reconnected {
+				instance.Config.Logger.Info(
+					context.Background(),
+					fmt.Sprintf("■ ■ Storage ■ ■ 数据库-副本重连成功: %s [%d]", instance.Name, i))
+			}
+		} else if replicaErr == nil {
+			instance.Config.Logger.Info(
+				context.Background(),
+				fmt.Sprintf("■ ■ Storage ■ ■ 数据库-副本健康OK: %s [%d]", instance.Name, i))
+		}
 	}
 }
 
@@ -656,7 +687,7 @@ func (ins *DBInstance) getWeightedRoundRobinIndex() int {
 		return int(time.Now().UnixNano()) % replicaCount // 回退到简单轮询
 	}
 
-	// 计算总权重
+	// 计算总权重 - 这部分不需要锁保护
 	totalWeight := 0
 	for _, cfg := range ins.Config.Replicas {
 		weight := cfg.Weight
@@ -672,25 +703,24 @@ func (ins *DBInstance) getWeightedRoundRobinIndex() int {
 	// 使用实例名作为key
 	key := ins.Name // 每个实例名应该是唯一的
 
+	// 仅在访问/修改 ReplicasCount 时加锁
 	ins.mutex.Lock()
-	defer ins.mutex.Unlock()
-
-	// 获取当前计数
 	currentCount := ins.ReplicasCount[key]
-	currentCount = (currentCount + 1) % totalWeight
-	ins.ReplicasCount[key] = currentCount
+	nextCount := (currentCount + 1) % totalWeight
+	ins.ReplicasCount[key] = nextCount
+	ins.mutex.Unlock()
 
-	// 选择副本
+	// 选择副本 - 这部分不需要锁保护
+	runningWeight := 0
 	for i, cfg := range ins.Config.Replicas {
 		weight := cfg.Weight
 		if weight <= 0 {
 			weight = 1
 		}
-
-		if currentCount < weight {
+		runningWeight += weight
+		if currentCount < runningWeight {
 			return i
 		}
-		currentCount -= weight
 	}
 
 	// 安全回退
