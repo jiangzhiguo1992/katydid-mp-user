@@ -103,33 +103,11 @@ func InitConnect(name string, config DBConfig) (*gorm.DB, error) {
 		return nil, fmt.Errorf("■ ■ Storage ■ ■ 数据库-连接已存在: %s", name)
 	}
 
-	// 根据数据库类型创建对应的方言
-	dialector, err := createDialector(config)
+	// instance未实例化，无锁
+	db, err := connectDB(fmt.Sprintf("%s(主-首连)", name), config)
 	if err != nil {
 		return nil, err
 	}
-	config.Logger.Info(context.Background(), fmt.Sprintf("■ ■ Storage ■ ■ 数据库-连接方言:%s :%s", name, dialector))
-
-	// 配置GORM
-	gormConfig := createGormConfig(config)
-
-	// 重试连接逻辑
-	db, err := connectWithRetries(
-		dialector, gormConfig, config.MaxRetries,
-		time.Duration(config.RetryDelay)*time.Second,
-		time.Duration(config.RetryMaxDelay)*time.Second)
-	if err != nil {
-		return nil, fmt.Errorf("■ ■ Storage ■ ■ 数据库-连接失败: %s, %w", name, err)
-	}
-
-	sqlDB, err := db.DB()
-	if err != nil {
-		return nil, fmt.Errorf("■ ■ Storage ■ ■ 数据库-连接获取失败: %s, %w", name, err)
-	}
-	config.Logger.Info(context.Background(), fmt.Sprintf("■ ■ Storage ■ ■ 数据库-连接成功:%s", name))
-
-	// 设置连接池参数
-	configureConnectionPool(sqlDB, config)
 
 	// 保存到实例map中
 	now := time.Now()
@@ -147,45 +125,16 @@ func InitConnect(name string, config DBConfig) (*gorm.DB, error) {
 	// 初始化副本连接
 	if len(config.Replicas) > 0 {
 		for i, replica := range config.Replicas {
-			replicaConfig := config
-			replicaConfig.Host = replica.Host
-			if replica.Port != 0 {
-				replicaConfig.Port = replica.Port
-			}
-			if replica.User != "" {
-				replicaConfig.User = replica.User
-			}
-			if replica.Password != "" {
-				replicaConfig.Password = replica.Password
-			}
-			if replica.Params != nil {
-				replicaConfig.Params = replica.Params
-			}
-
-			replicaDialector, err := createDialector(replicaConfig)
-			if err != nil {
-				config.Logger.Warn(context.Background(), fmt.Sprintf("■ ■ Storage ■ ■ 数据库-副本连接方言创建失败: %d, %v", i, err))
-				continue
-			}
-
-			replicaDB, err := connectWithRetries(
-				replicaDialector, gormConfig, config.MaxRetries,
-				time.Duration(config.RetryDelay)*time.Second,
-				time.Duration(config.RetryMaxDelay)*time.Second)
-			if err != nil {
-				config.Logger.Warn(context.Background(), fmt.Sprintf("■ ■ Storage ■ ■ 数据库-副本连接失败: %d, %v", i, err))
-				continue
-			}
-
-			replicaSQLDB, err := replicaDB.DB()
-			if err != nil {
-				return nil, fmt.Errorf("■ ■ Storage ■ ■ 数据库-副本连接获取失败: %d, %s, %w", i, name, err)
-			} else {
-				configureConnectionPool(replicaSQLDB, replicaConfig)
+			// instance未实例化，无锁
+			replicaDB, repErr := connectReplicaDB(
+				fmt.Sprintf("%s(副%d-首连[%s])", name, i, replica.Host),
+				config, replica,
+			)
+			if repErr != nil {
+				continue // 可以忽略副本连接失败
 			}
 
 			dbInstances[name].ReadReplicas = append(dbInstances[name].ReadReplicas, replicaDB)
-			config.Logger.Info(context.Background(), fmt.Sprintf("■ ■ Storage ■ ■ 数据库-副本连接成功: %d, %s:%d", i, replica.Host, replica.Port))
 		}
 	}
 
@@ -300,8 +249,7 @@ func connectWithRetries(dialector gorm.Dialector, config *gorm.Config, maxRetrie
 		db, err = gorm.Open(dialector, config)
 		if err == nil && db != nil {
 			// 验证连接是否真的可用
-			sqlDB, sqlErr := db.DB()
-			if sqlErr == nil {
+			if sqlDB, sqlErr := db.DB(); sqlErr == nil {
 				if pingErr := sqlDB.PingContext(ctx); pingErr == nil {
 					return db, nil // 连接成功并且可用
 				}
@@ -336,6 +284,62 @@ func configureConnectionPool(sqlDB *sql.DB, config DBConfig) {
 	sqlDB.SetMaxIdleConns(config.MaxIdle)
 	sqlDB.SetConnMaxLifetime(config.MaxLifeTime)
 	sqlDB.SetConnMaxIdleTime(config.MaxIdleTime)
+}
+
+// 连接主数据库 (无锁)
+func connectDB(tag string, config DBConfig) (*gorm.DB, error) {
+	ctx := context.Background()
+	// 根据数据库类型创建对应的方言
+	dialector, err := createDialector(config)
+	if err != nil {
+		return nil, err
+	}
+	config.Logger.Info(ctx, fmt.Sprintf("■ ■ Storage ■ ■ 数据库-连接方言:%s :%s", tag, dialector))
+
+	// 配置GORM
+	gormConfig := createGormConfig(config)
+
+	// 重试连接逻辑
+	db, err := connectWithRetries(
+		dialector, gormConfig, config.MaxRetries,
+		time.Duration(config.RetryDelay)*time.Second,
+		time.Duration(config.RetryMaxDelay)*time.Second)
+	if err != nil {
+		return nil, fmt.Errorf("■ ■ Storage ■ ■ 数据库-连接失败: %s, %w", tag, err)
+	}
+
+	sqlDB, err := db.DB()
+	if err != nil {
+		return nil, fmt.Errorf("■ ■ Storage ■ ■ 数据库-连接获取失败: %s, %w", tag, err)
+	} else if sqlDB == nil {
+		return nil, fmt.Errorf("■ ■ Storage ■ ■ 数据库-连接获取失败: %s, %w", tag, err)
+	}
+	config.Logger.Info(ctx, fmt.Sprintf("■ ■ Storage ■ ■ 数据库-连接成功:%s", tag))
+
+	// 设置连接池参数
+	configureConnectionPool(sqlDB, config)
+
+	return db, nil
+}
+
+// 连接副数据库 (无锁)
+func connectReplicaDB(tag string, config DBConfig, rConf ReplicaConfig) (*gorm.DB, error) {
+	replicaConfig := config
+	replicaConfig.Host = rConf.Host
+	if rConf.Port > 0 {
+		replicaConfig.Port = rConf.Port
+	}
+	if rConf.User != "" {
+		replicaConfig.User = rConf.User
+	}
+	if rConf.Password != "" {
+		replicaConfig.Password = rConf.Password
+	}
+	if rConf.Params != nil && len(rConf.Params) > 0 {
+		replicaConfig.Params = rConf.Params
+	}
+
+	return connectDB(tag, replicaConfig)
 }
 
 // 启动健康检查 (有锁)
@@ -435,117 +439,71 @@ func checkAndReconnectReplicas(instance *DBInstance, autoReconnect bool, queryTi
 	}
 }
 
-// 重新连接主数据库 (带锁)
+// 重新连接主数据库 (有锁，带instance的都有锁)
 func reconnectMainDB(instance *DBInstance, now time.Time) bool {
 	if instance == nil {
 		return false
 	}
 
+	instance.mutex.Lock()
+	defer instance.mutex.Unlock()
+
 	// 关闭旧连接
-	sqlDB, _ := instance.DB.DB()
-	if sqlDB != nil {
-		_ = sqlDB.Close()
+	if instance.DB != nil {
+		sqlDB, _ := instance.DB.DB()
+		if sqlDB != nil {
+			_ = sqlDB.Close()
+		}
 	}
 
-	// 创建新连接
-	dialector, err := createDialector(*instance.Config)
+	// 连接
+	db, err := connectDB(fmt.Sprintf("%s(主-重连)", instance.Name), *instance.Config)
 	if err != nil {
 		return false
 	}
 
-	db, reconnectErr := connectWithRetries(
-		dialector, createGormConfig(*instance.Config),
-		instance.Config.MaxRetries,
-		time.Duration(instance.Config.RetryDelay)*time.Second,
-		time.Duration(instance.Config.RetryMaxDelay)*time.Second)
+	// 更新实例
+	instance.DB = db
+	instance.Healthy = true
+	instance.LastPingTime = now
 
-	if reconnectErr == nil {
-		sqlDB, _ := db.DB()
-		if sqlDB != nil {
-			configureConnectionPool(sqlDB, *instance.Config)
-			instance.mutex.Lock()
-			instance.DB = db
-			instance.Healthy = true
-			instance.LastPingTime = now
-			instance.mutex.Unlock()
-			return true
-		}
-	}
-
-	instance.Config.Logger.Error(
-		context.Background(),
-		fmt.Sprintf("■ ■ Storage ■ ■ 数据库-重连失败: %s %v", instance.Name, reconnectErr))
 	return false
 }
 
-// 重新连接副本数据库 (无锁)
+// 重新连接副本数据库 (无锁，带instance的都有锁)
 func reconnectReplica(instance *DBInstance, replicaIndex int) bool {
 	if instance == nil {
 		return false
 	}
 
+	instance.mutex.Lock()
+	defer instance.mutex.Unlock()
+
 	// 读锁获取所需信息
-	instance.mutex.RLock()
 	if replicaIndex < 0 || replicaIndex >= len(instance.Config.Replicas) || replicaIndex >= len(instance.ReadReplicas) {
-		instance.mutex.RUnlock()
 		return false
 	}
 
 	// 复制需要的配置信息，避免在释放锁后继续使用
 	replica := instance.Config.Replicas[replicaIndex]
 	oldDB := instance.ReadReplicas[replicaIndex]
-	config := *instance.Config // 复制配置防止竞态条件
-	instance.mutex.RUnlock()
 
-	// 创建副本配置
-	replicaConfig := config
-	replicaConfig.Host = replica.Host
-	if replica.Port > 0 {
-		replicaConfig.Port = replica.Port
-	}
-	if replica.User != "" {
-		replicaConfig.User = replica.User
-	}
-	if replica.Password != "" {
-		replicaConfig.Password = replica.Password
-	}
-	if replica.Params != nil {
-		replicaConfig.Params = replica.Params
+	// 关闭旧连接
+	if oldDB != nil {
+		if sqlDB, _ := oldDB.DB(); sqlDB != nil {
+			_ = sqlDB.Close()
+		}
 	}
 
-	// 关闭现有连接
-	if sqlDB, err := oldDB.DB(); err == nil && sqlDB != nil {
-		_ = sqlDB.Close()
-	}
-
-	// 创建新连接
-	dialector, err := createDialector(replicaConfig)
+	// 连接
+	db, err := connectReplicaDB("tag!!!!", *instance.Config, replica)
 	if err != nil {
 		return false
 	}
 
-	newDB, err := connectWithRetries(
-		dialector, createGormConfig(replicaConfig),
-		replicaConfig.MaxRetries,
-		time.Duration(replicaConfig.RetryDelay)*time.Second,
-		time.Duration(replicaConfig.RetryMaxDelay)*time.Second)
-
-	if err == nil && newDB != nil {
-		// 配置连接池
-		sqlDB, err := newDB.DB()
-		if err != nil {
-			return false
-		}
-		configureConnectionPool(sqlDB, replicaConfig)
-
-		// 加锁更新实例
-		instance.mutex.Lock()
-		if replicaIndex < len(instance.ReadReplicas) {
-			instance.ReadReplicas[replicaIndex] = newDB
-		}
-		instance.mutex.Unlock()
-
-		return true
+	// 更新实例
+	if replicaIndex < len(instance.ReadReplicas) {
+		instance.ReadReplicas[replicaIndex] = db
 	}
 
 	return false
@@ -773,10 +731,10 @@ func (ins *DBInstance) getWeightedRoundRobinIndex() (int, func()) {
 			weight = 1
 		}
 
-		if currentCount < weight {
+		if ins.ReplicasCount[key] < weight {
 			return i, unlock
 		}
-		currentCount -= weight
+		ins.ReplicasCount[key] -= weight
 	}
 
 	// 安全回退
