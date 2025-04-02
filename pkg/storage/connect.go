@@ -477,20 +477,25 @@ func reconnectReplica(instance *DBInstance, replicaIndex int) bool {
 		return false
 	}
 
+	// 读锁获取所需信息
 	instance.mutex.RLock()
 	if replicaIndex < 0 || replicaIndex >= len(instance.Config.Replicas) || replicaIndex >= len(instance.ReadReplicas) {
 		instance.mutex.RUnlock()
 		return false
 	}
 
+	// 复制需要的配置信息，避免在释放锁后继续使用
 	replica := instance.Config.Replicas[replicaIndex]
 	oldDB := instance.ReadReplicas[replicaIndex]
+	config := *instance.Config // 复制配置防止竞态条件
 	instance.mutex.RUnlock()
 
 	// 创建副本配置
-	replicaConfig := *instance.Config
+	replicaConfig := config
 	replicaConfig.Host = replica.Host
-	replicaConfig.Port = replica.Port
+	if replica.Port > 0 {
+		replicaConfig.Port = replica.Port
+	}
 	if replica.User != "" {
 		replicaConfig.User = replica.User
 	}
@@ -690,17 +695,15 @@ func Ping(name string, timeout time.Duration) error {
 		return fmt.Errorf("■ ■ Storage ■ ■ 数据库-Ping:获取SQL DB失败:%s: %w", name, err)
 	}
 
-	// 使用带超时的上下文进行ping
-	if timeout > 0 {
-		ctx, cancel := context.WithTimeout(context.Background(), timeout)
-		defer cancel()
-		if err := sqlDB.PingContext(ctx); err != nil {
-			return fmt.Errorf("■ ■ Storage ■ ■ 数据库-Ping失败(%s): %w", name, err)
-		}
-		return nil
+	// 默认超时设置为5秒
+	if timeout <= 0 {
+		timeout = 5 * time.Second
 	}
 
-	if err := sqlDB.Ping(); err != nil {
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
+
+	if err := sqlDB.PingContext(ctx); err != nil {
 		return fmt.Errorf("■ ■ Storage ■ ■ 数据库-Ping失败(%s): %w", name, err)
 	}
 	return nil
@@ -722,24 +725,33 @@ func Stats(name string) (sql.DBStats, error) {
 
 // getWeightedRoundRobinIndex 实现加权轮询算法 (带锁)
 func (ins *DBInstance) getWeightedRoundRobinIndex() int {
-	replicaCount := len(ins.ReadReplicas)
-	if replicaCount == 0 {
+	if ins == nil {
 		return 0
 	}
 
-	// 所有副本权重相同或只有一个副本时，使用简单轮询
-	if replicaCount == 1 {
+	// 使用读锁获取只读信息
+	ins.mutex.RLock()
+	replicaCount := len(ins.ReadReplicas)
+	if replicaCount == 0 {
+		ins.mutex.RUnlock()
 		return 0
 	}
 
 	// 确保配置与副本数量匹配
 	if len(ins.Config.Replicas) != replicaCount {
+		ins.mutex.RUnlock()
 		return int(time.Now().UnixNano()) % replicaCount // 回退到简单轮询
 	}
 
-	// 计算总权重 - 这部分不需要锁保护
+	// 复制配置相关信息在锁区域外计算
+	replicas := make([]ReplicaConfig, len(ins.Config.Replicas))
+	copy(replicas, ins.Config.Replicas)
+	key := ins.Name
+	ins.mutex.RUnlock()
+
+	// 计算总权重 - 无需锁保护
 	totalWeight := 0
-	for _, cfg := range ins.Config.Replicas {
+	for _, cfg := range replicas {
 		weight := cfg.Weight
 		if weight <= 0 {
 			weight = 1 // 默认权重为1
@@ -750,19 +762,16 @@ func (ins *DBInstance) getWeightedRoundRobinIndex() int {
 		return 0 // 防止除零错误
 	}
 
-	// 使用实例名作为key
-	key := ins.Name // 每个实例名应该是唯一的
-
-	// 仅在访问/修改 ReplicasCount 时加锁
+	// 只在修改计数器时使用写锁，缩小锁范围
 	ins.mutex.Lock()
 	currentCount := ins.ReplicasCount[key]
 	nextCount := (currentCount + 1) % totalWeight
 	ins.ReplicasCount[key] = nextCount
 	ins.mutex.Unlock()
 
-	// 选择副本 - 这部分不需要锁保护
+	// 选择副本 - 无需锁保护
 	runningWeight := 0
-	for i, cfg := range ins.Config.Replicas {
+	for i, cfg := range replicas {
 		weight := cfg.Weight
 		if weight <= 0 {
 			weight = 1
