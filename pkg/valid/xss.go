@@ -32,7 +32,7 @@ var (
 
 		// 数据URI
 		regexp.MustCompile(`(?i)data:(?:text|image|application)/(?:html|xml|xhtml|svg)`),
-		regexp.MustCompile(`(?i)data:.*?;base64`), // 使用��贪婪匹配
+		regexp.MustCompile(`(?i)data:.*?;base64`), // 使用非贪婪匹配
 
 		// 表达式和绕过
 		regexp.MustCompile(`(?i)expression\s*\(`),
@@ -68,21 +68,18 @@ var (
 
 // XSSValidator 提供检测XSS攻击的功能
 type XSSValidator struct {
-	patterns  []*regexp.Regexp
 	sanitizer *bluemonday.Policy
 }
 
 // NewXSSValidator 返回一个配置好的XSS验证器
 func NewXSSValidator(strict bool) *XSSValidator {
 	// 编译所有正则表达式模式
-	validator := &XSSValidator{
-		patterns: xssPatterns,
-	}
+	validator := &XSSValidator{}
 
 	if strict {
 		validator.sanitizer = bluemonday.StrictPolicy() // 使用严格策略，删除所有HTML
 	} else {
-		validator.sanitizer = bluemonday.UGCPolicy() // 使用用户生成内容策略，允许一些HTML
+		validator.sanitizer = bluemonday.UGCPolicy() // 使用用户生成内容策略，允许一些安全HTML
 	}
 	return validator
 }
@@ -107,7 +104,7 @@ func (v *XSSValidator) HasXSS(text string) bool {
 	}
 
 	// 首先使用正则检测
-	for _, pattern := range v.patterns {
+	for _, pattern := range xssPatterns {
 		if pattern.MatchString(text) {
 			return true
 		}
@@ -130,7 +127,7 @@ func (v *XSSValidator) GetXSSMatches(text string) []string {
 	}
 
 	var matches []string
-	for _, pattern := range v.patterns {
+	for _, pattern := range xssPatterns {
 		if found := pattern.FindAllString(text, -1); len(found) > 0 {
 			matches = append(matches, found...)
 		}
