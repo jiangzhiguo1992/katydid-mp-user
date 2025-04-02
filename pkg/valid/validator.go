@@ -33,7 +33,7 @@ var (
 type (
 	Validator struct {
 		validate *validator.Validate
-		regTypes *sync.Map // 验证注册类型
+		regTypes *sync.Map // 验证注册类型缓存
 		regLocs  *sync.Map // 本地化文本缓存
 	}
 
@@ -284,6 +284,7 @@ func (v *Validator) validStruct(obj any, sl validator.StructLevel, scene Scene) 
 }
 
 // processEmbeddedValidations 递归注册组合类型的验证规则
+// ttt: 处理类型 1=字段, 2=额外, 3=结构体
 func (v *Validator) processEmbeddedValidations(
 	obj any, scene Scene,
 	ttt int, sl validator.StructLevel,
@@ -336,18 +337,19 @@ func (v *Validator) processEmbeddedValidations(
 			return err
 		}
 
+		// 根据处理类型执行对应验证
 		switch ttt {
-		case 1:
+		case 1: // 字段验证
 			if fv, okk := embedObj.(IFieldValidator); okk {
 				if err := v.validFields(fv, scene); err != nil {
 					return err
 				}
 			}
-		case 2:
+		case 2: // 额外验证
 			if ev, okk := embedObj.(IExtraValidator); okk {
 				v.validExtra(ev, sl, scene)
 			}
-		case 3:
+		case 3: // 结构体验证
 			if sv, okk := embedObj.(IStructValidator); okk {
 				v.validStruct(sv, sl, scene)
 			}
@@ -395,33 +397,43 @@ func (v *Validator) validLocalize(
 	cacheRules, ok := v.regLocs.Load(typ)
 	if !ok {
 		// 没有就缓存，注册本地化规则
-		tagFieldRules := make(map[Tag]map[FieldName]LocalizeValidRuleParam)
-		tagRules := make(map[Tag]LocalizeValidRuleParam)
-
 		sceneRules := rl.ValidLocalizeRules()
 		if sceneRules == nil {
 			return msgErrs
 		}
+
+		// 预分配合适大小的map
+		tagFieldRules := make(map[Tag]map[FieldName]LocalizeValidRuleParam)
+		tagRules := make(map[Tag]LocalizeValidRuleParam)
+
+		// 处理全局规则 - Rule1
 		if tRules := sceneRules[SceneAll]; tRules.Rule1 != nil {
 			for tag, rule := range tRules.Rule1 {
 				tagFieldRules[tag] = rule
 			}
 		}
+
+		// 处理全局规则 - Rule2
 		if tRules := sceneRules[SceneAll]; tRules.Rule2 != nil {
 			for tag, rule := range tRules.Rule2 {
 				tagRules[tag] = rule
 			}
 		}
+
+		// 处理当前场景规则 - Rule1
 		if tRules := sceneRules[scene]; tRules.Rule1 != nil {
 			for tag, rule := range tRules.Rule1 {
 				tagFieldRules[tag] = rule
 			}
 		}
+
+		// 处理当前场景规则 - Rule2
 		if tRules := sceneRules[scene]; tRules.Rule2 != nil {
 			for tag, rule := range tRules.Rule2 {
 				tagRules[tag] = rule
 			}
 		}
+
 		localRule = LocalizeValidRule{Rule1: tagFieldRules, Rule2: tagRules}
 		v.regLocs.Store(typ, localRule)
 	} else {
@@ -429,6 +441,7 @@ func (v *Validator) validLocalize(
 		localRule = cacheRules.(LocalizeValidRule)
 	}
 
+	// 处理每个验证错误
 	for _, ee := range validateErrs {
 		// -- 本地化错误注册(Tag+Field) --
 		for tag, fieldRules := range localRule.Rule1 {

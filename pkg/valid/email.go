@@ -130,21 +130,21 @@ func FindEmailsInText(text string) []string {
 
 	// 预分配空间以避免多次扩容
 	validEmails := make([]string, 0, len(matches))
-	seen := make(map[string]struct{}, len(matches)) // 用于去重
+	seen := make(map[string]bool, len(matches)) // 用于去重
 
 	for _, match := range matches {
 		// 移除可能的前后空格
 		match = strings.TrimSpace(match)
 
 		// 检查是否已处理过相同邮箱，优化放前面，减少IsEmail调用
-		if _, exists := seen[match]; exists {
+		if seen[match] {
 			continue
 		}
 
 		// 使用IsEmail进行最终验证
 		if _, ok := IsEmail(match); ok {
 			validEmails = append(validEmails, match)
-			seen[match] = struct{}{}
+			seen[match] = true
 		}
 	}
 
