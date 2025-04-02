@@ -281,8 +281,7 @@ func createGormConfig(config DBConfig) *gorm.Config {
 
 // 连接重试 (无锁)
 func connectWithRetries(dialector gorm.Dialector, config *gorm.Config, maxRetries int, retryDelay, retryMaxDelay time.Duration) (*gorm.DB, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), retryMaxDelay*time.Duration(maxRetries))
-	defer cancel()
+	ctx := context.Background() // 没有超时，connect的时间是未知的
 
 	var db *gorm.DB
 	var err error
@@ -573,21 +572,16 @@ func GetReadDB(name string) *gorm.DB {
 	}
 
 	// 获取索引 (内部有锁保护)
-	index := instance.getWeightedRoundRobinIndex()
-
-	// 读锁
-	instance.mutex.RLock()
-	defer instance.mutex.RUnlock()
-
-	// 检查副本数量和配置
-	replicaCount := len(instance.ReadReplicas)
-	if index < 0 || index >= replicaCount {
+	index, unlock := instance.getWeightedRoundRobinIndex()
+	if index < 0 || index >= len(instance.ReadReplicas) {
+		unlock()
 		return instance.DB // 索引无效时使用主库
-	} else if replicaCount == 0 || instance.Config.OnlyMaster {
-		return instance.DB // 如果无副本或配置为始终使用主库，返回主连接
 	}
 
-	return instance.ReadReplicas[index]
+	db := instance.ReadReplicas[index]
+	unlock()
+
+	return db
 }
 
 // CloseDB 关闭指定的数据库连接 (带锁)
@@ -724,34 +718,27 @@ func Stats(name string) (sql.DBStats, error) {
 }
 
 // getWeightedRoundRobinIndex 实现加权轮询算法 (带锁)
-func (ins *DBInstance) getWeightedRoundRobinIndex() int {
-	if ins == nil {
-		return 0
-	}
-
-	// 使用读锁获取只读信息
+func (ins *DBInstance) getWeightedRoundRobinIndex() (int, func()) {
+	// 使用读锁
 	ins.mutex.RLock()
-	replicaCount := len(ins.ReadReplicas)
-	if replicaCount == 0 {
-		ins.mutex.RUnlock()
-		return 0
+	unlock := func() { ins.mutex.RUnlock() }
+
+	// 获取只读信息
+	replicaCount := len(ins.ReadReplicas) // ins.ReadReplicas的长度为准
+	if replicaCount == 0 || ins.Config.OnlyMaster {
+		return -1, unlock // 表示使用主库
+	} else if replicaCount == 1 {
+		return 0, unlock // 只有一个副本
 	}
 
 	// 确保配置与副本数量匹配
 	if len(ins.Config.Replicas) != replicaCount {
-		ins.mutex.RUnlock()
-		return int(time.Now().UnixNano()) % replicaCount // 回退到简单轮询
+		return int(time.Now().UnixNano()) % replicaCount, unlock // 回退到简单轮询
 	}
 
-	// 复制配置相关信息在锁区域外计算
-	replicas := make([]ReplicaConfig, len(ins.Config.Replicas))
-	copy(replicas, ins.Config.Replicas)
-	key := ins.Name
-	ins.mutex.RUnlock()
-
-	// 计算总权重 - 无需锁保护
+	// 计算总权重
 	totalWeight := 0
-	for _, cfg := range replicas {
+	for _, cfg := range ins.Config.Replicas {
 		weight := cfg.Weight
 		if weight <= 0 {
 			weight = 1 // 默认权重为1
@@ -759,29 +746,35 @@ func (ins *DBInstance) getWeightedRoundRobinIndex() int {
 		totalWeight += weight
 	}
 	if totalWeight == 0 {
-		return 0 // 防止除零错误
+		return int(time.Now().UnixNano()) % replicaCount, unlock // 回退到简单轮询
 	}
 
-	// 只在修改计数器时使用写锁，缩小锁范围
-	ins.mutex.Lock()
-	currentCount := ins.ReplicasCount[key]
-	nextCount := (currentCount + 1) % totalWeight
-	ins.ReplicasCount[key] = nextCount
-	ins.mutex.Unlock()
+	// 生成副本集合的唯一标识
+	key := ins.Name
 
-	// 选择副本 - 无需锁保护
-	runningWeight := 0
-	for i, cfg := range replicas {
+	// 换锁
+	unlock()
+	ins.mutex.Lock()
+	unlock = func() { ins.mutex.Unlock() }
+
+	// 获取当前计数
+	currentCount := ins.ReplicasCount[key]
+	currentCount = (currentCount + 1) % totalWeight
+	ins.ReplicasCount[key] = currentCount
+
+	// 选择副本
+	for i, cfg := range ins.Config.Replicas {
 		weight := cfg.Weight
 		if weight <= 0 {
 			weight = 1
 		}
-		runningWeight += weight
-		if currentCount < runningWeight {
-			return i
+
+		if currentCount < weight {
+			return i, unlock
 		}
+		currentCount -= weight
 	}
 
 	// 安全回退
-	return 0
+	return 0, unlock
 }
