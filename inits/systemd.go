@@ -38,8 +38,9 @@ func System() {
 
 	// i18n
 	err = i18n.Init(i18n.Config{
-		DefaultLang: config.LangConf.Default,
-		DocDirs:     configs.LangDirs,
+		DefaultLang:  config.LangConf.Default,
+		CacheMaxSize: config.LangConf.CacheMaxSize,
+		DocDirs:      configs.LangDirs,
 		OnInfo: func(msg string, fields map[string]any) {
 			var fs []log.Field
 			if fields != nil {
@@ -69,14 +70,9 @@ func System() {
 		// TODO:GG params要翻译吗?
 		return fmt.Sprintf(format, params...)
 	})
-	errs.InitMatch(msg.ErrCodePatterns, msg.ErrMsgPatterns, func(msg string) {
+	errs.InitMatch(1000, msg.ErrCodePatterns, msg.ErrMsgPatterns, func(msg string) {
 		log.WarnMustf(!config.IsDebug(), msg)
 	})
-
-	// TODO:GG role
-	//perm.Init(&perm.Config{
-	//	LogEnable: true,
-	//})
 
 	// pgsql
 	if PgSql := config.PgSql; PgSql != nil {

@@ -53,6 +53,7 @@ key_path = "X-Trace-Path" # 每层api都会塞入 ">name"
 [middleware.language]
 #enable = true # 必须是true
 key_accept = "Accept-Language" # 请求头中语言参数
+cache_max_size = 1000 # 缓存大小限制，默认1000
 
 [middleware.logger]
 enable = true # 接入日志收集之后，就只debug开

@@ -38,32 +38,34 @@ type (
 	}
 
 	LangConf struct {
-		Default string `toml:"default" mapstructure:"default"`
+		Default      string `toml:"default" mapstructure:"default"`
+		CacheMaxSize int    `toml:"cache_max_size" mapstructure:"cache_max_size"`
 	}
 
 	MiddleWareConf struct {
-		Trace struct {
+		TraceConf struct {
 			Enable  bool   `toml:"enable" mapstructure:"enable"`
 			KeyID   string `toml:"key_id" mapstructure:"key_id"`
 			KeyPath string `toml:"key_path" mapstructure:"key_path"`
 		} `toml:"trace" mapstructure:"trace"`
-		Language struct {
-			KeyAccept string `toml:"key_accept" mapstructure:"key_accept"`
+		LanguageConf struct {
+			KeyAccept    string `toml:"key_accept" mapstructure:"key_accept"`
+			CacheMaxSize int    `toml:"cache_max_size" mapstructure:"cache_max_size"`
 		} `toml:"language" mapstructure:"language"`
-		Logger struct {
+		LoggerConf struct {
 			Enable     bool     `toml:"enable" mapstructure:"enable"`
 			SkipStatus []int    `toml:"skip_status" mapstructure:"skip_status"`
 			SkipPaths  []string `toml:"skip_paths" mapstructure:"skip_paths"`
 			Sensitives []string `toml:"sensitives" mapstructure:"sensitives"`
 			MaxSize    int      `toml:"max_size" mapstructure:"max_size"`
 		} `toml:"logger" mapstructure:"logger"`
-		CORS struct {
+		CORSConf struct {
 			Enable bool `toml:"enable" mapstructure:"enable"`
 		} `toml:"cors" mapstructure:"cors"`
-		CSRF struct {
+		CSRFConf struct {
 			Enable bool `toml:"enable" mapstructure:"enable"`
 		} `toml:"csrf" mapstructure:"csrf"`
-		XSS struct {
+		XSSConf struct {
 			Enable bool `toml:"enable" mapstructure:"enable"`
 		} `toml:"xss" mapstructure:"xss"`
 	}

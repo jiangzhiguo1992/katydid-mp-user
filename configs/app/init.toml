@@ -11,6 +11,7 @@ file_max_size = 100  # 单文件最大大小，MB
 
 [lang]
 default = "en-US" # zh-CN / en-US  必须是已有的语言
+cache_max_size = 1000 # 缓存大小限制，默认1000
 
 [auth]
 enable = true
