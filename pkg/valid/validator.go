@@ -291,6 +291,9 @@ func (v *Validator) processEmbeddedValidations(
 	val := reflect.ValueOf(obj)
 	typ := reflect.TypeOf(obj)
 	if val.Kind() == reflect.Ptr {
+		if val.IsNil() {
+			return nil // 避免空指针引用
+		}
 		val = val.Elem()
 		typ = typ.Elem()
 	}
@@ -307,14 +310,18 @@ func (v *Validator) processEmbeddedValidations(
 		fieldType := field.Type
 		var embedObj any
 
-		// 处理指针类型的组合字段
 		if fieldType.Kind() == reflect.Ptr {
+			// 处理指针类型的组合字段
 			if fieldVal.IsNil() {
 				continue
 			}
 			embedObj = fieldVal.Interface()
 			fieldType = fieldType.Elem()
 		} else {
+			// 处理非指针类型的组合字段
+			if !fieldVal.CanAddr() {
+				continue // 避免不可寻址的字段
+			}
 			// 处理非指针类型的组合字段
 			embedObj = fieldVal.Addr().Interface()
 		}
@@ -483,6 +490,9 @@ func (v *Validator) processEmbeddedLocalizes(
 	val := reflect.ValueOf(obj)
 	typ := reflect.TypeOf(obj)
 	if val.Kind() == reflect.Ptr {
+		if val.IsNil() {
+			return nil // 避免空指针引用
+		}
 		val = val.Elem()
 		typ = typ.Elem()
 	}
@@ -499,14 +509,18 @@ func (v *Validator) processEmbeddedLocalizes(
 		fieldType := field.Type
 		var embedObj any
 
-		// 处理指针类型的组合字段
 		if fieldType.Kind() == reflect.Ptr {
+			// 处理指针类型的组合字段
 			if fieldVal.IsNil() {
 				continue
 			}
 			embedObj = fieldVal.Interface()
 			fieldType = fieldType.Elem()
 		} else {
+			// 处理非指针类型的组合字段
+			if !fieldVal.CanAddr() {
+				continue // 避免不可寻址的字段
+			}
 			// 处理非指针类型的组合字段
 			embedObj = fieldVal.Addr().Interface()
 		}
