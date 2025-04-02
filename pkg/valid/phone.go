@@ -243,7 +243,7 @@ var (
 	compiledPatterns   map[string][]*regexp.Regexp
 )
 
-// 初始化函数，预编译正则表达式、构建查找映射等
+// init 函数，确保包引入时执行初始化
 func init() {
 	// 预分配足够大小的映射和切片，避免动态扩容
 	countryCodeMap = make(map[string]PhoneCountryCode, len(CountryCodes))
@@ -351,7 +351,7 @@ func IsPhoneCountryCode(code string) (*PhoneCountryCode, bool) {
 		return nil, false
 	}
 
-	// 移除前导的'+'(如果存在)
+	// 清理代码格式
 	code = cleanPhoneNumber(code)
 	if code == "" {
 		return nil, false
@@ -390,8 +390,14 @@ func FormatPhone(phone string) string {
 		return number
 	}
 
-	// 简单格式化，在国家代码和号码之间添加空格
-	return "+" + code.Code + " " + number
+	// 使用strings.Builder进行优化的字符串拼接
+	var sb strings.Builder
+	sb.Grow(len(code.Code) + len(number) + 2) // 预分配足够空间
+	sb.WriteString("+")
+	sb.WriteString(code.Code)
+	sb.WriteString(" ")
+	sb.WriteString(number)
+	return sb.String()
 }
 
 // FindPhonesInText 从文本中查找可能的电话号码
@@ -476,7 +482,7 @@ func cleanPhoneNumber(phone string) string {
 
 	phone = strings.TrimSpace(phone)
 	var builder strings.Builder
-	builder.Grow(len(phone))
+	builder.Grow(len(phone)) // 预分配空间，减少内存重新分配
 
 	for _, r := range phone {
 		if r == '+' || unicode.IsDigit(r) {
@@ -494,7 +500,7 @@ func cleanDigitsOnly(input string) string {
 	}
 
 	var builder strings.Builder
-	builder.Grow(len(input))
+	builder.Grow(len(input)) // 预分配空间，减少内存重新分配
 
 	for _, r := range input {
 		if unicode.IsDigit(r) {

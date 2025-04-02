@@ -6,9 +6,9 @@ import (
 )
 
 var (
-	// 用户名部分正则表达式 - 符合RFC 5322标准
+	// 用户名部分正则表达式 - 符合RFC 5322标准，验证邮箱@前的本地部分
 	usernameRegex = regexp.MustCompile(`^[a-zA-Z0-9!#$%&'*+\-/=?^_\` + "`" + `{|}~.]+$`)
-	// 域名部分正则表达式
+	// 域名部分正则表达式，验证邮箱@后的域名部分
 	domainRegex = regexp.MustCompile(`^(?:[a-zA-Z0-9](?:[a-zA-Z0-9\-]{0,61}[a-zA-Z0-9])?\.)+[a-zA-Z0-9](?:[a-zA-Z0-9\-]{0,61}[a-zA-Z0-9])?$`)
 	// 优化后的电子邮件匹配正则表达式 - 用于从文本中初步筛选可能的邮箱地址
 	emailRegex = regexp.MustCompile(`\b[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9](?:[a-zA-Z0-9\-]{0,61}[a-zA-Z0-9])?(?:\.[a-zA-Z0-9](?:[a-zA-Z0-9\-]{0,61}[a-zA-Z0-9])?)*\.[a-zA-Z]{2,}(?:\b|$)`)
@@ -136,7 +136,7 @@ func FindEmailsInText(text string) []string {
 		// 移除可能的前后空格
 		match = strings.TrimSpace(match)
 
-		// 检查是否已处理过相同邮箱
+		// 检查是否已处理过相同邮箱，优化放前面，减少IsEmail调用
 		if _, exists := seen[match]; exists {
 			continue
 		}
