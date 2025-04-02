@@ -5,12 +5,22 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"sync"
 )
 
 var (
+	// 预编译正则表达式，提高性能
 	rangeRegex = regexp.MustCompile(`\{(\d+)-(\d+)\}`)
 	paramRegex = regexp.MustCompile(`^[a-zA-Z_][a-zA-Z0-9_]*$`)
 	brackets   = regexp.MustCompile(`\[(.*?)\]`)
+
+	// 使用sync.Pool缓存编译后的正则表达式，减少重复编译
+	regexPool = sync.Pool{
+		New: func() interface{} {
+			return make(map[string]*regexp.Regexp)
+		},
+	}
+	regexPoolMutex sync.RWMutex
 )
 
 const (
@@ -51,7 +61,7 @@ func MatchURLPath(path string, pattern string) bool {
 		return path == pattern
 	}
 
-	// 标准化输入，移除多余的斜杠
+	// 标准化输入，移除多余的空白
 	path = strings.TrimSpace(path)
 	pattern = strings.TrimSpace(pattern)
 
@@ -90,8 +100,11 @@ func MatchURLPath(path string, pattern string) bool {
 		return false
 	}
 
+	// 创建一个新的参数映射表，避免并发问题
+	params := make(map[string]string)
+
 	// 处理多段通配符 **
-	return matchSegments(pathSegments, patternSegments, 0, 0, make(map[string]string), 0)
+	return matchSegments(pathSegments, patternSegments, 0, 0, params, 0)
 }
 
 // matchSegments 使用递归方式匹配路径段
@@ -128,7 +141,17 @@ func matchSegments(pathSegs []string, patternSegs []string, pathIdx, patternIdx 
 
 		// 尝试匹配0个或多个路径段（优化：从多到少，更容易找到成功匹配）
 		for i := len(pathSegs); i >= pathIdx; i-- {
-			if matchSegments(pathSegs, patternSegs, i, patternIdx+1, params, depth+1) {
+			// 创建临时参数表，避免污染原参数表
+			tempParams := make(map[string]string)
+			for k, v := range params {
+				tempParams[k] = v
+			}
+
+			if matchSegments(pathSegs, patternSegs, i, patternIdx+1, tempParams, depth+1) {
+				// 成功匹配时，将临时参数合并回原参数表
+				for k, v := range tempParams {
+					params[k] = v
+				}
 				return true
 			}
 		}
@@ -170,9 +193,9 @@ func matchSegments(pathSegs []string, patternSegs []string, pathIdx, patternIdx 
 
 				// 添加更严格的参数名检查
 				if paramName != "" && paramRegex.MatchString(paramName) {
-					// 尝试编译正则表达式，添加错误恢复
-					regex, err := regexp.Compile("^" + regexStr + "$")
-					if err == nil && regex.MatchString(pathSeg) {
+					// 使用正则表达式缓存
+					regex := getCompiledRegex("^" + regexStr + "$")
+					if regex != nil && regex.MatchString(pathSeg) {
 						// 存储参数值
 						params[paramName] = pathSeg
 						return matchSegments(pathSegs, patternSegs, pathIdx+1, patternIdx+1, params, depth+1)
@@ -230,9 +253,9 @@ func matchSegment(pathSeg, patternSeg string) bool {
 		}
 		pattern.WriteString("$")
 
-		// 添加错误恢复
-		regex, err := regexp.Compile(pattern.String())
-		if err != nil {
+		// 使用缓存的正则表达式
+		regex := getCompiledRegex(pattern.String())
+		if regex == nil {
 			return false
 		}
 		return regex.MatchString(pathSeg)
@@ -293,9 +316,9 @@ func matchSegment(pathSeg, patternSeg string) bool {
 		}
 		regexPattern.WriteString("$")
 
-		// 添加错误处理
-		regex, err := regexp.Compile(regexPattern.String())
-		if err != nil {
+		// 使用正则表达式缓存
+		regex := getCompiledRegex(regexPattern.String())
+		if regex == nil {
 			return false
 		}
 		return regex.MatchString(pathSeg)
@@ -330,8 +353,9 @@ func matchSegment(pathSeg, patternSeg string) bool {
 		}
 		regexPattern.WriteString("$")
 
-		regex, err := regexp.Compile(regexPattern.String())
-		if err != nil {
+		// 使用正则表达式缓存
+		regex := getCompiledRegex(regexPattern.String())
+		if regex == nil {
 			return false
 		}
 		return regex.MatchString(pathSeg)
@@ -355,9 +379,9 @@ func matchSegment(pathSeg, patternSeg string) bool {
 		}
 		pattern.WriteString("$")
 
-		// 添加错误处理
-		regex, err := regexp.Compile(pattern.String())
-		if err != nil {
+		// 使用正则表达式缓存
+		regex := getCompiledRegex(pattern.String())
+		if regex == nil {
 			return false
 		}
 		return regex.MatchString(pathSeg)
@@ -404,4 +428,37 @@ func isValidBracketPattern(pattern string) bool {
 	}
 
 	return stack == 0
+}
+
+// getCompiledRegex 从缓存中获取编译后的正则表达式，如果不存在则编译并缓存
+// 通过正则表达式缓存提高性能，避免重复编译相同的正则表达式
+func getCompiledRegex(pattern string) *regexp.Regexp {
+	// 先尝试从缓存中读取
+	regexPoolMutex.RLock()
+	cache := regexPool.Get().(map[string]*regexp.Regexp)
+	regex, found := cache[pattern]
+	regexPoolMutex.RUnlock()
+
+	if found {
+		// 确保归还缓存
+		regexPool.Put(cache)
+		return regex
+	}
+
+	// 未找到则编译
+	compiledRegex, err := regexp.Compile(pattern)
+	if err != nil {
+		regexPool.Put(cache) // 确保归还缓存
+		return nil
+	}
+
+	// 写入缓存
+	regexPoolMutex.Lock()
+	cache[pattern] = compiledRegex
+	regexPoolMutex.Unlock()
+
+	// 归还缓存
+	regexPool.Put(cache)
+
+	return compiledRegex
 }
