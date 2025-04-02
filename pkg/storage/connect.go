@@ -288,20 +288,21 @@ func configureConnectionPool(sqlDB *sql.DB, config DBConfig) {
 
 // 连接主数据库 (无锁)
 func connectDB(tag string, config DBConfig) (*gorm.DB, error) {
+	// 使用内部创建上下文，而不是依赖未定义的ctx
 	ctx := context.Background()
-	// 根据数据库类型创建对应的方言
+
+	// 记录连接信息
 	dialector, err := createDialector(config)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("■ ■ Storage ■ ■ 数据库-方言创建失败: %s, %w", tag, err)
 	}
 	config.Logger.Info(ctx, fmt.Sprintf("■ ■ Storage ■ ■ 数据库-连接方言:%s :%s", tag, dialector))
 
 	// 配置GORM
 	gormConfig := createGormConfig(config)
 
-	// 重试连接逻辑
-	db, err := connectWithRetries(
-		dialector, gormConfig, config.MaxRetries,
+	// 使用重试逻辑连接
+	db, err := connectWithRetries(dialector, gormConfig, config.MaxRetries,
 		time.Duration(config.RetryDelay)*time.Second,
 		time.Duration(config.RetryMaxDelay)*time.Second)
 	if err != nil {
@@ -310,9 +311,9 @@ func connectDB(tag string, config DBConfig) (*gorm.DB, error) {
 
 	sqlDB, err := db.DB()
 	if err != nil {
-		return nil, fmt.Errorf("■ ■ Storage ■ ■ 数据库-连接获取失败: %s, %w", tag, err)
+		return nil, fmt.Errorf("■ ■ Storage ■ ■ 数据库-连接获取异常: %s, %w", tag, err)
 	} else if sqlDB == nil {
-		return nil, fmt.Errorf("■ ■ Storage ■ ■ 数据库-连接获取失败: %s, %w", tag, err)
+		return nil, fmt.Errorf("■ ■ Storage ■ ■ 数据库-连接为空: %s", tag)
 	}
 	config.Logger.Info(ctx, fmt.Sprintf("■ ■ Storage ■ ■ 数据库-连接成功:%s", tag))
 
@@ -324,8 +325,10 @@ func connectDB(tag string, config DBConfig) (*gorm.DB, error) {
 
 // 连接副数据库 (无锁)
 func connectReplicaDB(tag string, config DBConfig, rConf ReplicaConfig) (*gorm.DB, error) {
+	// 为避免修改原始配置，创建一个配置副本
 	replicaConfig := config
-	replicaConfig.Host = rConf.Host
+
+	replicaConfig.Host = rConf.Host // 必须有值！
 	if rConf.Port > 0 {
 		replicaConfig.Port = rConf.Port
 	}
@@ -339,6 +342,7 @@ func connectReplicaDB(tag string, config DBConfig, rConf ReplicaConfig) (*gorm.D
 		replicaConfig.Params = rConf.Params
 	}
 
+	// 复用主连接的逻辑
 	return connectDB(tag, replicaConfig)
 }
 
@@ -496,7 +500,10 @@ func reconnectReplica(instance *DBInstance, replicaIndex int) bool {
 	}
 
 	// 连接
-	db, err := connectReplicaDB("tag!!!!", *instance.Config, replica)
+	db, err := connectReplicaDB(
+		fmt.Sprintf("%s(副%d-重连[%s])", instance.Name, replicaIndex, replica.Host),
+		*instance.Config, replica,
+	)
 	if err != nil {
 		return false
 	}
