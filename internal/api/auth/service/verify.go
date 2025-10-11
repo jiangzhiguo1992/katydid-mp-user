@@ -114,7 +114,7 @@ func (svc *Verify) Valid(param *model.Verify) *errs.CodeErrs {
 // generateBody 生成验证码
 func (svc *Verify) generateBody(entity *model.Verify) *errs.CodeErrs {
 	limit := svc.GetLimitVerify(int16(entity.OwnKind), entity.OwnID)
-	bodyLen := limit.BodyLen[int16(entity.AuthKind)]
+	bodyLen := limit.BodyLens[int16(entity.AuthKind)]
 
 	body := ""
 	switch entity.AuthKind {
@@ -150,7 +150,7 @@ func (svc *Verify) addWithCheck(entity *model.Verify) *errs.CodeErrs {
 	count, err := svc.dbs.SelectCount(entity) // TODO:GG 根据 OwnKind + OwnID + AuthKind + Apply + Target + time(上面) 查找最近的
 	if err != nil {
 		return err
-	} else if count >= limit.InsertMaxTimes {
+	} else if int64(count) >= limit.InsertMaxTimes {
 		return errs.Match2(fmt.Sprintf("添加次数不能超过 %d", limit.InsertMaxTimes))
 	}
 
@@ -170,7 +170,7 @@ func (svc *Verify) checkExist(param *model.Verify) (*model.Verify, *errs.CodeErr
 
 	// 检查验证码是否有效
 	limit := svc.GetLimitVerify(int16(exist.OwnKind), exist.OwnID)
-	if !exist.CanValid(limit.Expires, limit.VerifyMaxTimes) {
+	if !exist.CanValid(limit.Expires, int(limit.VerifyMaxTimes)) {
 		return nil, errs.Match2("失效的验证码")
 	}
 

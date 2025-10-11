@@ -47,7 +47,7 @@ func (v *Verify) Post() {
 	sendOk := true // TODO:GG rpc发送验证码/Oauth2/等等...
 	sendAt := time.Now().Unix()
 	if sendOk {
-		bind.PendingAt = &sendAt // TODO:GG 上层返回
+		bind.SendAt = &sendAt // TODO:GG 上层返回
 		err = v.service.OnSendOk(bind)
 	} else {
 		err = v.service.OnSendFail(bind)
@@ -70,12 +70,9 @@ func (v *Verify) Put() {
 		v.Response400("绑定失败", err)
 		return
 	}
-	valid, err := v.service.Valid(bind)
+	err = v.service.Valid(bind)
 	if err != nil {
 		v.Response400("验证失败", err)
-		return
-	} else if !valid {
-		v.Response400("验证失败", nil)
 		return
 	}
 	v.Response200(nil)

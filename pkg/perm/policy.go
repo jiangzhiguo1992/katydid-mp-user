@@ -16,7 +16,7 @@ type Policy struct {
 	Sub string `json:"sub"` // 主体
 	Obj string `json:"obj"` // 资源
 	Act string `json:"act"` // 动作
-	//Lv  int    `json:"lv"`  // 等级
+	Lv  int    `json:"lv"`  // 等级
 }
 
 // NewPolicy 创建一个新的空策略

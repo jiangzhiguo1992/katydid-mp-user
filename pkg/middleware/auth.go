@@ -179,7 +179,7 @@ func validateAndParseToken(tokenStr string) (*auth.TokenClaims, error) {
 	log.DebugFmt("■ ■ Auth ■ ■ 缓存未命中: %s", tokenStr)
 
 	// 解析并验证token
-	claims, err := auth.ParseJWT(tokenStr, authConfig.JwtSecret, authConfig.SkipExpireCheck)
+	claims, _, err := auth.ParseJWT(tokenStr, authConfig.JwtSecret, authConfig.SkipExpireCheck)
 	if err != nil {
 		return nil, err
 	}

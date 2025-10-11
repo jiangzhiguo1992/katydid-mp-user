@@ -15,7 +15,7 @@ type (
 
 func NewAuth() *Auth {
 	return &Auth{
-		Base: storage.NewBase(),
+		Base: storage.NewBase(nil),
 	}
 }
 

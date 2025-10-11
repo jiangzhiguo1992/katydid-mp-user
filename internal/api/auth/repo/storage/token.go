@@ -15,7 +15,7 @@ type (
 
 func NewToken() *Token {
 	return &Token{
-		Base: storage.NewBase(),
+		Base: storage.NewBase(nil),
 	}
 }
 

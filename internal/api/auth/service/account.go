@@ -248,11 +248,9 @@ func (svc *Account) isAuthKindRequire(param *model.Account, authKind model.AuthK
 	if len(limit.AuthRequires) <= 0 {
 		return true // 没有则都可以
 	}
-	for _, groupKind := range limit.AuthRequires {
-		for _, enableKind := range groupKind {
-			if authKind == model.AuthKind(enableKind) {
-				return true
-			}
+	for _, enableKind := range limit.AuthRequires {
+		if authKind == model.AuthKind(enableKind) {
+			return true
 		}
 	}
 	return false
@@ -294,4 +292,18 @@ func (svc *Account) checkActionLogin(exist *model.Account) *errs.CodeErrs {
 	} else {
 		return errs.Match2("账号暂时被锁定")
 	}
+}
+
+// AddAccount is a stub method to add an account
+// TODO: Implement proper account creation logic
+func (svc *Account) AddAccount(ownKind model.OwnKind, ownID uint64, userID *uint64, nickname string, auths map[model.AuthKind]model.IAuth) (*model.Account, *errs.CodeErrs) {
+	// TODO: Implement account creation
+	account := model.NewAccountEmpty()
+	account.OwnKind = ownKind
+	account.OwnID = ownID
+	account.UserID = userID
+	if nickname != "" {
+		account.Nickname = &nickname
+	}
+	return account, nil
 }

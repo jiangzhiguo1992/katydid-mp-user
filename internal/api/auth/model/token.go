@@ -154,7 +154,7 @@ func (t *Token) ValidateAccess(
 	}
 	// 解析和验证JWT
 	checkExpire = checkExpire && (t.AccessExpireAt > 0)
-	claims, err := auth.ParseJWT(t.AccessToken, jwtSecret, checkExpire)
+	claims, _, err := auth.ParseJWT(t.AccessToken, jwtSecret, checkExpire)
 	return claims, err != nil
 }
 
@@ -171,7 +171,7 @@ func (t *Token) ValidateRefresh(
 	}
 	// 解析和验证JWT
 	checkExpire = checkExpire && (t.RefreshExpireAt != nil) && (*t.RefreshExpireAt > 0)
-	claims, err := auth.ParseJWT(*t.RefreshToken, jwtSecret, checkExpire)
+	claims, _, err := auth.ParseJWT(*t.RefreshToken, jwtSecret, checkExpire)
 	return claims, err != nil
 }
 

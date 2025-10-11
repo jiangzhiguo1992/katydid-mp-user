@@ -43,7 +43,8 @@ type IService[T any] interface {
 }
 
 type Base struct {
-	ctx *Ctx
+	ctx    *Ctx
+	limits map[int16]map[uint64]*Limits
 }
 
 func NewBase(ctx *Ctx) *Base {
