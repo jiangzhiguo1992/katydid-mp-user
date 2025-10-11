@@ -217,3 +217,64 @@ func (e *Error) Translate(lang string) string {
 func (e *Error) Code() int {
 	return e.code
 }
+
+// CodeErrs is an alias for Error for backward compatibility
+type CodeErrs = Error
+
+// Match is a wrapper that tries to match an error or create a new one
+func Match(v any) *Error {
+	switch val := v.(type) {
+	case error:
+		return MatchErr(val)
+	case string:
+		return MatchMsg(val)
+	case *Error:
+		return val
+	default:
+		return New(nil).WithMsg(fmt.Sprintf("%v", val))
+	}
+}
+
+// Match2 is a simple wrapper for matching a string message
+func Match2(msg string) *Error {
+	return MatchMsg(msg)
+}
+
+// WrapErrs adds errors to the error
+func (e *Error) WrapErrs(errs ...error) *Error {
+	return e.AppendErrors(errs...)
+}
+
+// WrapLocalize adds a localized message to the error
+func (e *Error) WrapLocalize(templateID string, data map[string]any, params []any) *Error {
+	return e.AppendLocale(templateID, data, params...)
+}
+
+// Real returns the error if it's not nil, otherwise returns nil
+func (e *Error) Real() *Error {
+	return e.Wash()
+}
+
+// ToLocales formats all locale messages using a custom formatter
+func (e *Error) ToLocales(formatter func(localize string, template1s []any, template2s map[string]any) string) string {
+	if len(e.locales) == 0 {
+		return e.msg
+	}
+	
+	var builder strings.Builder
+	for i, loc := range e.locales {
+		if loc.templateID == "" {
+			continue
+		}
+		msg := formatter(loc.templateID, loc.params, loc.data)
+		builder.WriteString(msg)
+		if i < len(e.locales)-1 {
+			builder.WriteString("\n")
+		}
+	}
+	result := builder.String()
+	if result == "" {
+		return e.msg
+	}
+	return result
+}

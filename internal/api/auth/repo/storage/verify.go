@@ -16,7 +16,7 @@ type (
 
 func NewVerify() *Verify {
 	return &Verify{
-		Base: storage.NewBase(),
+		Base: storage.NewBase(nil),
 	}
 }
 

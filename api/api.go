@@ -32,17 +32,14 @@ func Run() *gin.Engine {
 	engine.Use(gin.Recovery())
 
 	// 追踪
-	if conf := config.MiddleWareConf.Trace; conf.Enable {
+	if conf := config.MiddleWareConf.TraceConf; conf.Enable {
 		engine.Use(middleware.Trace(config.Server.Name, conf.KeyID, conf.KeyPath))
 	}
 
 	// 日志
-	if conf := config.MiddleWareConf.Logger; conf.Enable {
-		traceConf := config.MiddleWareConf.Trace
+	if conf := config.MiddleWareConf.LoggerConf; conf.Enable {
 		engine.Use(middleware.ZapLoggerWithConfig(
 			middleware.LoggerDefaultConfig(
-				traceConf.KeyID,
-				traceConf.KeyPath,
 				conf.SkipStatus,
 				conf.SkipPaths,
 				conf.Sensitives,
@@ -52,17 +49,17 @@ func Run() *gin.Engine {
 	}
 
 	// 跨站请求伪造
-	if config.MiddleWareConf.CSRF.Enable {
+	if config.MiddleWareConf.CSRFConf.Enable {
 		engine.Use(middleware.CSRF())
 	}
 
 	// 跨站脚本攻击
-	if config.MiddleWareConf.XSS.Enable {
+	if config.MiddleWareConf.XSSConf.Enable {
 		engine.Use(middleware.XSS())
 	}
 
 	// 国际化 // TODO:GG conf自定义
-	engine.Use(middleware.Language())
+	engine.Use(middleware.Language("Accept-Language", 1000))
 
 	// 限流 // TODO:GG conf自定义 + 整体限流(代理做)?
 	//engine.Use(middleware.RateLimiter(1000, time.Minute))

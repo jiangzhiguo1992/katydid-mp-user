@@ -17,14 +17,12 @@ type Account struct {
 
 func NewAccount(
 	db *db.Account, cache *cache.Account,
-	getMaxNumByOwner func(ownKind model.TokenOwn, ownID uint64) (int, *errs.CodeErrs),
-	isOwnerAuthEnable func(ownKind model.TokenOwn, ownID uint64, kind model.AuthKind) (bool, *errs.CodeErrs),
+	getMaxNumByOwner func(ownKind model.OwnKind, ownID uint64) (int, *errs.CodeErrs),
+	isOwnerAuthEnable func(ownKind model.OwnKind, ownID uint64, kind model.AuthKind) (bool, *errs.CodeErrs),
 ) *Account {
 	return &Account{
 		Base: handler.NewBase(nil),
-		service: service.NewAccount(
-			db, cache, isOwnerAuthEnable, getMaxNumByOwner,
-		),
+		service: service.NewAccount(db),
 	}
 }
 
@@ -43,8 +41,8 @@ func (a *Account) Post() {
 		a.Response400("", err)
 		return
 	}
-	ownKind := model.TokenOwn(rune(bind.OwnType))
-	//authKind := model.TokenOwn(rune(param.AuthKind))
+	ownKind := model.OwnKind(rune(bind.OwnType))
+	//authKind := model.OwnKind(rune(param.AuthKind))
 
 	// TODO:GG 先check Verify？
 

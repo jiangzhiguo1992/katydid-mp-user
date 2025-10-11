@@ -121,13 +121,13 @@ func (b *Base) RequestBind(obj any, must bool) *errs.CodeErrs {
 		return nil
 	}
 	// 处理验证错误
-	codeErrs := errs.New()
+	codeErrs := errs.New(nil)
 	for _, me := range msgErrs {
 		if me.Err != nil {
 			_ = codeErrs.WrapErrs(me.Err)
 		}
 		if len(me.Msg) > 0 {
-			_ = codeErrs.WrapLocalize(me.Msg, me.Params, nil)
+			_ = codeErrs.WrapLocalize(me.Msg, nil, me.Params)
 		}
 	}
 	return codeErrs.Real()
@@ -239,6 +239,14 @@ func (b *Base) Response404(msg string) {
 	}
 	localizedMsg := i18n.LocalizeTry(b.Lang, msg, nil)
 	b.Response(http.StatusNotFound, 404, localizedMsg, nil)
+}
+
+func (b *Base) Response501(msg string) {
+	if msg == "" {
+		msg = "not_implemented"
+	}
+	localizedMsg := i18n.LocalizeTry(b.Lang, msg, nil)
+	b.Response(http.StatusNotImplemented, 501, localizedMsg, nil)
 }
 
 func (b *Base) Response(status, code int, msg string, data any) {

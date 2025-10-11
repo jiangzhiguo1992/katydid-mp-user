@@ -16,7 +16,7 @@ type (
 
 func NewAccount() *Account {
 	return &Account{
-		Base: storage.NewBase(),
+		Base: storage.NewBase(nil),
 	}
 }
 

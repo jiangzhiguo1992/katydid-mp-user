@@ -451,3 +451,38 @@ func Fatalf(msg string, a ...any) {
 func FatalMustf(output bool, msg string, a ...any) {
 	log(zapcore.FatalLevel, &output, fmt.Sprintf(msg, a...))
 }
+
+// DebugFmt is an alias for Debugf
+func DebugFmt(msg string, a ...any) {
+	Debugf(msg, a...)
+}
+
+// InfoFmt is an alias for Infof
+func InfoFmt(msg string, a ...any) {
+	Infof(msg, a...)
+}
+
+// InfoFmtOutput is similar to InfoMustf with output = true
+func InfoFmtOutput(msg string, a ...any) {
+	InfoMustf(true, msg, a...)
+}
+
+// WarnFmt is an alias for Warnf
+func WarnFmt(msg string, a ...any) {
+	Warnf(msg, a...)
+}
+
+// WarnFmtOutput is similar to WarnMustf with output = true
+func WarnFmtOutput(msg string, a ...any) {
+	WarnMustf(true, msg, a...)
+}
+
+// ErrorFmt is an alias for Errorf
+func ErrorFmt(msg string, a ...any) {
+	Errorf(msg, a...)
+}
+
+// ErrorFmtOutput is similar to ErrorMustf with output = true
+func ErrorFmtOutput(msg string, a ...any) {
+	ErrorMustf(true, msg, a...)
+}

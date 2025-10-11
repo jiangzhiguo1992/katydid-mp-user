@@ -14,15 +14,6 @@ var (
 	enforcer *casbin.Enforcer
 )
 
-type (
-	Policy struct {
-		Sub string `json:"sub"` // 主体
-		Obj string `json:"obj"` // 资源
-		Act string `json:"act"` // 动作
-		Lv  int    `json:"lv"`  // 等级
-	}
-)
-
 // Init initializes the Casbin enforcer with an in-memory model.
 // In real projects, you can load the model and policy from files or database.
 func Init() {
